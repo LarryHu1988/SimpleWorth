@@ -84,6 +84,7 @@ struct CategoryGridSection: View {
     let title: String
     let subtitle: String
     let categories: [CategoryItem]
+    var onTapCategory: ((CategoryItem) -> Void)? = nil
 
     private let columns = [
         GridItem(.adaptive(minimum: 70), spacing: 12)
@@ -96,6 +97,10 @@ struct CategoryGridSection: View {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(categories) { item in
                     CategoryIconCell(item: item)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            onTapCategory?(item)
+                        }
                 }
             }
         }
@@ -139,48 +144,29 @@ struct CategoryIconCell: View {
     }
 }
 
-struct TransactionSection: View {
-    let title: String
-    let subtitle: String
-    let items: [TransactionItem]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: title, subtitle: subtitle)
-
-            VStack(spacing: 10) {
-                ForEach(items) { item in
-                    TransactionRow(item: item)
-                }
-            }
-        }
-        .fitnessCard()
-    }
-}
-
-struct TransactionRow: View {
-    let item: TransactionItem
+struct LedgerRow: View {
+    let entry: LedgerEntry
 
     private var signedAmount: Double {
-        item.flow == .expense ? -item.amount : item.amount
+        entry.flow == .expense ? -entry.amount : entry.amount
     }
 
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(item.color.opacity(0.2))
+                    .fill(entry.categoryColor.opacity(0.2))
                     .frame(width: 44, height: 44)
-                Image(systemName: item.symbol)
+                Image(systemName: entry.categorySymbol)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(item.color)
+                    .foregroundStyle(entry.categoryColor)
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
+                Text(entry.note)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                Text(item.dateText)
+                Text(entry.createdAt.ledgerDateText)
                     .font(.caption)
                     .foregroundStyle(SWTheme.textSecondary)
             }
@@ -189,9 +175,36 @@ struct TransactionRow: View {
 
             Text(signedAmount.signedCNYText)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(item.flow == .expense ? SWTheme.accentOrange : SWTheme.accentGreen)
+                .foregroundStyle(entry.flow == .expense ? SWTheme.accentOrange : SWTheme.accentGreen)
         }
         .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+    }
+}
+
+struct EmptyStateCard: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.85))
+            Text(title)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white)
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(SWTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.04))

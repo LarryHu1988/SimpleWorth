@@ -34,6 +34,5 @@ struct MainTabView: View {
         .tint(SWTheme.accentGreen)
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarBackground(Color.black.opacity(0.72), for: .tabBar)
-        .appBackground()
     }
 }

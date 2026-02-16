@@ -1,12 +1,30 @@
+import SwiftData
 import SwiftUI
 
+private struct GoalEditTarget: Identifiable {
+    let id: UUID
+    let goal: SavingsGoalRecord
+}
+
 struct VaultView: View {
+    @Environment(\.modelContext) private var modelContext
+
+    @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .forward)])
+    private var goals: [SavingsGoalRecord]
+
+    @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)])
+    private var deposits: [VaultDepositRecord]
+
+    @State private var showCreateGoalSheet = false
+    @State private var showDepositSheet = false
+    @State private var editingGoal: GoalEditTarget?
+
     private var totalCurrent: Double {
-        PreviewData.savingsGoals.reduce(0) { $0 + $1.current }
+        goals.reduce(0) { $0 + $1.currentAmount }
     }
 
     private var totalTarget: Double {
-        PreviewData.savingsGoals.reduce(0) { $0 + $1.target }
+        goals.reduce(0) { $0 + $1.targetAmount }
     }
 
     private var totalProgress: Double {
@@ -14,44 +32,16 @@ struct VaultView: View {
         return min(max(totalCurrent / totalTarget, 0), 1)
     }
 
+    private var recentDeposits: [VaultDepositRecord] {
+        Array(deposits.prefix(20))
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 18) {
                 vaultOverview
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionTitle(title: "小目标", subtitle: "每一笔都在接近理想生活")
-
-                    ForEach(PreviewData.savingsGoals) { goal in
-                        GoalProgressCard(goal: goal)
-                    }
-                }
-                .fitnessCard()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionTitle(title: "最近存入", subtitle: "把碎片现金变成长期安全感")
-
-                    ForEach(PreviewData.vaultRecords) { item in
-                        HStack(alignment: .center, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.note)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                Text(item.date)
-                                    .font(.caption)
-                                    .foregroundStyle(SWTheme.textSecondary)
-                            }
-
-                            Spacer(minLength: 8)
-
-                            Text(item.amount.cnyText)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(SWTheme.accentGreen)
-                        }
-                        .padding(.vertical, 6)
-                    }
-                }
-                .fitnessCard()
+                goalsCard
+                depositsCard
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -59,6 +49,37 @@ struct VaultView: View {
         }
         .navigationTitle("小金库")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        showCreateGoalSheet = true
+                    } label: {
+                        Label("新增目标", systemImage: "target")
+                    }
+
+                    Button {
+                        showDepositSheet = true
+                    } label: {
+                        Label("记录存入", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(goals.isEmpty)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(SWTheme.accentBlue)
+                }
+                .accessibilityLabel("新增")
+            }
+        }
+        .sheet(isPresented: $showCreateGoalSheet) {
+            GoalEditorSheet()
+        }
+        .sheet(isPresented: $showDepositSheet) {
+            DepositEditorSheet(goals: goals)
+        }
+        .sheet(item: $editingGoal) { target in
+            GoalEditorSheet(goal: target.goal)
+        }
         .appBackground()
     }
 
@@ -97,27 +118,138 @@ struct VaultView: View {
         }
         .fitnessCard()
     }
+
+    private var goalsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "小目标", subtitle: "点按可编辑，左滑可删除")
+
+            if goals.isEmpty {
+                EmptyStateCard(
+                    title: "还没有小目标",
+                    subtitle: "右上角 + 新增目标，再开始记录存入",
+                    symbol: "target"
+                )
+            } else {
+                ForEach(goals) { goal in
+                    GoalProgressCard(goal: goal)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            editingGoal = GoalEditTarget(id: goal.id, goal: goal)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(goal)
+                            } label: {
+                                Label("删除", systemImage: "trash.fill")
+                            }
+
+                            Button {
+                                editingGoal = GoalEditTarget(id: goal.id, goal: goal)
+                            } label: {
+                                Label("编辑", systemImage: "pencil")
+                            }
+                            .tint(SWTheme.accentBlue)
+                        }
+                }
+            }
+        }
+        .fitnessCard()
+    }
+
+    private var depositsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "最近存入", subtitle: "记录会同步更新目标进度")
+
+            if recentDeposits.isEmpty {
+                EmptyStateCard(
+                    title: "暂无存入记录",
+                    subtitle: "点击右上角 + 记录第一笔存入",
+                    symbol: "tray.fill"
+                )
+            } else {
+                ForEach(recentDeposits) { item in
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.note)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+
+                            HStack(spacing: 6) {
+                                Text(item.date.depositDateText)
+                                    .font(.caption)
+                                    .foregroundStyle(SWTheme.textSecondary)
+
+                                if let goal = item.goal {
+                                    Text(goal.name)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(goal.tintColor)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(goal.tintColor.opacity(0.2))
+                                        )
+                                }
+                            }
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Text(item.amount.cnyText)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(SWTheme.accentGreen)
+                    }
+                    .padding(.vertical, 6)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            delete(item)
+                        } label: {
+                            Label("删除", systemImage: "trash.fill")
+                        }
+                    }
+                }
+            }
+        }
+        .fitnessCard()
+    }
+
+    private func delete(_ goal: SavingsGoalRecord) {
+        withAnimation {
+            modelContext.delete(goal)
+            try? modelContext.save()
+        }
+    }
+
+    private func delete(_ deposit: VaultDepositRecord) {
+        withAnimation {
+            if let goal = deposit.goal {
+                goal.currentAmount = max(0, goal.currentAmount - deposit.amount)
+            }
+            modelContext.delete(deposit)
+            try? modelContext.save()
+        }
+    }
 }
 
 private struct GoalProgressCard: View {
-    let goal: SavingsGoal
+    let goal: SavingsGoalRecord
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(goal.tint.opacity(0.2))
+                        .fill(goal.tintColor.opacity(0.2))
                         .frame(width: 36, height: 36)
                     Image(systemName: goal.symbol)
-                        .foregroundStyle(goal.tint)
+                        .foregroundStyle(goal.tintColor)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(goal.name)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
-                    Text("截止: \(goal.deadline)")
+                    Text("截止: \(goal.deadlineText)")
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
                 }
@@ -126,22 +258,22 @@ private struct GoalProgressCard: View {
 
                 Text("\((goal.progress * 100).formatted(.number.precision(.fractionLength(0))))%")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(goal.tint)
+                    .foregroundStyle(goal.tintColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(goal.tint.opacity(0.2))
+                            .fill(goal.tintColor.opacity(0.2))
                     )
             }
 
             VStack(spacing: 6) {
                 HStack {
-                    Text(goal.current.cnyText)
+                    Text(goal.currentAmount.cnyText)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                     Spacer()
-                    Text(goal.target.cnyText)
+                    Text(goal.targetAmount.cnyText)
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
                 }
@@ -151,7 +283,7 @@ private struct GoalProgressCard: View {
                         Capsule(style: .continuous)
                             .fill(Color.white.opacity(0.12))
                         Capsule(style: .continuous)
-                            .fill(goal.tint.gradient)
+                            .fill(goal.tintColor.gradient)
                             .frame(width: proxy.size.width * goal.progress)
                     }
                 }
