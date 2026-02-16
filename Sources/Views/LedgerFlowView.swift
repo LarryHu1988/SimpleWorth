@@ -15,6 +15,9 @@ struct LedgerFlowView: View {
     @State private var showCreateSheet = false
     @State private var presetCategoryID: String?
     @State private var editingTarget: EntryEditTarget?
+    @State private var selectedYear = Calendar.current.component(.year, from: .now)
+    @State private var selectedMonth = Calendar.current.component(.month, from: .now)
+    @State private var showCategoryGrid = false
 
     private var categories: [CategoryItem] {
         CategoryLibrary.categories(for: flow)
@@ -24,25 +27,45 @@ struct LedgerFlowView: View {
         allEntries.filter { $0.flow == flow }
     }
 
+    private var availableYears: [Int] {
+        let currentYear = Calendar.current.component(.year, from: .now)
+        let years = Set(entries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
+        return years.sorted(by: >)
+    }
+
+    private var selectedPeriodDate: Date {
+        let components = DateComponents(year: selectedYear, month: selectedMonth, day: 1)
+        return Calendar.current.date(from: components) ?? .now
+    }
+
+    private var selectedPeriodEntries: [LedgerEntry] {
+        let range = monthRange(for: selectedPeriodDate)
+        return entries.filter { range.contains($0.createdAt) }
+    }
+
     private var recentEntries: [LedgerEntry] {
-        Array(entries.prefix(20))
+        Array(selectedPeriodEntries.prefix(20))
     }
 
-    private var currentMonthTotal: Double {
-        totalAmount(inMonthOf: .now)
+    private var selectedPeriodTotal: Double {
+        totalAmount(inMonthOf: selectedPeriodDate)
     }
 
-    private var previousMonthTotal: Double {
-        let previousMonthDate = Calendar.current.date(byAdding: .month, value: -1, to: .now) ?? .now
+    private var previousPeriodTotal: Double {
+        let previousMonthDate = Calendar.current.date(byAdding: .month, value: -1, to: selectedPeriodDate) ?? selectedPeriodDate
         return totalAmount(inMonthOf: previousMonthDate)
     }
 
+    private var selectedPeriodLabel: String {
+        "\(selectedYear)年\(selectedMonth)月"
+    }
+
     private var compareText: String {
-        guard previousMonthTotal > 0 else {
-            return currentMonthTotal > 0 ? "本月新增 \(currentMonthTotal.cnyText)" : "本月暂无记录"
+        guard previousPeriodTotal > 0 else {
+            return selectedPeriodTotal > 0 ? "\(selectedPeriodLabel)新增 \(selectedPeriodTotal.cnyText)" : "\(selectedPeriodLabel)暂无记录"
         }
 
-        let delta = (currentMonthTotal - previousMonthTotal) / previousMonthTotal
+        let delta = (selectedPeriodTotal - previousPeriodTotal) / previousPeriodTotal
         if abs(delta) < 0.001 {
             return "较上月持平"
         }
@@ -55,11 +78,11 @@ struct LedgerFlowView: View {
     }
 
     private var ringProgress: Double {
-        guard previousMonthTotal > 0 else {
-            return currentMonthTotal > 0 ? 1 : 0
+        guard previousPeriodTotal > 0 else {
+            return selectedPeriodTotal > 0 ? 1 : 0
         }
 
-        return min(max(currentMonthTotal / previousMonthTotal, 0), 1)
+        return min(max(selectedPeriodTotal / previousPeriodTotal, 0), 1)
     }
 
     private var categoryTitle: String {
@@ -83,7 +106,9 @@ struct LedgerFlowView: View {
     }
 
     private var emptySubtitle: String {
-        flow == .expense ? "右上角 + 添加第一笔支出" : "右上角 + 添加第一笔收入"
+        flow == .expense
+            ? "\(selectedPeriodLabel)暂无记录，右上角 + 添加第一笔支出"
+            : "\(selectedPeriodLabel)暂无记录，右上角 + 添加第一笔收入"
     }
 
     var body: some View {
@@ -91,19 +116,24 @@ struct LedgerFlowView: View {
             VStack(spacing: 18) {
                 FlowSummaryCard(
                     flow: flow,
-                    amount: currentMonthTotal,
+                    periodTitle: "\(selectedPeriodLabel)\(flow.rawValue)",
+                    amount: selectedPeriodTotal,
                     compareText: compareText,
                     ringProgress: ringProgress
                 )
 
-                CategoryGridSection(
-                    title: categoryTitle,
-                    subtitle: categorySubtitle,
-                    categories: categories,
-                    onTapCategory: { category in
-                        presentCreateSheet(categoryID: category.id)
-                    }
-                )
+                categoryToggleCard
+
+                if showCategoryGrid {
+                    CategoryGridSection(
+                        title: categoryTitle,
+                        subtitle: categorySubtitle,
+                        categories: categories,
+                        onTapCategory: { category in
+                            presentCreateSheet(categoryID: category.id)
+                        }
+                    )
+                }
 
                 transactionCard
             }
@@ -115,13 +145,18 @@ struct LedgerFlowView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    presentCreateSheet(categoryID: nil)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(flow.accent)
+                HStack(spacing: SWTheme.toolbarControlSpacing) {
+                    yearMenu
+                    monthMenu
+
+                    Button {
+                        presentCreateSheet(categoryID: nil)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(flow.accent)
+                    }
+                    .accessibilityLabel("新增\(flow.rawValue)")
                 }
-                .accessibilityLabel("新增\(flow.rawValue)")
             }
         }
         .sheet(isPresented: $showCreateSheet, onDismiss: {
@@ -132,7 +167,105 @@ struct LedgerFlowView: View {
         .sheet(item: $editingTarget) { target in
             EntryEditorSheet(flow: flow, entry: target.entry)
         }
+        .onChange(of: availableYears) { _, _ in
+            normalizeSelectionIfNeeded()
+        }
+        .onAppear {
+            resetToCurrentPeriod()
+            showCategoryGrid = false
+        }
         .appBackground()
+    }
+
+    private var categoryToggleCard: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showCategoryGrid.toggle()
+            }
+            HapticService.selection()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: showCategoryGrid ? "square.grid.2x2.fill" : "square.grid.2x2")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(flow.accent)
+
+                Text(showCategoryGrid ? "隐藏\(categoryTitle)" : "显示\(categoryTitle)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Image(systemName: showCategoryGrid ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .fitnessCard()
+    }
+
+    private var yearMenu: some View {
+        Menu {
+            ForEach(availableYears, id: \.self) { year in
+                Button {
+                    selectedYear = year
+                    HapticService.selection()
+                } label: {
+                    if year == selectedYear {
+                        Label("\(year)年", systemImage: "checkmark")
+                    } else {
+                        Text("\(year)年")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedYear)年")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择年度")
+    }
+
+    private var monthMenu: some View {
+        Menu {
+            ForEach(1...12, id: \.self) { month in
+                Button {
+                    selectedMonth = month
+                    HapticService.selection()
+                } label: {
+                    if month == selectedMonth {
+                        Label("\(month)月", systemImage: "checkmark")
+                    } else {
+                        Text("\(month)月")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedMonth)月")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择月份")
     }
 
     private var transactionCard: some View {
@@ -179,11 +312,35 @@ struct LedgerFlowView: View {
         showCreateSheet = true
     }
 
+    private func normalizeSelectionIfNeeded() {
+        if !availableYears.contains(selectedYear), let fallbackYear = availableYears.first {
+            selectedYear = fallbackYear
+        }
+
+        if !(1...12).contains(selectedMonth) {
+            selectedMonth = Calendar.current.component(.month, from: .now)
+        }
+    }
+
+    private func resetToCurrentPeriod() {
+        let now = Date()
+        selectedYear = Calendar.current.component(.year, from: now)
+        selectedMonth = Calendar.current.component(.month, from: now)
+        normalizeSelectionIfNeeded()
+    }
+
     private func totalAmount(inMonthOf date: Date) -> Double {
-        let calendar = Calendar.current
+        let range = monthRange(for: date)
         return entries
-            .filter { calendar.isDate($0.createdAt, equalTo: date, toGranularity: .month) }
+            .filter { range.contains($0.createdAt) }
             .reduce(0) { $0 + $1.amount }
+    }
+
+    private func monthRange(for date: Date) -> DateInterval {
+        let calendar = Calendar.current
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+        let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+        return DateInterval(start: start, end: end)
     }
 
     private func delete(_ entry: LedgerEntry) {

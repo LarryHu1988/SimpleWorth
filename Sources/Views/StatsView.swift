@@ -2,18 +2,49 @@ import Charts
 import SwiftData
 import SwiftUI
 
+private struct MonthlyTrendRow: Identifiable {
+    let month: Int
+    let expense: Double
+    let income: Double
+
+    var id: Int { month }
+}
+
 struct StatsView: View {
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
+
     @State private var selectedFlow: FlowType = .expense
+    @State private var selectedYear = Calendar.current.component(.year, from: .now)
+    @State private var selectedMonth = Calendar.current.component(.month, from: .now)
+    @State private var chartMonthSelection: Double?
+    @State private var chartScrollStartMonth = max(
+        1.0,
+        Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
+    )
+    @State private var showSettingsSheet = false
+
+    private var availableYears: [Int] {
+        let currentYear = Calendar.current.component(.year, from: .now)
+        let years = Set(entries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
+        return years.sorted(by: >)
+    }
+
+    private var selectedMonthEntries: [LedgerEntry] {
+        entries.filter {
+            let year = Calendar.current.component(.year, from: $0.createdAt)
+            let month = Calendar.current.component(.month, from: $0.createdAt)
+            return year == selectedYear && month == selectedMonth
+        }
+    }
 
     private var totalExpense: Double {
-        entries
+        selectedMonthEntries
             .filter { $0.flow == .expense }
             .reduce(0) { $0 + $1.amount }
     }
 
     private var totalIncome: Double {
-        entries
+        selectedMonthEntries
             .filter { $0.flow == .income }
             .reduce(0) { $0 + $1.amount }
     }
@@ -27,39 +58,30 @@ struct StatsView: View {
         return netBalance / totalIncome
     }
 
-    private var monthlyRows: [MonthlyCashflow] {
-        let calendar = Calendar.current
-        let currentMonthStart = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: .now)
-        ) ?? .now
-
-        let monthStarts: [Date] = (0..<6).compactMap { offset in
-            calendar.date(byAdding: .month, value: offset - 5, to: currentMonthStart)
+    private var monthlyRows: [MonthlyTrendRow] {
+        let monthEntries = entries.filter {
+            Calendar.current.component(.year, from: $0.createdAt) == selectedYear
         }
 
-        return monthStarts.map { monthStart in
-            let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
-            let monthEntries = entries.filter { $0.createdAt >= monthStart && $0.createdAt < monthEnd }
+        return (1...12).map { month in
+            let rows = monthEntries.filter {
+                Calendar.current.component(.month, from: $0.createdAt) == month
+            }
 
-            let expense = monthEntries
+            let expense = rows
                 .filter { $0.flow == .expense }
                 .reduce(0) { $0 + $1.amount }
 
-            let income = monthEntries
+            let income = rows
                 .filter { $0.flow == .income }
                 .reduce(0) { $0 + $1.amount }
 
-            return MonthlyCashflow(
-                monthStart: monthStart,
-                monthLabel: monthStart.monthLabel,
-                expense: expense,
-                income: income
-            )
+            return MonthlyTrendRow(month: month, expense: expense, income: income)
         }
     }
 
     private var selectedStats: [CategoryStat] {
-        let filtered = entries.filter { $0.flow == selectedFlow }
+        let filtered = selectedMonthEntries.filter { $0.flow == selectedFlow }
         let grouped = Dictionary(grouping: filtered) {
             "\($0.categoryName)|\($0.categorySymbol)|\($0.categoryColorHex)"
         }
@@ -100,16 +122,94 @@ struct StatsView: View {
         }
         .navigationTitle("统计")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: SWTheme.toolbarControlSpacing) {
+                    yearMenu
+
+                    Button {
+                        showSettingsSheet = true
+                        HapticService.impact()
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundStyle(SWTheme.accentBlue)
+                    }
+                    .accessibilityLabel("统计设置")
+                }
+            }
+        }
+        .sheet(isPresented: $showSettingsSheet) {
+            StatsSettingsView()
+        }
+        .onChange(of: availableYears) { _, _ in
+            normalizeSelectionIfNeeded()
+            syncScrollWithSelection()
+        }
+        .onChange(of: chartMonthSelection) { _, newValue in
+            guard let newValue else { return }
+            let normalizedMonth = monthFromChartX(newValue)
+            if selectedMonth != normalizedMonth {
+                selectedMonth = normalizedMonth
+                syncScrollWithSelection()
+                HapticService.selection()
+            }
+        }
+        .onChange(of: selectedMonth) { _, _ in
+            syncScrollWithSelection()
+        }
+        .onAppear {
+            resetToCurrentPeriod()
+            chartMonthSelection = monthAnchor(for: selectedMonth)
+            syncScrollWithSelection()
+        }
         .appBackground()
+    }
+
+    private var yearMenu: some View {
+        Menu {
+            ForEach(availableYears, id: \.self) { year in
+                Button {
+                    selectedYear = year
+                    chartMonthSelection = monthAnchor(for: selectedMonth)
+                    syncScrollWithSelection()
+                    HapticService.selection()
+                } label: {
+                    if year == selectedYear {
+                        Label("\(year)年", systemImage: "checkmark")
+                    } else {
+                        Text("\(year)年")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedYear)年")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择年度")
     }
 
     private var overviewCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "收支概览", subtitle: "实时汇总（基于本地账本）")
+            HStack {
+                SectionTitle(title: "收支概览", subtitle: "")
+                Spacer()
+                monthMenu
+            }
 
             HStack(spacing: 12) {
-                StatMetric(title: "总收入", valueText: totalIncome.cnyText, tint: SWTheme.accentGreen)
-                StatMetric(title: "总支出", valueText: totalExpense.cnyText, tint: SWTheme.accentOrange)
+                StatMetric(title: "收入", valueText: totalIncome.cnyText, tint: SWTheme.accentGreen)
+                StatMetric(title: "支出", valueText: totalExpense.cnyText, tint: SWTheme.accentOrange)
             }
 
             HStack(spacing: 12) {
@@ -126,7 +226,7 @@ struct StatsView: View {
 
     private var monthlyChartCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "月度趋势", subtitle: "最近 6 个月收入与支出对比")
+            SectionTitle(title: "月度趋势", subtitle: "")
 
             if monthlyRows.allSatisfy({ $0.expense == 0 && $0.income == 0 }) {
                 EmptyStateCard(
@@ -135,27 +235,27 @@ struct StatsView: View {
                     symbol: "chart.bar.xaxis"
                 )
             } else {
+                HStack(spacing: 14) {
+                    TrendLegendItem(name: "支出", color: SWTheme.accentOrange)
+                    TrendLegendItem(name: "收入", color: SWTheme.accentGreen)
+                    Spacer()
+                }
+
                 Chart {
                     ForEach(monthlyRows) { row in
-                        BarMark(
-                            x: .value("月份", row.monthLabel),
-                            y: .value("金额", row.expense)
-                        )
-                        .position(by: .value("类型", "支出"))
-                        .foregroundStyle(by: .value("类型", "支出"))
-
-                        BarMark(
-                            x: .value("月份", row.monthLabel),
-                            y: .value("金额", row.income)
-                        )
-                        .position(by: .value("类型", "收入"))
-                        .foregroundStyle(by: .value("类型", "收入"))
+                        expenseBar(for: row)
+                        incomeBar(for: row)
                     }
                 }
-                .chartForegroundStyleScale([
-                    "支出": SWTheme.accentOrange,
-                    "收入": SWTheme.accentGreen
-                ])
+                .chartLegend(.hidden)
+                .chartXScale(
+                    domain: 1.0...13.0,
+                    range: .plotDimension(startPadding: 10, endPadding: 10)
+                )
+                .chartScrollableAxes(.horizontal)
+                .chartXVisibleDomain(length: 6)
+                .chartScrollPosition(x: $chartScrollStartMonth)
+                .chartXSelection(value: $chartMonthSelection)
                 .chartYAxis {
                     AxisMarks(position: .leading) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
@@ -165,12 +265,17 @@ struct StatsView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks { _ in
-                        AxisValueLabel()
-                            .foregroundStyle(SWTheme.textSecondary)
+                    AxisMarks(values: Array(1...12).map { monthAnchor(for: $0) }) { value in
+                        AxisValueLabel {
+                            if let x = value.as(Double.self) {
+                                let month = monthFromChartX(x)
+                                Text("\(month)月")
+                                    .foregroundStyle(SWTheme.textSecondary)
+                            }
+                        }
                     }
                 }
-                .frame(height: 230)
+                .frame(height: 238)
             }
         }
         .fitnessCard()
@@ -178,7 +283,11 @@ struct StatsView: View {
 
     private var distributionCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "分类占比", subtitle: "图标 + 圆环分布")
+            HStack {
+                SectionTitle(title: "分类占比", subtitle: "")
+                Spacer()
+                monthMenu
+            }
 
             Picker("类型", selection: $selectedFlow) {
                 ForEach(FlowType.allCases) { flow in
@@ -190,7 +299,7 @@ struct StatsView: View {
             if selectedStats.isEmpty {
                 EmptyStateCard(
                     title: "暂无\(selectedFlow.rawValue)分类数据",
-                    subtitle: "新增账单后自动更新",
+                    subtitle: "点击趋势图中的月份可以切换统计范围",
                     symbol: selectedFlow == .expense ? "minus.circle" : "plus.circle"
                 )
             } else {
@@ -237,6 +346,119 @@ struct StatsView: View {
             }
         }
         .fitnessCard()
+    }
+
+    private var monthMenu: some View {
+        Menu {
+            ForEach(1...12, id: \.self) { month in
+                Button {
+                    selectedMonth = month
+                    chartMonthSelection = monthAnchor(for: month)
+                    syncScrollWithSelection()
+                    HapticService.selection()
+                } label: {
+                    if month == selectedMonth {
+                        Label("\(month)月", systemImage: "checkmark")
+                    } else {
+                        Text("\(month)月")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedMonth)月")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择月份")
+    }
+
+    private func normalizeSelectionIfNeeded() {
+        if !availableYears.contains(selectedYear), let fallbackYear = availableYears.first {
+            selectedYear = fallbackYear
+        }
+
+        if !(1...12).contains(selectedMonth) {
+            selectedMonth = Calendar.current.component(.month, from: .now)
+        }
+    }
+
+    private func resetToCurrentPeriod() {
+        let now = Date()
+        selectedYear = Calendar.current.component(.year, from: now)
+        selectedMonth = Calendar.current.component(.month, from: now)
+        normalizeSelectionIfNeeded()
+    }
+
+    @ChartContentBuilder
+    private func expenseBar(for row: MonthlyTrendRow) -> some ChartContent {
+        let center = monthAnchor(for: row.month)
+        RectangleMark(
+            xStart: .value("支出起点", center - 0.24),
+            xEnd: .value("支出终点", center - 0.03),
+            yStart: .value("基线", 0),
+            yEnd: .value("支出", row.expense)
+        )
+        .foregroundStyle(SWTheme.accentOrange.gradient)
+        .opacity(row.month == selectedMonth ? 1 : 0.38)
+    }
+
+    @ChartContentBuilder
+    private func incomeBar(for row: MonthlyTrendRow) -> some ChartContent {
+        let center = monthAnchor(for: row.month)
+        RectangleMark(
+            xStart: .value("收入起点", center + 0.03),
+            xEnd: .value("收入终点", center + 0.24),
+            yStart: .value("基线", 0),
+            yEnd: .value("收入", row.income)
+        )
+        .foregroundStyle(SWTheme.accentGreen.gradient)
+        .opacity(row.month == selectedMonth ? 1 : 0.38)
+    }
+
+    private func syncScrollWithSelection() {
+        let minStart = 1.0
+        let maxStart = 7.0
+        let monthValue = monthAnchor(for: selectedMonth)
+
+        if monthValue < chartScrollStartMonth + 0.5 {
+            chartScrollStartMonth = max(minStart, monthValue - 0.5)
+        } else if monthValue > chartScrollStartMonth + 5.5 {
+            chartScrollStartMonth = min(maxStart, monthValue - 5.5)
+        }
+    }
+
+    private func monthAnchor(for month: Int) -> Double {
+        Double(month) + 0.5
+    }
+
+    private func monthFromChartX(_ x: Double) -> Int {
+        max(1, min(12, Int((x - 0.5).rounded())))
+    }
+}
+
+private struct TrendLegendItem: View {
+    let name: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color)
+                .frame(width: 12, height: 12)
+            Text(name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SWTheme.textSecondary)
+        }
     }
 }
 

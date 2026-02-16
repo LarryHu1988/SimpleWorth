@@ -3,6 +3,7 @@ import SwiftUI
 struct EntryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
 
     let flow: FlowType
     let entry: LedgerEntry?
@@ -53,6 +54,10 @@ struct EntryEditorSheet: View {
     private var canSave: Bool {
         guard let normalizedAmount, normalizedAmount > 0 else { return false }
         return true
+    }
+
+    private var datePickerComponents: DatePickerComponents {
+        detailedTimeEnabled ? [.date, .hourAndMinute] : [.date]
     }
 
     var body: some View {
@@ -141,9 +146,10 @@ struct EntryEditorSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "日期", subtitle: "选择入账日期")
 
-            DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
+            DatePicker("", selection: $date, displayedComponents: datePickerComponents)
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .tint(flow.accent)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -152,6 +158,7 @@ struct EntryEditorSheet: View {
                         .fill(Color.white.opacity(0.04))
                 )
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fitnessCard()
     }
 
@@ -212,18 +219,19 @@ struct EntryEditorSheet: View {
 
         let finalNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let noteToSave = finalNote.isEmpty ? selectedCategory.name : finalNote
+        let finalDate = detailedTimeEnabled ? date : Calendar.current.startOfDay(for: date)
 
         if let entry {
             entry.amount = amount
             entry.note = noteToSave
-            entry.createdAt = date
+            entry.createdAt = finalDate
             entry.flow = flow
             entry.categoryName = selectedCategory.name
             entry.categorySymbol = selectedCategory.symbol
             entry.categoryColorHex = selectedCategory.colorHex
         } else {
             let newEntry = LedgerEntry(
-                createdAt: date,
+                createdAt: finalDate,
                 amount: amount,
                 note: noteToSave,
                 flow: flow,

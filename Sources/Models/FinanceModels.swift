@@ -410,9 +410,9 @@ extension Date {
         )
     }
 
-    var ledgerDateText: String {
+    func ledgerDateText(showTime: Bool) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(self) {
+        if showTime, calendar.isDateInToday(self) {
             let timeText = formatted(
                 .dateTime
                     .hour(.twoDigits(amPM: .omitted))
@@ -431,6 +431,10 @@ extension Date {
                 .day()
                 .locale(Locale(identifier: "zh_CN"))
         )
+    }
+
+    var ledgerDateText: String {
+        ledgerDateText(showTime: true)
     }
 
     var depositDateText: String {

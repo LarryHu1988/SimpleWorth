@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct SimpleWorthApp: App {
+    @AppStorage("settings.darkModeEnabled") private var darkModeEnabled = true
+
     private var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             LedgerEntry.self,
@@ -25,7 +27,7 @@ struct SimpleWorthApp: App {
     var body: some Scene {
         WindowGroup {
             SeededRootView()
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(darkModeEnabled ? .dark : .light)
         }
         .modelContainer(sharedModelContainer)
     }
@@ -36,7 +38,9 @@ private struct SeededRootView: View {
     @State private var hasSeeded = false
 
     var body: some View {
-        MainTabView()
+        AppLockContainer {
+            MainTabView()
+        }
             .task {
                 guard !hasSeeded else { return }
                 hasSeeded = true

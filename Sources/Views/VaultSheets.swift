@@ -384,6 +384,7 @@ struct DepositEditorSheet: View {
             DatePicker("", selection: $date, displayedComponents: [.date])
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .tint(SWTheme.accentGreen)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -392,6 +393,7 @@ struct DepositEditorSheet: View {
                         .fill(Color.white.opacity(0.04))
                 )
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fitnessCard()
     }
 

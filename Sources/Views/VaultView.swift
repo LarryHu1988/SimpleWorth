@@ -18,6 +18,8 @@ struct VaultView: View {
     @State private var showCreateGoalSheet = false
     @State private var showDepositSheet = false
     @State private var editingGoal: GoalEditTarget?
+    @State private var selectedYear = Calendar.current.component(.year, from: .now)
+    @State private var selectedMonth = Calendar.current.component(.month, from: .now)
 
     private var totalCurrent: Double {
         goals.reduce(0) { $0 + $1.currentAmount }
@@ -32,8 +34,26 @@ struct VaultView: View {
         return min(max(totalCurrent / totalTarget, 0), 1)
     }
 
+    private var availableYears: [Int] {
+        let currentYear = Calendar.current.component(.year, from: .now)
+        let years = Set(deposits.map { Calendar.current.component(.year, from: $0.date) } + [currentYear])
+        return years.sorted(by: >)
+    }
+
+    private var selectedPeriodDeposits: [VaultDepositRecord] {
+        deposits.filter {
+            let year = Calendar.current.component(.year, from: $0.date)
+            let month = Calendar.current.component(.month, from: $0.date)
+            return year == selectedYear && month == selectedMonth
+        }
+    }
+
+    private var selectedPeriodLabel: String {
+        "\(selectedYear)年\(selectedMonth)月"
+    }
+
     private var recentDeposits: [VaultDepositRecord] {
-        Array(deposits.prefix(20))
+        Array(selectedPeriodDeposits.prefix(20))
     }
 
     var body: some View {
@@ -47,28 +67,33 @@ struct VaultView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .navigationTitle("小金库")
+        .navigationTitle("金库")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        showCreateGoalSheet = true
-                    } label: {
-                        Label("新增目标", systemImage: "target")
-                    }
+                HStack(spacing: SWTheme.toolbarControlSpacing) {
+                    yearMenu
+                    monthMenu
 
-                    Button {
-                        showDepositSheet = true
+                    Menu {
+                        Button {
+                            showCreateGoalSheet = true
+                        } label: {
+                            Label("新增目标", systemImage: "target")
+                        }
+
+                        Button {
+                            showDepositSheet = true
+                        } label: {
+                            Label("记录存入", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(goals.isEmpty)
                     } label: {
-                        Label("记录存入", systemImage: "arrow.down.circle")
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(SWTheme.accentBlue)
                     }
-                    .disabled(goals.isEmpty)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(SWTheme.accentBlue)
+                    .accessibilityLabel("新增")
                 }
-                .accessibilityLabel("新增")
             }
         }
         .sheet(isPresented: $showCreateGoalSheet) {
@@ -80,7 +105,77 @@ struct VaultView: View {
         .sheet(item: $editingGoal) { target in
             GoalEditorSheet(goal: target.goal)
         }
+        .onChange(of: availableYears) { _, _ in
+            normalizeSelectionIfNeeded()
+        }
+        .onAppear {
+            resetToCurrentPeriod()
+        }
         .appBackground()
+    }
+
+    private var yearMenu: some View {
+        Menu {
+            ForEach(availableYears, id: \.self) { year in
+                Button {
+                    selectedYear = year
+                    HapticService.selection()
+                } label: {
+                    if year == selectedYear {
+                        Label("\(year)年", systemImage: "checkmark")
+                    } else {
+                        Text("\(year)年")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedYear)年")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择年度")
+    }
+
+    private var monthMenu: some View {
+        Menu {
+            ForEach(1...12, id: \.self) { month in
+                Button {
+                    selectedMonth = month
+                    HapticService.selection()
+                } label: {
+                    if month == selectedMonth {
+                        Label("\(month)月", systemImage: "checkmark")
+                    } else {
+                        Text("\(month)月")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(selectedMonth)月")
+                    .font(SWTheme.toolbarPickerTextFont)
+                Image(systemName: "chevron.down")
+                    .font(SWTheme.toolbarPickerChevronFont)
+            }
+            .foregroundStyle(SWTheme.toolbarPillText)
+            .padding(.horizontal, SWTheme.toolbarPickerHorizontalPadding)
+            .padding(.vertical, SWTheme.toolbarPickerVerticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SWTheme.toolbarPillFill)
+            )
+        }
+        .accessibilityLabel("选择月份")
     }
 
     private var vaultOverview: some View {
@@ -163,7 +258,7 @@ struct VaultView: View {
             if recentDeposits.isEmpty {
                 EmptyStateCard(
                     title: "暂无存入记录",
-                    subtitle: "点击右上角 + 记录第一笔存入",
+                    subtitle: "\(selectedPeriodLabel)暂无存入记录，点击右上角 + 记录第一笔存入",
                     symbol: "tray.fill"
                 )
             } else {
@@ -228,6 +323,23 @@ struct VaultView: View {
             modelContext.delete(deposit)
             try? modelContext.save()
         }
+    }
+
+    private func normalizeSelectionIfNeeded() {
+        if !availableYears.contains(selectedYear), let fallbackYear = availableYears.first {
+            selectedYear = fallbackYear
+        }
+
+        if !(1...12).contains(selectedMonth) {
+            selectedMonth = Calendar.current.component(.month, from: .now)
+        }
+    }
+
+    private func resetToCurrentPeriod() {
+        let now = Date()
+        selectedYear = Calendar.current.component(.year, from: now)
+        selectedMonth = Calendar.current.component(.month, from: now)
+        normalizeSelectionIfNeeded()
     }
 }
 

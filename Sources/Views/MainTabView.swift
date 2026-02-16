@@ -18,17 +18,17 @@ struct MainTabView: View {
             }
 
             NavigationStack {
+                VaultView()
+            }
+            .tabItem {
+                Label("金库", systemImage: "lock.shield.fill")
+            }
+
+            NavigationStack {
                 StatsView()
             }
             .tabItem {
                 Label("统计", systemImage: "chart.bar.xaxis")
-            }
-
-            NavigationStack {
-                VaultView()
-            }
-            .tabItem {
-                Label("小金库", systemImage: "lock.shield.fill")
             }
         }
         .tint(SWTheme.accentGreen)

@@ -5,14 +5,9 @@ struct SectionTitle: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
-            Text(subtitle)
-                .font(.footnote)
-                .foregroundStyle(SWTheme.textSecondary)
-        }
+        Text(title)
+            .font(.title3.weight(.bold))
+            .foregroundStyle(.white)
     }
 }
 
@@ -43,6 +38,7 @@ struct ProgressRing: View {
 
 struct FlowSummaryCard: View {
     let flow: FlowType
+    let periodTitle: String
     let amount: Double
     let compareText: String
     let ringProgress: Double
@@ -54,7 +50,7 @@ struct FlowSummaryCard: View {
     var body: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("本月\(flow.rawValue)")
+                Text(periodTitle)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
                 Text(signedAmount.signedCNYText)
@@ -145,6 +141,7 @@ struct CategoryIconCell: View {
 }
 
 struct LedgerRow: View {
+    @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     let entry: LedgerEntry
 
     private var signedAmount: Double {
@@ -166,7 +163,7 @@ struct LedgerRow: View {
                 Text(entry.note)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                Text(entry.createdAt.ledgerDateText)
+                Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled))
                     .font(.caption)
                     .foregroundStyle(SWTheme.textSecondary)
             }
