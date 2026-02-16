@@ -134,7 +134,7 @@ struct StatsView: View {
                         Image(systemName: "gearshape.fill")
                             .foregroundStyle(SWTheme.accentBlue)
                     }
-                    .accessibilityLabel("统计设置")
+                    .accessibilityLabel("设置")
                 }
             }
         }

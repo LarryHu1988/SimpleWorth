@@ -20,7 +20,7 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.3.0
+        CFBundleShortVersionString: 0.4.0
         CFBundleVersion: 2
         UILaunchScreen:
           UIColorName: LaunchBackground

@@ -16,7 +16,6 @@ struct StatsSettingsView: View {
     @AppStorage("settings.darkModeEnabled") private var darkModeEnabled = true
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @AppStorage("settings.iCloudSyncEnabled") private var iCloudSyncEnabled = false
-    @AppStorage("settings.passcodeLockEnabled") private var passcodeLockEnabled = false
 
     @State private var showDeveloperSheet = false
     @State private var showDetailedTimeInfo = false
@@ -33,7 +32,7 @@ struct StatsSettingsView: View {
     private let supportEmail = "larry_hu@163.com"
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.3.0"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.0"
         return "V\(version)"
     }
 
@@ -60,71 +59,86 @@ struct StatsSettingsView: View {
                         .listRowBackground(Color.clear)
                 }
 
-                Section("偏好") {
-                    Toggle("震动反馈", isOn: $hapticsEnabled)
-                        .onChange(of: hapticsEnabled) { _, newValue in
-                            if newValue { HapticService.impact() }
-                        }
+                Section("个人偏好") {
+                    settingToggleRow(
+                        title: "震动反馈",
+                        symbol: "iphone.radiowaves.left.and.right",
+                        iconColor: SWTheme.accentPink,
+                        isOn: $hapticsEnabled
+                    )
+                    .onChange(of: hapticsEnabled) { _, newValue in
+                        if newValue { HapticService.impact() }
+                    }
 
-                    Toggle("深色模式", isOn: $darkModeEnabled)
-                        .onChange(of: darkModeEnabled) { _, _ in
-                            HapticService.impact()
-                        }
+                    settingToggleRow(
+                        title: "深色模式",
+                        symbol: "moon.stars.fill",
+                        iconColor: SWTheme.accentBlue,
+                        isOn: $darkModeEnabled
+                    )
+                    .onChange(of: darkModeEnabled) { _, _ in
+                        HapticService.impact()
+                    }
 
-                    HStack(spacing: 10) {
-                        Toggle("账单详细时间", isOn: $detailedTimeEnabled)
-                            .onChange(of: detailedTimeEnabled) { _, _ in
-                                HapticService.impact()
-                            }
-
-                        Button {
+                    settingToggleRow(
+                        title: "账单详细时间",
+                        symbol: "clock.badge.checkmark.fill",
+                        iconColor: SWTheme.accentOrange,
+                        isOn: $detailedTimeEnabled,
+                        infoAction: {
                             showDetailedTimeInfo = true
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .foregroundStyle(SWTheme.accentBlue)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("账单详细时间说明")
+                    )
+                    .onChange(of: detailedTimeEnabled) { _, _ in
+                        HapticService.impact()
                     }
                 }
 
-                Section("数据与安全") {
-                    Toggle("iCloud 同步", isOn: $iCloudSyncEnabled)
-                        .onChange(of: iCloudSyncEnabled) { _, _ in
-                            HapticService.impact()
-                            showICloudInfo = true
-                        }
+                Section("数据安全") {
+                    settingToggleRow(
+                        title: "iCloud 同步",
+                        symbol: "icloud.fill",
+                        iconColor: SWTheme.accentBlue,
+                        isOn: $iCloudSyncEnabled
+                    )
+                    .onChange(of: iCloudSyncEnabled) { _, _ in
+                        HapticService.impact()
+                        showICloudInfo = true
+                    }
 
-                    Toggle("启用密码锁", isOn: $passcodeLockEnabled)
-                        .onChange(of: passcodeLockEnabled) { _, _ in
-                            HapticService.impact()
-                        }
-
-                    Button {
+                    settingsActionRow(
+                        title: "账单导出",
+                        symbol: "square.and.arrow.up.on.square",
+                        iconColor: SWTheme.accentGreen
+                    ) {
                         exportBackup()
-                    } label: {
-                        Label("账单导出", systemImage: "square.and.arrow.up.on.square")
                     }
 
-                    Button {
+                    settingsActionRow(
+                        title: "账单导入",
+                        symbol: "square.and.arrow.down.on.square",
+                        iconColor: SWTheme.accentOrange
+                    ) {
                         showFileImporter = true
-                    } label: {
-                        Label("账单导入", systemImage: "square.and.arrow.down.on.square")
                     }
                 }
 
-                Section("互动") {
-                    Button {
+                Section("良性互动") {
+                    settingsActionRow(
+                        title: "意见反馈",
+                        symbol: "envelope.fill",
+                        iconColor: SWTheme.accentBlue
+                    ) {
                         sendFeedback()
-                    } label: {
-                        Label("意见反馈", systemImage: "envelope.fill")
                     }
 
-                    Button {
+                    settingsActionRow(
+                        title: "好评鼓励",
+                        symbol: "hand.thumbsup.fill",
+                        iconColor: SWTheme.accentGreen
+                    ) {
                         requestReview()
                         HapticService.impact()
-                    } label: {
-                        Label("好评鼓励", systemImage: "hand.thumbsup.fill")
                     }
 
                     if let shareURL {
@@ -133,24 +147,34 @@ struct StatsSettingsView: View {
                             subject: Text("SimpleWorth 简值"),
                             message: Text("我在用这款记账 App：SimpleWorth（简值），推荐你试试。")
                         ) {
-                            Label("分享给朋友", systemImage: "square.and.arrow.up")
+                            settingsShareLabel(
+                                title: "分享给朋友",
+                                symbol: "square.and.arrow.up",
+                                iconColor: SWTheme.accentPink
+                            )
                         }
                     } else {
-                        Text("分享给朋友")
-                            .foregroundStyle(SWTheme.textSecondary)
+                        settingsShareLabel(
+                            title: "分享给朋友",
+                            symbol: "square.and.arrow.up",
+                            iconColor: SWTheme.accentPink
+                        )
+                        .foregroundStyle(SWTheme.textSecondary)
                     }
                 }
 
                 Section("开发者信息") {
-                    Button {
+                    settingsActionRow(
+                        title: "开发者信息",
+                        symbol: "person.crop.circle",
+                        iconColor: SWTheme.accentOrange
+                    ) {
                         showDeveloperSheet = true
-                    } label: {
-                        Label("开发者信息", systemImage: "person.crop.circle")
                     }
                 }
             }
             .scrollContentBackground(.hidden)
-            .navigationTitle("统计设置")
+            .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -209,6 +233,86 @@ struct StatsSettingsView: View {
             SettingsMetricCard(title: "记账总笔数", value: "\(totalEntryCount)", tint: SWTheme.accentGreen)
         }
         .padding(.horizontal, 16)
+    }
+
+    private func settingsActionRow(
+        title: String,
+        symbol: String,
+        iconColor: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 22)
+
+                Text(title)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settingToggleRow(
+        title: String,
+        symbol: String,
+        iconColor: Color,
+        isOn: Binding<Bool>,
+        infoAction: (() -> Void)? = nil
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 22)
+
+            HStack(spacing: 6) {
+                Text(title)
+                    .foregroundStyle(.white)
+
+                if let infoAction {
+                    Button(action: infoAction) {
+                        Image(systemName: "info.circle")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(SWTheme.accentBlue)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(title)说明")
+                }
+            }
+
+            Spacer()
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+        }
+    }
+
+    private func settingsShareLabel(
+        title: String,
+        symbol: String,
+        iconColor: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 22)
+
+            Text(title)
+                .foregroundStyle(.white)
+
+            Spacer()
+        }
     }
 
     private func sendFeedback() {

@@ -38,9 +38,7 @@ private struct SeededRootView: View {
     @State private var hasSeeded = false
 
     var body: some View {
-        AppLockContainer {
-            MainTabView()
-        }
+        MainTabView()
             .task {
                 guard !hasSeeded else { return }
                 hasSeeded = true
