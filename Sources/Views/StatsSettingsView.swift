@@ -1,3 +1,4 @@
+import CloudKit
 import StoreKit
 import SwiftData
 import SwiftUI
@@ -15,11 +16,11 @@ struct StatsSettingsView: View {
     @AppStorage("settings.hapticsEnabled") private var hapticsEnabled = true
     @AppStorage("settings.darkModeEnabled") private var darkModeEnabled = true
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
-    @AppStorage("settings.iCloudSyncEnabled") private var iCloudSyncEnabled = false
+    @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
 
     @State private var showDeveloperSheet = false
     @State private var showDetailedTimeInfo = false
-    @State private var showICloudInfo = false
+    @State private var iCloudAccountState: ICloudAccountState = .idle
 
     @State private var exportDocument: LedgerBackupDocument?
     @State private var showFileExporter = false
@@ -32,7 +33,7 @@ struct StatsSettingsView: View {
     private let supportEmail = "larry_hu@163.com"
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.0"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.1"
         return "V\(version)"
     }
 
@@ -101,9 +102,25 @@ struct StatsSettingsView: View {
                         iconColor: SWTheme.accentBlue,
                         isOn: $iCloudSyncEnabled
                     )
-                    .onChange(of: iCloudSyncEnabled) { _, _ in
+                    .onChange(of: iCloudSyncEnabled) { _, newValue in
                         HapticService.impact()
-                        showICloudInfo = true
+                        refreshICloudAccountStatus()
+                        presentNotice(
+                            message: newValue
+                                ? "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。"
+                                : "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。"
+                        )
+                    }
+
+                    iCloudStatusRow
+
+                    settingsActionRow(
+                        title: "检测 iCloud 状态",
+                        symbol: "arrow.clockwise.icloud",
+                        iconColor: SWTheme.accentBlue
+                    ) {
+                        HapticService.impact()
+                        refreshICloudAccountStatus()
                     }
 
                     settingsActionRow(
@@ -176,6 +193,9 @@ struct StatsSettingsView: View {
             .scrollContentBackground(.hidden)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                refreshICloudAccountStatus()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") {
@@ -188,11 +208,6 @@ struct StatsSettingsView: View {
                 Button("知道了", role: .cancel) {}
             } message: {
                 Text("开启后，新增/编辑账单可精确到分钟；关闭后仅精确到天。")
-            }
-            .alert("iCloud 同步", isPresented: $showICloudInfo) {
-                Button("知道了", role: .cancel) {}
-            } message: {
-                Text("该开关已保留，后续版本将接入 iCloud 实时同步。")
             }
             .alert("操作结果", isPresented: $showNotice) {
                 Button("确定", role: .cancel) {}
@@ -233,6 +248,24 @@ struct StatsSettingsView: View {
             SettingsMetricCard(title: "记账总笔数", value: "\(totalEntryCount)", tint: SWTheme.accentGreen)
         }
         .padding(.horizontal, 16)
+    }
+
+    private var iCloudStatusRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: iCloudAccountState.symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(iCloudAccountState.tint)
+                .frame(width: 22)
+
+            Text("iCloud 状态")
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Text(iCloudAccountState.text)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(iCloudAccountState.tint)
+        }
     }
 
     private func settingsActionRow(
@@ -441,6 +474,85 @@ struct StatsSettingsView: View {
     private func presentNotice(message: String) {
         noticeMessage = message
         showNotice = true
+    }
+
+    private func refreshICloudAccountStatus() {
+        iCloudAccountState = .checking
+
+        Task {
+            let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
+            do {
+                let status = try await container.accountStatus()
+                await MainActor.run {
+                    iCloudAccountState = mapICloudStatus(status)
+                }
+            } catch {
+                await MainActor.run {
+                    iCloudAccountState = .unavailable("检测失败")
+                }
+            }
+        }
+    }
+
+    private func mapICloudStatus(_ status: CKAccountStatus) -> ICloudAccountState {
+        switch status {
+        case .available:
+            .available
+        case .noAccount:
+            .unavailable("未登录账号")
+        case .restricted:
+            .unavailable("账号受限")
+        case .couldNotDetermine:
+            .unavailable("无法确定")
+        case .temporarilyUnavailable:
+            .unavailable("暂时不可用")
+        @unknown default:
+            .unavailable("未知状态")
+        }
+    }
+}
+
+private enum ICloudAccountState {
+    case idle
+    case checking
+    case available
+    case unavailable(String)
+
+    var text: String {
+        switch self {
+        case .idle:
+            "未检测"
+        case .checking:
+            "检测中"
+        case .available:
+            "可用"
+        case .unavailable(let message):
+            message
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .idle:
+            "icloud"
+        case .checking:
+            "icloud.and.arrow.down"
+        case .available:
+            "checkmark.icloud.fill"
+        case .unavailable:
+            "xmark.icloud.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle, .checking:
+            SWTheme.textSecondary
+        case .available:
+            SWTheme.accentGreen
+        case .unavailable:
+            SWTheme.accentOrange
+        }
     }
 }
 

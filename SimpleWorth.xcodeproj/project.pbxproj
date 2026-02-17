@@ -10,6 +10,7 @@
 		2AFA23BF4AE713CE5415D26C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FFAA3B423C68B2A8201B4A /* Theme.swift */; };
 		3C94E79BC00BA6096F81FBBD /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACFB660981CCAB5E95F673B /* BackupDocument.swift */; };
 		3DD5C4237E2695C40C14B1F8 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0FA100434E5834E942F5BB1 /* MainTabView.swift */; };
+		49C713741833D77D1CAA7114 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C84D1FA79FE8DA3C841040 /* AppConfig.swift */; };
 		7A1A28AE38C2DBF30E497DB3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */; };
 		80FFA59FE5CA4300CA760A16 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD50A24856491E3AA53963E /* VaultView.swift */; };
 		8426C25AB8AB5A7A8F73EBC8 /* EntryEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */; };
@@ -29,6 +30,7 @@
 /* Begin PBXFileReference section */
 		0081162AD6EA4A233BEBAEF1 /* LedgerFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerFlowView.swift; sourceTree = "<group>"; };
 		01FFAA3B423C68B2A8201B4A /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		07C84D1FA79FE8DA3C841040 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		1ACFB660981CCAB5E95F673B /* BackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDocument.swift; sourceTree = "<group>"; };
 		1D57EC02BE1325AC708FF4A9 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		2A8CC5A0E0618DE5718CA19A /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
@@ -36,6 +38,7 @@
 		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A1A84C9C1CD234D84984D79 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7C96A3031E8C6C9E884649D0 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
+		80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SimpleWorth.entitlements; sourceTree = "<group>"; };
 		A015262E5CB25D039C4152B1 /* ExpenseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseView.swift; sourceTree = "<group>"; };
 		A0FA100434E5834E942F5BB1 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		A77B72DEDDBDBC84A6EB7467 /* VaultSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultSheets.swift; sourceTree = "<group>"; };
@@ -54,6 +57,7 @@
 			children = (
 				B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */,
 				7A1A84C9C1CD234D84984D79 /* Info.plist */,
+				80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */,
 				C71ACF11F43F0A3E38043196 /* App */,
 				E9DEEA706D0037D1F4D93A4F /* Models */,
 				AB91057A5C42964655DCF72F /* Preview Content */,
@@ -116,6 +120,7 @@
 		C71ACF11F43F0A3E38043196 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				07C84D1FA79FE8DA3C841040 /* AppConfig.swift */,
 				C30EC476011B7F2C6DBAF920 /* SimpleWorthApp.swift */,
 			);
 			path = App;
@@ -196,6 +201,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				49C713741833D77D1CAA7114 /* AppConfig.swift in Sources */,
 				3C94E79BC00BA6096F81FBBD /* BackupDocument.swift in Sources */,
 				CDC38BEC5BAB8FF13F47F762 /* DashboardComponents.swift in Sources */,
 				8426C25AB8AB5A7A8F73EBC8 /* EntryEditorSheet.swift in Sources */,
@@ -222,6 +228,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/SimpleWorth.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"Sources/Preview Content\"";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -242,6 +249,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/SimpleWorth.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"Sources/Preview Content\"";
 				GENERATE_INFOPLIST_FILE = NO;

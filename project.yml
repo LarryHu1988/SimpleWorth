@@ -14,14 +14,24 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
+    entitlements:
+      path: Sources/SimpleWorth.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.larry.SimpleWorth
+        com.apple.developer.icloud-services:
+          - CloudKit
+        com.apple.developer.ubiquity-container-identifiers:
+          - iCloud.com.larry.SimpleWorth
+        com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.larry.SimpleWorth"
     sources:
       - Sources
     info:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.4.0
-        CFBundleVersion: 2
+        CFBundleShortVersionString: 0.4.1
+        CFBundleVersion: 3
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: LaunchMark
