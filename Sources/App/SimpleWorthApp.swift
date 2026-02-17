@@ -31,28 +31,37 @@ struct SimpleWorthApp: App {
             ? .private(AppConfig.iCloudContainerIdentifier)
             : .none
 
-        let modelConfiguration = ModelConfiguration(
+        let primaryConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
             cloudKitDatabase: cloudKitDatabase
         )
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            if iCloudSyncEnabled {
-                let localConfiguration = ModelConfiguration(
-                    schema: schema,
-                    isStoredInMemoryOnly: false,
-                    cloudKitDatabase: .none
-                )
-                if let fallbackContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
-                    return fallbackContainer
-                }
-            }
-
-            fatalError("Could not create ModelContainer: \(error)")
+        if let container = try? ModelContainer(for: schema, configurations: [primaryConfiguration]) {
+            return container
         }
+
+        let localConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .none
+        )
+        if let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
+            UserDefaults.standard.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
+            return localContainer
+        }
+
+        let inMemoryConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
+        )
+        if let inMemoryContainer = try? ModelContainer(for: schema, configurations: [inMemoryConfiguration]) {
+            UserDefaults.standard.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
+            return inMemoryContainer
+        }
+
+        fatalError("Could not create ModelContainer in any mode")
     }
 }
 

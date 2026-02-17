@@ -6,4 +6,5 @@ enum AppConfig {
 
 enum SettingsKeys {
     static let iCloudSyncEnabled = "settings.iCloudSyncEnabled"
+    static let baseCurrencyCode = "settings.baseCurrencyCode"
 }

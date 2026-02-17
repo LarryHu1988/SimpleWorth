@@ -6,6 +6,9 @@ struct LedgerEntrySnapshot: Codable {
     let id: UUID
     let createdAt: Date
     let amount: Double
+    let originalAmount: Double?
+    let currencyCode: String?
+    let exchangeRateToCNY: Double?
     let note: String
     let flow: FlowType
     let categoryName: String

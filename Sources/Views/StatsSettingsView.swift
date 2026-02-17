@@ -33,7 +33,7 @@ struct StatsSettingsView: View {
     private let supportEmail = "larry_hu@163.com"
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.1"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.0"
         return "V\(version)"
     }
 
@@ -93,6 +93,17 @@ struct StatsSettingsView: View {
                     .onChange(of: detailedTimeEnabled) { _, _ in
                         HapticService.impact()
                     }
+
+                    NavigationLink {
+                        CurrencySettingsView()
+                    } label: {
+                        settingsNavigationRowLabel(
+                            title: "货币选择",
+                            symbol: "dollarsign.circle.fill",
+                            iconColor: SWTheme.accentGreen
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 Section("数据安全") {
@@ -348,6 +359,24 @@ struct StatsSettingsView: View {
         }
     }
 
+    private func settingsNavigationRowLabel(
+        title: String,
+        symbol: String,
+        iconColor: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 22)
+
+            Text(title)
+                .foregroundStyle(.white)
+
+            Spacer()
+        }
+    }
+
     private func sendFeedback() {
         let subject = "SimpleWorth 意见反馈".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let body = "请描述你的建议或问题：".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -368,6 +397,9 @@ struct StatsSettingsView: View {
                     id: $0.id,
                     createdAt: $0.createdAt,
                     amount: $0.amount,
+                    originalAmount: $0.originalAmount,
+                    currencyCode: $0.currencyCode,
+                    exchangeRateToCNY: $0.exchangeRateToCNY,
                     note: $0.note,
                     flow: $0.flow,
                     categoryName: $0.categoryName,
@@ -450,6 +482,9 @@ struct StatsSettingsView: View {
                 id: snapshot.id,
                 createdAt: snapshot.createdAt,
                 amount: snapshot.amount,
+                originalAmount: snapshot.originalAmount ?? snapshot.amount,
+                currencyCode: snapshot.currencyCode ?? "CNY",
+                exchangeRateToCNY: snapshot.exchangeRateToCNY ?? 1,
                 note: snapshot.note,
                 flow: snapshot.flow,
                 category: category

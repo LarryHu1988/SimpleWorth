@@ -39,14 +39,12 @@ struct StatsView: View {
 
     private var totalExpense: Double {
         selectedMonthEntries
-            .filter { $0.flow == .expense }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + $1.expenseContribution }
     }
 
     private var totalIncome: Double {
         selectedMonthEntries
-            .filter { $0.flow == .income }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + $1.incomeContribution }
     }
 
     private var netBalance: Double {
@@ -69,12 +67,10 @@ struct StatsView: View {
             }
 
             let expense = rows
-                .filter { $0.flow == .expense }
-                .reduce(0) { $0 + $1.amount }
+                .reduce(0) { $0 + $1.expenseContribution }
 
             let income = rows
-                .filter { $0.flow == .income }
-                .reduce(0) { $0 + $1.amount }
+                .reduce(0) { $0 + $1.incomeContribution }
 
             return MonthlyTrendRow(month: month, expense: expense, income: income)
         }

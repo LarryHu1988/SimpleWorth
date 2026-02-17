@@ -3,6 +3,7 @@ import SwiftUI
 struct GoalEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var currencyStore = CurrencyStore.shared
 
     let goal: SavingsGoalRecord?
 
@@ -48,6 +49,11 @@ struct GoalEditorSheet: View {
         guard let parsedCurrent, parsedCurrent >= 0 else { return false }
         guard let parsedTarget, parsedTarget > 0 else { return false }
         return true
+    }
+
+    private var currencySymbol: String {
+        let code = CurrencyCatalog.normalize(code: currencyStore.baseCurrencyCode)
+        return CurrencyCatalog.symbol(for: code)
     }
 
     var body: some View {
@@ -107,23 +113,8 @@ struct GoalEditorSheet: View {
             SectionTitle(title: "金额设置", subtitle: "当前金额与目标金额")
 
             VStack(spacing: 10) {
-                HStack {
-                    Text("当前")
-                        .foregroundStyle(SWTheme.textSecondary)
-                    TextField("0", text: $currentText)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.white)
-                }
-
-                HStack {
-                    Text("目标")
-                        .foregroundStyle(SWTheme.textSecondary)
-                    TextField("0", text: $targetText)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.white)
-                }
+                amountInputRow(title: "当前", text: $currentText)
+                amountInputRow(title: "目标", text: $targetText)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -133,6 +124,28 @@ struct GoalEditorSheet: View {
             )
         }
         .fitnessCard()
+    }
+
+    private func amountInputRow(title: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(SWTheme.textSecondary)
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 4) {
+                Text(currencySymbol)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.84))
+
+                TextField("0", text: text)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: 44, alignment: .leading)
+            }
+        }
     }
 
     private var deadlineCard: some View {
@@ -269,6 +282,7 @@ struct GoalEditorSheet: View {
 struct DepositEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var currencyStore = CurrencyStore.shared
 
     let goals: [SavingsGoalRecord]
 
@@ -297,6 +311,11 @@ struct DepositEditorSheet: View {
         guard selectedGoal != nil else { return false }
         guard let parsedAmount, parsedAmount > 0 else { return false }
         return true
+    }
+
+    private var currencySymbol: String {
+        let code = CurrencyCatalog.normalize(code: currencyStore.baseCurrencyCode)
+        return CurrencyCatalog.symbol(for: code)
     }
 
     var body: some View {
@@ -360,19 +379,27 @@ struct DepositEditorSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "存入金额", subtitle: "将零散现金沉淀到小金库")
 
-            TextField("0", text: $amountText)
-                .keyboardType(.decimalPad)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(SWTheme.accentGreen.opacity(0.4), lineWidth: 1)
-                        )
-                )
+            HStack(spacing: 10) {
+                Text(currencySymbol)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.white.opacity(0.84))
+
+                TextField("0", text: $amountText)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(SWTheme.accentGreen.opacity(0.4), lineWidth: 1)
+                    )
+            )
         }
         .fitnessCard()
     }

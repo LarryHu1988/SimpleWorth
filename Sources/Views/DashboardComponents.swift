@@ -144,8 +144,18 @@ struct LedgerRow: View {
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     let entry: LedgerEntry
 
-    private var signedAmount: Double {
-        entry.flow == .expense ? -entry.amount : entry.amount
+    private var signedDisplayAmount: Double {
+        entry.signedDisplayAmount
+    }
+
+    private var signedCNYAmount: Double {
+        entry.signedAmountInCNY
+    }
+
+    private var signedDisplayAmountText: String {
+        let code = CurrencyCatalog.normalize(code: entry.currencyCode)
+        let digits = CurrencyCatalog.fractionDigits(for: code)
+        return signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits)
     }
 
     var body: some View {
@@ -163,21 +173,240 @@ struct LedgerRow: View {
                 Text(entry.note)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled))
-                    .font(.caption)
-                    .foregroundStyle(SWTheme.textSecondary)
+
+                HStack(spacing: 6) {
+                    Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled))
+                        .font(.caption)
+                        .foregroundStyle(SWTheme.textSecondary)
+
+                    if CurrencyCatalog.normalize(code: entry.currencyCode) != "CNY" {
+                        Text("折合\(signedCNYAmount.signedCNYText)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(SWTheme.textSecondary)
+                    }
+                }
             }
 
             Spacer(minLength: 8)
 
-            Text(signedAmount.signedCNYText)
+            Text(signedDisplayAmountText)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(entry.flow == .expense ? SWTheme.accentOrange : SWTheme.accentGreen)
+                .foregroundStyle(entry.amountTint)
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.04))
+        )
+    }
+}
+
+struct SwipeableLedgerRow: View {
+    let entry: LedgerEntry
+    var showCopyAction: Bool = true
+    var showRefundAction: Bool = true
+    let onTap: () -> Void
+    let onCopy: () -> Void
+    let onRefund: () -> Void
+    let onDelete: () -> Void
+
+    @State private var offsetX: CGFloat = 0
+    @State private var baseOffsetX: CGFloat = 0
+    @State private var isHorizontalDragging = false
+
+    private var leadingWidth: CGFloat {
+        showCopyAction ? 84 : 0
+    }
+    private var trailingWidth: CGFloat {
+        showRefundAction ? 168 : 84
+    }
+
+    private var revealedLeadingWidth: CGFloat {
+        max(offsetX, 0)
+    }
+
+    private var revealedTrailingWidth: CGFloat {
+        max(-offsetX, 0)
+    }
+
+    private var isOpen: Bool {
+        abs(baseOffsetX) > 0.5 || abs(offsetX) > 0.5
+    }
+
+    var body: some View {
+        ZStack {
+            actionBackground
+
+            LedgerRow(entry: entry)
+                .offset(x: offsetX)
+                .contentShape(Rectangle())
+                .allowsHitTesting(!isOpen || isHorizontalDragging)
+                .onTapGesture {
+                    onTap()
+                }
+        }
+        .contentShape(Rectangle())
+        .simultaneousGesture(dragGesture)
+        .onTapGesture {
+            if isOpen {
+                closeActions()
+            }
+        }
+        .clipped()
+    }
+
+    private var actionBackground: some View {
+        ZStack {
+            HStack {
+                if showCopyAction {
+                    leadingActionPane
+                        .frame(width: revealedLeadingWidth, alignment: .leading)
+                        .clipped()
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack {
+                Spacer(minLength: 0)
+                trailingActionPane
+                    .frame(width: revealedTrailingWidth, alignment: .trailing)
+                    .clipped()
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .allowsHitTesting(abs(offsetX) > 0.5)
+    }
+
+    private var leadingActionPane: some View {
+        Button {
+            closeActions()
+            onCopy()
+        } label: {
+            actionLabel(
+                title: "复制",
+                symbol: "doc.on.doc.fill",
+                tint: SWTheme.accentGreen.opacity(0.38),
+                width: leadingWidth
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(width: leadingWidth)
+        .padding(.leading, 2)
+        .padding(.vertical, 2)
+    }
+
+    private var trailingActionPane: some View {
+        HStack(spacing: 0) {
+            if showRefundAction {
+                Button {
+                    closeActions()
+                    onRefund()
+                } label: {
+                    actionLabel(
+                        title: "退款",
+                        symbol: "arrow.uturn.backward.circle.fill",
+                        tint: SWTheme.accentBlue.opacity(0.4),
+                        width: 84
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(role: .destructive) {
+                closeActions()
+                onDelete()
+            } label: {
+                actionLabel(
+                    title: "删除",
+                    symbol: "trash.fill",
+                    tint: Color.red.opacity(0.46),
+                    width: 84
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(width: trailingWidth)
+        .padding(.trailing, 2)
+        .padding(.vertical, 2)
+    }
+
+    private func clampedOffset(_ value: CGFloat) -> CGFloat {
+        if value > leadingWidth {
+            let extra = value - leadingWidth
+            return leadingWidth + extra * 0.24
+        }
+        if value < -trailingWidth {
+            let extra = value + trailingWidth
+            return -trailingWidth + extra * 0.24
+        }
+
+        return min(max(value, -trailingWidth), leadingWidth)
+    }
+
+    private func settledOffset(_ value: CGFloat) -> CGFloat {
+        min(max(value, -trailingWidth), leadingWidth)
+    }
+
+    private func closeActions() {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.74, blendDuration: 0.08)) {
+            offsetX = 0
+            baseOffsetX = 0
+        }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                let translation = value.translation
+                if !isHorizontalDragging {
+                    if abs(translation.width) <= abs(translation.height) {
+                        return
+                    }
+                    isHorizontalDragging = true
+                }
+
+                offsetX = clampedOffset(baseOffsetX + translation.width)
+            }
+            .onEnded { value in
+                defer { isHorizontalDragging = false }
+                guard isHorizontalDragging else { return }
+
+                let predictedOffset = settledOffset(baseOffsetX + value.predictedEndTranslation.width)
+                let leadingThreshold = leadingWidth * 0.42
+                let trailingThreshold = -trailingWidth * 0.38
+
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.74, blendDuration: 0.08)) {
+                    if predictedOffset > leadingThreshold {
+                        offsetX = leadingWidth
+                        baseOffsetX = leadingWidth
+                    } else if predictedOffset < trailingThreshold {
+                        offsetX = -trailingWidth
+                        baseOffsetX = -trailingWidth
+                    } else {
+                        offsetX = 0
+                        baseOffsetX = 0
+                    }
+                }
+            }
+    }
+
+    private func actionLabel(title: String, symbol: String, tint: Color, width: CGFloat) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.bold))
+            Text(title)
+                .font(.caption2.weight(.semibold))
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
+        .foregroundStyle(Color.white.opacity(0.96))
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(tint)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                )
         )
     }
 }

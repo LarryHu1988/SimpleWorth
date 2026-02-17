@@ -15,6 +15,9 @@ struct LedgerFlowView: View {
     @State private var showCreateSheet = false
     @State private var presetCategoryID: String?
     @State private var editingTarget: EntryEditTarget?
+    @State private var copyTarget: EntryEditTarget?
+    @State private var refundTarget: EntryEditTarget?
+    @State private var pendingDeleteEntry: LedgerEntry?
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var showCategoryGrid = false
@@ -98,7 +101,7 @@ struct LedgerFlowView: View {
     }
 
     private var recentSubtitle: String {
-        flow == .expense ? "点按可编辑，左滑可删除" : "点按可编辑，左滑可删除"
+        flow == .expense ? "点按可编辑，左滑退款或删除，右滑复制（退款账单除外）" : "点按可编辑，左滑删除，右滑复制"
     }
 
     private var emptyTitle: String {
@@ -162,10 +165,16 @@ struct LedgerFlowView: View {
         .sheet(isPresented: $showCreateSheet, onDismiss: {
             presetCategoryID = nil
         }) {
-            EntryEditorSheet(flow: flow, presetCategoryID: presetCategoryID)
+            EntryEditorSheet(flow: flow, presetCategoryID: presetCategoryID, operation: .create)
         }
         .sheet(item: $editingTarget) { target in
-            EntryEditorSheet(flow: flow, entry: target.entry)
+            EntryEditorSheet(flow: flow, entry: target.entry, operation: .edit)
+        }
+        .sheet(item: $copyTarget) { target in
+            EntryEditorSheet(flow: flow, entry: target.entry, operation: .copy)
+        }
+        .sheet(item: $refundTarget) { target in
+            EntryEditorSheet(flow: target.entry.flow, entry: target.entry, operation: .refund)
         }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
@@ -173,6 +182,28 @@ struct LedgerFlowView: View {
         .onAppear {
             resetToCurrentPeriod()
             showCategoryGrid = false
+        }
+        .alert(
+            "确认删除账单",
+            isPresented: Binding(
+                get: { pendingDeleteEntry != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingDeleteEntry = nil
+                    }
+                }
+            ),
+            presenting: pendingDeleteEntry
+        ) { entry in
+            Button("删除", role: .destructive) {
+                delete(entry)
+                pendingDeleteEntry = nil
+            }
+            Button("取消", role: .cancel) {
+                pendingDeleteEntry = nil
+            }
+        } message: { _ in
+            Text("删除后将同步更新统计数据，且无法撤销。")
         }
         .appBackground()
     }
@@ -281,25 +312,24 @@ struct LedgerFlowView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(recentEntries) { entry in
-                        LedgerRow(entry: entry)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
+                        SwipeableLedgerRow(
+                            entry: entry,
+                            showCopyAction: !entry.isRefundEntry,
+                            showRefundAction: flow == .expense,
+                            onTap: {
                                 editingTarget = EntryEditTarget(id: entry.id, entry: entry)
+                            },
+                            onCopy: {
+                                copyTarget = EntryEditTarget(id: entry.id, entry: entry)
+                            },
+                            onRefund: {
+                                guard flow == .expense else { return }
+                                refundTarget = EntryEditTarget(id: entry.id, entry: entry)
+                            },
+                            onDelete: {
+                                pendingDeleteEntry = entry
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    delete(entry)
-                                } label: {
-                                    Label("删除", systemImage: "trash.fill")
-                                }
-
-                                Button {
-                                    editingTarget = EntryEditTarget(id: entry.id, entry: entry)
-                                } label: {
-                                    Label("编辑", systemImage: "pencil")
-                                }
-                                .tint(SWTheme.accentBlue)
-                            }
+                        )
                     }
                 }
             }
@@ -333,7 +363,7 @@ struct LedgerFlowView: View {
         let range = monthRange(for: date)
         return entries
             .filter { range.contains($0.createdAt) }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + $1.flowPageContribution }
     }
 
     private func monthRange(for date: Date) -> DateInterval {

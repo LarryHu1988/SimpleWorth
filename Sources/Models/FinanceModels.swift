@@ -32,6 +32,15 @@ enum FlowType: String, CaseIterable, Identifiable, Codable {
         case .income: SWTheme.accentGreen
         }
     }
+
+    var opposite: FlowType {
+        switch self {
+        case .expense:
+            .income
+        case .income:
+            .expense
+        }
+    }
 }
 
 struct CategoryItem: Identifiable, Hashable {
@@ -74,19 +83,28 @@ struct CategoryStat: Identifiable {
 
 @Model
 final class LedgerEntry {
-    @Attribute(.unique) var id: UUID
-    var createdAt: Date
-    var amount: Double
-    var note: String
-    var flowRaw: String
-    var categoryName: String
-    var categorySymbol: String
-    var categoryColorHex: Int
+    var id: UUID = UUID()
+    var createdAt: Date = Date.now
+    // Normalized to CNY for unified statistics and chart aggregation.
+    var amount: Double = 0
+    // Original user input amount in the selected currency.
+    var originalAmount: Double = 0
+    var currencyCode: String = CurrencyCatalog.defaultBaseCode
+    // 1 unit of selected currency equals how many CNY.
+    var exchangeRateToCNY: Double = 1
+    var note: String = ""
+    var flowRaw: String = FlowType.expense.storageValue
+    var categoryName: String = ""
+    var categorySymbol: String = ""
+    var categoryColorHex: Int = 0x9CA3AF
 
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
         amount: Double,
+        originalAmount: Double? = nil,
+        currencyCode: String = "CNY",
+        exchangeRateToCNY: Double = 1,
         note: String,
         flow: FlowType,
         category: CategoryItem
@@ -94,6 +112,9 @@ final class LedgerEntry {
         self.id = id
         self.createdAt = createdAt
         self.amount = amount
+        self.originalAmount = originalAmount ?? amount
+        self.currencyCode = currencyCode
+        self.exchangeRateToCNY = exchangeRateToCNY
         self.note = note
         self.flowRaw = flow.storageValue
         self.categoryName = category.name
@@ -109,18 +130,70 @@ final class LedgerEntry {
     var categoryColor: Color {
         Color.sw(UInt(categoryColorHex))
     }
+
+    var displayAmount: Double {
+        originalAmount > 0 ? originalAmount : amount
+    }
+
+    var isRefundEntry: Bool {
+        categoryName == CategoryLibrary.refundCategoryName
+    }
+
+    var signedDisplayAmount: Double {
+        switch flow {
+        case .expense:
+            return isRefundEntry ? displayAmount : -displayAmount
+        case .income:
+            return displayAmount
+        }
+    }
+
+    var signedAmountInCNY: Double {
+        switch flow {
+        case .expense:
+            return isRefundEntry ? amount : -amount
+        case .income:
+            return amount
+        }
+    }
+
+    var amountTint: Color {
+        if flow == .income {
+            return SWTheme.accentGreen
+        }
+        return isRefundEntry ? SWTheme.accentBlue : SWTheme.accentOrange
+    }
+
+    var expenseContribution: Double {
+        guard flow == .expense else { return 0 }
+        return isRefundEntry ? -amount : amount
+    }
+
+    var incomeContribution: Double {
+        guard flow == .income else { return 0 }
+        return amount
+    }
+
+    var flowPageContribution: Double {
+        switch flow {
+        case .expense:
+            return isRefundEntry ? -amount : amount
+        case .income:
+            return amount
+        }
+    }
 }
 
 @Model
 final class SavingsGoalRecord {
-    @Attribute(.unique) var id: UUID
-    var createdAt: Date
-    var name: String
-    var symbol: String
-    var currentAmount: Double
-    var targetAmount: Double
+    var id: UUID = UUID()
+    var createdAt: Date = Date.now
+    var name: String = ""
+    var symbol: String = "target"
+    var currentAmount: Double = 0
+    var targetAmount: Double = 0
     var deadline: Date?
-    var tintHex: Int
+    var tintHex: Int = 0x38BDF8
     @Relationship(deleteRule: .cascade, inverse: \VaultDepositRecord.goal) var deposits: [VaultDepositRecord]
 
     init(
@@ -166,10 +239,10 @@ final class SavingsGoalRecord {
 
 @Model
 final class VaultDepositRecord {
-    @Attribute(.unique) var id: UUID
-    var date: Date
-    var amount: Double
-    var note: String
+    var id: UUID = UUID()
+    var date: Date = Date.now
+    var amount: Double = 0
+    var note: String = ""
     var goal: SavingsGoalRecord?
 
     init(
@@ -188,6 +261,14 @@ final class VaultDepositRecord {
 }
 
 enum CategoryLibrary {
+    static let refundCategoryName = "退款"
+    static let expenseRefundCategory = CategoryItem(
+        flow: .expense,
+        name: refundCategoryName,
+        symbol: "arrow.uturn.backward.circle.fill",
+        colorHex: 0x5AACE8
+    )
+
     static let expenseCategories: [CategoryItem] = [
         .init(flow: .expense, name: "餐饮", symbol: "fork.knife", colorHex: 0xF87171),
         .init(flow: .expense, name: "咖啡", symbol: "cup.and.saucer.fill", colorHex: 0xFB923C),
@@ -224,7 +305,7 @@ enum CategoryLibrary {
         .init(flow: .income, name: "股票", symbol: "building.columns.fill", colorHex: 0x818CF8),
         .init(flow: .income, name: "基金", symbol: "chart.pie.fill", colorHex: 0x4ADE80),
         .init(flow: .income, name: "红包", symbol: "gift.fill", colorHex: 0xFB7185),
-        .init(flow: .income, name: "退款", symbol: "arrow.uturn.backward.circle.fill", colorHex: 0x38BDF8),
+        .init(flow: .income, name: refundCategoryName, symbol: "arrow.uturn.backward.circle.fill", colorHex: 0x38BDF8),
         .init(flow: .income, name: "报销", symbol: "doc.text.fill", colorHex: 0xF59E0B),
         .init(flow: .income, name: "租金", symbol: "house.fill", colorHex: 0x2DD4BF),
         .init(flow: .income, name: "二手", symbol: "repeat.circle.fill", colorHex: 0xF472B6),
@@ -259,7 +340,10 @@ enum CategoryLibrary {
     }
 
     static func category(named name: String, flow: FlowType) -> CategoryItem? {
-        categories(for: flow).first { $0.name == name }
+        if flow == .expense, name == refundCategoryName {
+            return expenseRefundCategory
+        }
+        return categories(for: flow).first { $0.name == name }
     }
 }
 
@@ -448,16 +532,24 @@ extension Date {
 }
 
 extension Double {
-    var cnyText: String {
+    func currencyText(code: String, fractionDigits: Int = 0) -> String {
         formatted(
-            .currency(code: "CNY")
+            .currency(code: code)
                 .locale(Locale(identifier: "zh_CN"))
-                .precision(.fractionLength(0))
+                .precision(.fractionLength(fractionDigits))
         )
     }
 
-    var signedCNYText: String {
+    func signedCurrencyText(code: String, fractionDigits: Int = 0) -> String {
         let sign = self >= 0 ? "+" : "-"
-        return "\(sign)\(abs(self).cnyText)"
+        return "\(sign)\(abs(self).currencyText(code: code, fractionDigits: fractionDigits))"
+    }
+
+    var cnyText: String {
+        currencyText(code: "CNY", fractionDigits: 0)
+    }
+
+    var signedCNYText: String {
+        signedCurrencyText(code: "CNY", fractionDigits: 0)
     }
 }
