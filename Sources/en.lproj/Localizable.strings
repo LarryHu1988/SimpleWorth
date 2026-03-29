@@ -47,6 +47,8 @@
 "震动反馈" = "Haptics";
 "主题颜色" = "Theme";
 "语言选择" = "Language";
+"账单设置" = "Bill Settings";
+"详细时间" = "Detailed Time";
 "账单详细时间" = "Detailed Time";
 "货币选择" = "Currency";
 "标签管理" = "Tags";
@@ -57,7 +59,12 @@
 "良性互动" = "Support";
 "意见反馈" = "Feedback";
 "好评鼓励" = "Rate the App";
+"分享简值" = "Share SimpleWorth";
 "分享给朋友" = "Share";
+"关于简值" = "About SimpleWorth";
+"隐私协议" = "Privacy Policy";
+"作者信息" = "Author";
+"其他 APP" = "Other Apps";
 "开发者信息" = "Developer";
 "设置" = "Settings";
 "完成" = "Done";
@@ -69,6 +76,7 @@
 "记账总笔数" = "Total Entries";
 "SimpleWorth 意见反馈" = "SimpleWorth Feedback";
 "请描述你的建议或问题：" = "Please describe your suggestion or issue:";
+"settings.feedbackUnavailable" = "Mail is unavailable on this device. Please send feedback to %@. The address has been copied.";
 "账单已成功导出。" = "Bills exported successfully.";
 "账单已成功导入。" = "Bills imported successfully.";
 "同步设置" = "Sync";
@@ -262,6 +270,16 @@
 "版本" = "Version";
 "联系与项目" = "Contact & Project";
 "联系邮箱" = "Email";
+"作者主页" = "Author Website";
+"数据与同步" = "Data & Sync";
+"账单、标签、目标与存入记录默认仅保存在当前设备。" = "Bills, tags, goals, and deposits are stored on this device by default.";
+"开启 iCloud 同步后，相关数据会同步到你当前 Apple 账号的 iCloud 私有数据库。" = "After enabling iCloud Sync, related data is synced to the private iCloud database of your current Apple account.";
+"联网与系统能力" = "Network & System Services";
+"查看或刷新汇率时，App 会请求公开汇率接口以获取最新汇率。" = "When viewing or refreshing exchange rates, the app requests a public exchange-rate API for the latest data.";
+"意见反馈、好评鼓励与分享简值会调用系统邮件、评分与分享能力。" = "Feedback, ratings, and sharing SimpleWorth use the system Mail, rating, and share services.";
+"联系作者" = "Contact the Author";
+"更多作品" = "More Works";
+"当前公开作品以 SimpleWorth 为主，后续应用会优先发布在作者主页。" = "SimpleWorth is the main public app for now. Future apps will be posted on the author's website first.";
 "记录会同步更新目标进度" = "Deposits update goal progress automatically";
 "账单描述" = "Entry note";
 "例如：通勤 / 家庭 / 报销 / 旅行" = "e.g. Commute / Family / Reimbursement / Travel";

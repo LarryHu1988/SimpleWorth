@@ -32,11 +32,9 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.5.5
-        CFBundleVersion: "5"
-        UILaunchScreen:
-          UIColorName: LaunchBackground
-          UIImageName: LaunchMark
+        CFBundleShortVersionString: 0.5.6
+        CFBundleVersion: "6"
+        UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:
