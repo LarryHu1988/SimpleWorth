@@ -1,18 +1,75 @@
 import UIKit
 import SwiftUI
 
+enum ThemeMode: String, CaseIterable, Identifiable {
+    case system
+    case daylight
+    case moonlight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            "系统".appLocalized
+        case .daylight:
+            "日光".appLocalized
+        case .moonlight:
+            "月光".appLocalized
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .system:
+            "circle.lefthalf.filled"
+        case .daylight:
+            "sun.max.fill"
+        case .moonlight:
+            "moon.stars.fill"
+        }
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            nil
+        case .daylight:
+            .light
+        case .moonlight:
+            .dark
+        }
+    }
+
+    static func resolved(from defaults: UserDefaults = .standard) -> ThemeMode {
+        if
+            let rawValue = defaults.string(forKey: SettingsKeys.themeMode),
+            let mode = ThemeMode(rawValue: rawValue)
+        {
+            return mode
+        }
+
+        if defaults.object(forKey: SettingsKeys.legacyDarkModeEnabled) != nil {
+            return defaults.bool(forKey: SettingsKeys.legacyDarkModeEnabled) ? .moonlight : .daylight
+        }
+
+        return .system
+    }
+}
+
 enum SWTheme {
     static let accentGreen = Color.dynamic(light: 0x62B889, dark: 0x74F380)
     static let accentBlue = Color.dynamic(light: 0x6A9FD2, dark: 0x4FA8FF)
     static let accentOrange = Color.dynamic(light: 0xD99364, dark: 0xFF9F5A)
     static let accentPink = Color.dynamic(light: 0xD686A8, dark: 0xFF67B2)
+    static let primaryText = Color.dynamic(light: 0x122338, dark: 0xFFFFFF)
     static let textSecondary = Color.dynamic(light: 0x5F6F7E, dark: 0xBAC7DC)
 
     static let toolbarPillText = Color.dynamic(light: 0x445363, dark: 0xEEF4FF)
     static let toolbarPillFill = Color.dynamic(
-        light: 0xDCE5EE,
+        light: 0xFFFFFF,
         dark: 0xFFFFFF,
-        lightAlpha: 0.86,
+        lightAlpha: 0.56,
         darkAlpha: 0.14
     )
     static let toolbarPickerTextFont: Font = .caption.weight(.semibold)
@@ -23,9 +80,9 @@ enum SWTheme {
 
     static let appBackground = LinearGradient(
         colors: [
-            Color.dynamic(light: 0x1C2736, dark: 0x0A0F1E),
-            Color.dynamic(light: 0x253247, dark: 0x121A2F),
-            Color.dynamic(light: 0x171F2C, dark: 0x080B16)
+            Color.dynamic(light: 0xF8FBFF, dark: 0x0A0F1E),
+            Color.dynamic(light: 0xEEF5FF, dark: 0x121A2F),
+            Color.dynamic(light: 0xE3ECFB, dark: 0x080B16)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -72,29 +129,52 @@ extension UIColor {
 }
 
 private struct AppBackgroundModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        ZStack {
+            FlowingGlassBackground()
+            content
+        }
+    }
+}
+
+private struct FlowingGlassBackground: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    func body(content: Content) -> some View {
-        let blueOpacity = colorScheme == .light ? 0.11 : 0.18
-        let greenOpacity = colorScheme == .light ? 0.10 : 0.16
-
+    var body: some View {
         ZStack {
             SWTheme.appBackground
                 .ignoresSafeArea()
 
-            Circle()
-                .fill(SWTheme.accentBlue.opacity(blueOpacity))
-                .frame(width: 320)
-                .blur(radius: 60)
-                .offset(x: 150, y: -260)
+            Ellipse()
+                .fill(SWTheme.accentBlue.opacity(colorScheme == .light ? 0.18 : 0.18))
+                .frame(width: 340, height: 280)
+                .blur(radius: 56)
+                .offset(x: 132, y: -272)
 
-            Circle()
-                .fill(SWTheme.accentGreen.opacity(greenOpacity))
-                .frame(width: 260)
+            Ellipse()
+                .fill(SWTheme.accentGreen.opacity(colorScheme == .light ? 0.14 : 0.15))
+                .frame(width: 280, height: 240)
                 .blur(radius: 54)
-                .offset(x: -130, y: 310)
+                .offset(x: -144, y: 286)
 
-            content
+            Ellipse()
+                .fill(SWTheme.accentOrange.opacity(colorScheme == .light ? 0.10 : 0.11))
+                .frame(width: 250, height: 190)
+                .blur(radius: 58)
+                .offset(x: -56, y: -64)
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(colorScheme == .light ? 0.30 : 0.08),
+                    Color.white.opacity(0.02),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .blendMode(.screen)
+            .blur(radius: 64)
+            .ignoresSafeArea()
         }
     }
 }
@@ -104,14 +184,20 @@ private struct FitnessCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let topColor = colorScheme == .light
-            ? Color.sw(0xDCE5EF, alpha: 0.24)
+            ? Color.sw(0x8FA9C6, alpha: 0.34)
             : Color.white.opacity(0.12)
         let bottomColor = colorScheme == .light
-            ? Color.sw(0xA5B7CA, alpha: 0.08)
+            ? Color.sw(0x5C7391, alpha: 0.18)
             : Color.white.opacity(0.04)
         let borderColor = colorScheme == .light
-            ? Color.sw(0xBCC7D4, alpha: 0.36)
+            ? Color.white.opacity(0.54)
             : Color.white.opacity(0.18)
+        let shadowColor = colorScheme == .light
+            ? Color.sw(0x95B4D5, alpha: 0.12)
+            : Color.black.opacity(0.22)
+        let sheenColor = colorScheme == .light
+            ? Color.white.opacity(0.28)
+            : Color.white.opacity(0.08)
 
         content
             .padding(16)
@@ -119,15 +205,33 @@ private struct FitnessCardModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [topColor, bottomColor],
+                            colors: [
+                                topColor,
+                                bottomColor
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(Color.white.opacity(colorScheme == .light ? 0.04 : 0.01))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [sheenColor, .clear, Color.white.opacity(0.01)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .stroke(borderColor, lineWidth: 1)
                     )
+                    .shadow(color: shadowColor, radius: 12, x: 0, y: 8)
             )
     }
 }

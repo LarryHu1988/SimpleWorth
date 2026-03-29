@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @Environment(\.locale) private var locale
     var body: some View {
         TabView {
             NavigationStack {
@@ -33,6 +34,14 @@ struct MainTabView: View {
         }
         .tint(SWTheme.accentGreen)
         .toolbarBackground(.visible, for: .tabBar)
-        .toolbarBackground(Color.black.opacity(0.72), for: .tabBar)
+        .toolbarBackground(
+            Color.dynamic(
+                light: 0xF2F8FF,
+                dark: 0x09111E,
+                lightAlpha: 0.78,
+                darkAlpha: 0.72
+            ),
+            for: .tabBar
+        )
     }
 }

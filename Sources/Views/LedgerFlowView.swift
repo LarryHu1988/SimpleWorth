@@ -7,8 +7,10 @@ private struct EntryEditTarget: Identifiable {
 }
 
 struct LedgerFlowView: View {
+    @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var allEntries: [LedgerEntry]
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var allTags: [TagRecord]
 
     let flow: FlowType
 
@@ -28,6 +30,20 @@ struct LedgerFlowView: View {
 
     private var entries: [LedgerEntry] {
         allEntries.filter { $0.flow == flow }
+    }
+
+    private var tagTintHexByName: [String: Int] {
+        var result: [String: Int] = [:]
+
+        for tag in allTags {
+            let normalizedName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedName.isEmpty else { continue }
+            if result[normalizedName] == nil {
+                result[normalizedName] = tag.resolvedTintHex
+            }
+        }
+
+        return result
     }
 
     private var availableYears: [Int] {
@@ -60,24 +76,30 @@ struct LedgerFlowView: View {
     }
 
     private var selectedPeriodLabel: String {
-        "\(selectedYear)年\(selectedMonth)月"
+        L10n.yearMonth(year: selectedYear, month: selectedMonth, locale: locale)
     }
 
     private var compareText: String {
         guard previousPeriodTotal > 0 else {
-            return selectedPeriodTotal > 0 ? "\(selectedPeriodLabel)新增 \(selectedPeriodTotal.cnyText)" : "\(selectedPeriodLabel)暂无记录"
+            return selectedPeriodTotal > 0
+                ? L10n.string("ledger.compare.new", locale: locale, selectedPeriodLabel, selectedPeriodTotal.cnyText(in: locale))
+                : L10n.string("ledger.compare.empty", locale: locale, selectedPeriodLabel)
         }
 
         let delta = (selectedPeriodTotal - previousPeriodTotal) / previousPeriodTotal
         if abs(delta) < 0.001 {
-            return "较上月持平"
+            return L10n.string("ledger.compare.equal", locale: locale)
         }
 
         let ratioText = (abs(delta) * 100).formatted(.number.precision(.fractionLength(1)))
         if flow == .expense {
-            return delta > 0 ? "较上月上升 \(ratioText)%" : "较上月下降 \(ratioText)%"
+            return delta > 0
+                ? L10n.string("ledger.compare.expenseUp", locale: locale, ratioText)
+                : L10n.string("ledger.compare.expenseDown", locale: locale, ratioText)
         }
-        return delta > 0 ? "较上月增长 \(ratioText)%" : "较上月下降 \(ratioText)%"
+        return delta > 0
+            ? L10n.string("ledger.compare.incomeUp", locale: locale, ratioText)
+            : L10n.string("ledger.compare.incomeDown", locale: locale, ratioText)
     }
 
     private var ringProgress: Double {
@@ -89,37 +111,41 @@ struct LedgerFlowView: View {
     }
 
     private var categoryTitle: String {
-        flow == .expense ? "支出分类" : "收入分类"
+        flow == .expense ? "支出分类".appLocalized(in: locale) : "收入分类".appLocalized(in: locale)
     }
 
     private var categorySubtitle: String {
-        flow == .expense ? "常见生活消费图标一键记账" : "工资、副业、理财等来源一屏管理"
+        flow == .expense
+            ? "常见生活消费图标一键记账".appLocalized(in: locale)
+            : "工资、副业、理财等来源一屏管理".appLocalized(in: locale)
     }
 
     private var recentTitle: String {
-        flow == .expense ? "最近支出" : "最近收入"
+        flow == .expense ? "最近支出".appLocalized(in: locale) : "最近收入".appLocalized(in: locale)
     }
 
     private var recentSubtitle: String {
-        flow == .expense ? "点按可编辑，左滑退款或删除，右滑复制（退款账单除外）" : "点按可编辑，左滑删除，右滑复制"
+        flow == .expense
+            ? "点按可编辑，左滑退款或删除，右滑复制（退款账单除外）".appLocalized(in: locale)
+            : "点按可编辑，左滑删除，右滑复制".appLocalized(in: locale)
     }
 
     private var emptyTitle: String {
-        flow == .expense ? "还没有支出记录" : "还没有收入记录"
+        flow == .expense ? "还没有支出记录".appLocalized(in: locale) : "还没有收入记录".appLocalized(in: locale)
     }
 
     private var emptySubtitle: String {
         flow == .expense
-            ? "\(selectedPeriodLabel)暂无记录，右上角 + 添加第一笔支出"
-            : "\(selectedPeriodLabel)暂无记录，右上角 + 添加第一笔收入"
+            ? L10n.string("ledger.empty.expense", locale: locale, selectedPeriodLabel)
+            : L10n.string("ledger.empty.income", locale: locale, selectedPeriodLabel)
     }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            LazyVStack(spacing: 18) {
                 FlowSummaryCard(
                     flow: flow,
-                    periodTitle: "\(selectedPeriodLabel)\(flow.rawValue)",
+                    periodTitle: L10n.string("ledger.periodFlow", locale: locale, selectedPeriodLabel, flow.localizedTitle(in: locale)),
                     amount: selectedPeriodTotal,
                     compareText: compareText,
                     ringProgress: ringProgress
@@ -144,7 +170,7 @@ struct LedgerFlowView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .navigationTitle(flow.rawValue)
+        .navigationTitle(flow.localizedTitle(in: locale))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -158,7 +184,7 @@ struct LedgerFlowView: View {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(flow.accent)
                     }
-                    .accessibilityLabel("新增\(flow.rawValue)")
+                    .accessibilityLabel(L10n.string("ledger.addFlow", locale: locale, flow.localizedTitle(in: locale)))
                 }
             }
         }
@@ -220,9 +246,13 @@ struct LedgerFlowView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(flow.accent)
 
-                Text(showCategoryGrid ? "隐藏\(categoryTitle)" : "显示\(categoryTitle)")
+                Text(
+                    showCategoryGrid
+                        ? L10n.string("ledger.hideCategory", locale: locale, categoryTitle)
+                        : L10n.string("ledger.showCategory", locale: locale, categoryTitle)
+                )
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
 
                 Spacer()
 
@@ -243,15 +273,15 @@ struct LedgerFlowView: View {
                     HapticService.selection()
                 } label: {
                     if year == selectedYear {
-                        Label("\(year)年", systemImage: "checkmark")
+                        Label(L10n.year(year, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(year)年")
+                        Text(L10n.year(year, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedYear)年")
+                Text(L10n.year(selectedYear, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -275,15 +305,15 @@ struct LedgerFlowView: View {
                     HapticService.selection()
                 } label: {
                     if month == selectedMonth {
-                        Label("\(month)月", systemImage: "checkmark")
+                        Label(L10n.month(month, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(month)月")
+                        Text(L10n.month(month, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedMonth)月")
+                Text(L10n.month(selectedMonth, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -314,6 +344,7 @@ struct LedgerFlowView: View {
                     ForEach(recentEntries) { entry in
                         SwipeableLedgerRow(
                             entry: entry,
+                            tagTintHexByName: tagTintHexByName,
                             showCopyAction: !entry.isRefundEntry,
                             showRefundAction: flow == .expense,
                             onTap: {

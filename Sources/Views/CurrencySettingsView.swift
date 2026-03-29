@@ -9,6 +9,7 @@ private struct CurrencyRateItem: Identifiable {
 
 @MainActor
 struct CurrencySettingsView: View {
+    @Environment(\.locale) private var locale
     @ObservedObject private var currencyStore = CurrencyStore.shared
     @State private var searchText = ""
 
@@ -17,70 +18,50 @@ struct CurrencySettingsView: View {
     }
 
     private var lastUpdatedText: String {
-        guard let lastUpdated = currencyStore.lastUpdated else { return "未更新" }
+        guard let lastUpdated = currencyStore.lastUpdated else { return "未更新".appLocalized(in: locale) }
         return lastUpdated.formatted(
             .dateTime
                 .hour(.twoDigits(amPM: .omitted))
                 .minute(.twoDigits)
                 .second(.twoDigits)
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(locale)
         )
     }
 
     private var rateItems: [CurrencyRateItem] {
-        let baseCode = currencyStore.baseCurrencyCode
-        let items = currencyStore.descriptors.compactMap { descriptor -> CurrencyRateItem? in
-            guard descriptor.code != baseCode else { return nil }
-            guard let rate = currencyStore.rate(from: baseCode, to: descriptor.code) else { return nil }
-            return CurrencyRateItem(descriptor: descriptor, rateAgainstBase: rate)
+        let baseCode = CurrencyCatalog.normalize(code: currencyStore.baseCurrencyCode)
+        let allItems = currencyStore.supportedCurrencyCodes.compactMap { code -> CurrencyRateItem? in
+            let normalizedCode = CurrencyCatalog.normalize(code: code)
+            guard normalizedCode != baseCode else { return nil }
+            guard let rate = currencyStore.rate(from: baseCode, to: normalizedCode) else { return nil }
+            return CurrencyRateItem(
+                descriptor: CurrencyCatalog.descriptor(for: normalizedCode),
+                rateAgainstBase: rate
+            )
         }
 
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else { return items }
+        guard !keyword.isEmpty else { return allItems }
 
-        return items
-            .filter {
-                $0.descriptor.code.localizedCaseInsensitiveContains(keyword) ||
-                    $0.descriptor.name.localizedCaseInsensitiveContains(keyword)
-            }
+        return allItems.filter { item in
+            item.descriptor.code.localizedCaseInsensitiveContains(keyword) ||
+                item.descriptor.name.localizedCaseInsensitiveContains(keyword)
+        }
     }
 
     var body: some View {
-        List {
-            Section {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 16) {
                 baseCurrencyCard
+                searchCard
+                rateListCard
             }
-
-            Section("其他币种实时汇率") {
-                ForEach(rateItems) { item in
-                    Button {
-                        currencyStore.setBaseCurrency(code: item.descriptor.code)
-                        HapticService.selection()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Text(item.descriptor.flag)
-                                .font(.title3)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("\(item.descriptor.code) · \(item.descriptor.name)")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                Text("1 \(currencyStore.baseCurrencyCode) ≈ \(rateText(item.rateAgainstBase, code: item.descriptor.code))")
-                                    .font(.caption)
-                                    .foregroundStyle(SWTheme.textSecondary)
-                            }
-
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
         }
         .navigationTitle("货币选择")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "搜索币种代码或名称")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("刷新") {
@@ -95,39 +76,140 @@ struct CurrencySettingsView: View {
         .task {
             await currencyStore.refreshRates(force: false)
         }
+        .appBackground()
     }
 
     private var baseCurrencyCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("本位币")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(SWTheme.textSecondary)
+        SettingsSectionCard(title: "本位币") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Text(baseCurrency.flag)
+                        .font(.title2)
 
-            HStack(spacing: 10) {
-                Text(baseCurrency.flag)
-                    .font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(baseCurrency.code) · \(baseCurrency.name)")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text("默认本位币为人民币，可在下方点选切换")
-                        .font(.caption)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(baseCurrency.code) · \(baseCurrency.name)")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(SWTheme.primaryText)
+
+                        Text("当前记账与展示优先使用该币种。")
+                            .font(.caption)
+                            .foregroundStyle(SWTheme.textSecondary)
+                    }
+
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Text(L10n.string("currency.symbolLabel", locale: locale, baseCurrency.symbol))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SWTheme.textSecondary)
+
+                    Spacer()
+
+                    Text(L10n.string("currency.lastUpdated", locale: locale, lastUpdatedText))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(SWTheme.textSecondary)
                 }
-                Spacer()
-            }
 
-            Text("汇率更新时间：\(lastUpdatedText)")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(SWTheme.textSecondary)
-
-            if let errorMessage = currencyStore.errorMessage {
-                Text(errorMessage)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(SWTheme.accentOrange)
+                if let errorMessage = currencyStore.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(SWTheme.accentOrange)
+                }
             }
         }
-        .padding(.vertical, 4)
+    }
+
+    private var searchCard: some View {
+        SettingsSectionCard(title: "搜索") {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(SWTheme.textSecondary)
+
+                TextField("搜索币种代码或名称", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .foregroundStyle(SWTheme.primaryText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+        }
+    }
+
+    private var rateListCard: some View {
+        SettingsSectionCard(title: "其他币种实时汇率") {
+            if rateItems.isEmpty {
+                Text(
+                    searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "暂无可用汇率。".appLocalized(in: locale)
+                        : "没有找到匹配的币种。".appLocalized(in: locale)
+                )
+                    .font(.subheadline)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(Array(rateItems.enumerated()), id: \.element.id) { index, item in
+                    HStack(spacing: 10) {
+                        Text(item.descriptor.flag)
+                            .font(.title3)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(item.descriptor.code) · \(item.descriptor.name)")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SWTheme.primaryText)
+                            Text(
+                                L10n.string(
+                                    "currency.baseToTargetRate",
+                                    locale: locale,
+                                    currencyStore.baseCurrencyCode,
+                                    rateText(item.rateAgainstBase, code: item.descriptor.code),
+                                    item.descriptor.symbol
+                                )
+                            )
+                                .font(.caption)
+                                .foregroundStyle(SWTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            applyBaseCurrency(item.descriptor.code)
+                        } label: {
+                            Text("设为本位币")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(SWTheme.accentBlue.opacity(0.22))
+                                        .overlay(
+                                            Capsule(style: .continuous)
+                                                .stroke(SWTheme.accentBlue.opacity(0.4), lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 4)
+
+                    if index < rateItems.count - 1 {
+                        SettingsRowDivider()
+                    }
+                }
+            }
+        }
+    }
+
+    private func applyBaseCurrency(_ code: String) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            currencyStore.setBaseCurrency(code: code)
+        }
+        HapticService.selection()
     }
 
     private func rateText(_ rate: Double, code: String) -> String {

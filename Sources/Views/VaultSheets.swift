@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GoalEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var currencyStore = CurrencyStore.shared
 
@@ -103,7 +104,7 @@ struct GoalEditorSheet: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.04))
                 )
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
         }
         .fitnessCard()
     }
@@ -136,12 +137,12 @@ struct GoalEditorSheet: View {
             HStack(spacing: 4) {
                 Text(currencySymbol)
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.84))
+                    .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
                 TextField("0", text: text)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.leading)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 44, alignment: .leading)
             }
@@ -154,7 +155,7 @@ struct GoalEditorSheet: View {
 
             Toggle("设置截止日期", isOn: $hasDeadline)
                 .tint(SWTheme.accentBlue)
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
 
             if hasDeadline {
                 DatePicker("", selection: $deadline, displayedComponents: [.date])
@@ -179,7 +180,7 @@ struct GoalEditorSheet: View {
                     } label: {
                         Image(systemName: symbol)
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SWTheme.primaryText)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(
@@ -281,6 +282,7 @@ struct GoalEditorSheet: View {
 
 struct DepositEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var currencyStore = CurrencyStore.shared
 
@@ -363,7 +365,7 @@ struct DepositEditorSheet: View {
                 }
             }
             .pickerStyle(.menu)
-            .tint(.white)
+            .tint(SWTheme.primaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -382,12 +384,12 @@ struct DepositEditorSheet: View {
             HStack(spacing: 10) {
                 Text(currencySymbol)
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.white.opacity(0.84))
+                    .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
                 TextField("0", text: $amountText)
                     .keyboardType(.decimalPad)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
@@ -435,7 +437,7 @@ struct DepositEditorSheet: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.04))
                 )
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
         }
         .fitnessCard()
     }

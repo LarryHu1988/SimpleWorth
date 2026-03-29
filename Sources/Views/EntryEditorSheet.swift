@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum EntryEditorOperation {
     case create
@@ -10,9 +11,11 @@ enum EntryEditorOperation {
 @MainActor
 struct EntryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @ObservedObject private var currencyStore = CurrencyStore.shared
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var allTags: [TagRecord]
 
     let flow: FlowType
     let entry: LedgerEntry?
@@ -24,6 +27,7 @@ struct EntryEditorSheet: View {
     @State private var date: Date
     @State private var selectedCategoryID: String
     @State private var selectedCurrencyCode: String
+    @State private var selectedTagNames: [String]
     @State private var showCurrencyPicker = false
 
     init(
@@ -62,7 +66,7 @@ struct EntryEditorSheet: View {
             initialNote = entry?.note ?? ""
         case .refund:
             let source = entry?.note.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            initialNote = source.isEmpty ? "退款" : "退款：\(source)"
+            initialNote = source.isEmpty ? "退款".appLocalized : L10n.string("entry.refundNotePrefix", source)
         }
 
         let initialDate: Date
@@ -84,6 +88,7 @@ struct EntryEditorSheet: View {
         _date = State(initialValue: initialDate)
         _selectedCategoryID = State(initialValue: presetCategoryID ?? preferredCategory.id)
         _selectedCurrencyCode = State(initialValue: initialCurrencyCode)
+        _selectedTagNames = State(initialValue: entry?.tagNames ?? [])
     }
 
     private var categories: [CategoryItem] {
@@ -93,6 +98,15 @@ struct EntryEditorSheet: View {
     private var selectedCategory: CategoryItem {
         categories.first(where: { $0.id == selectedCategoryID })
             ?? CategoryLibrary.defaultCategory(for: flow)
+    }
+
+    private var managedTags: [TagRecord] {
+        var seen = Set<String>()
+        return allTags.filter { tag in
+            let normalized = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { return false }
+            return seen.insert(normalized.lowercased()).inserted
+        }
     }
 
     private var normalizedAmount: Double? {
@@ -135,39 +149,52 @@ struct EntryEditorSheet: View {
         selectedCurrencyDescriptor.symbol
     }
 
+    private var amountSubtitle: String {
+        L10n.string("entry.amountSubtitle", locale: locale, flow.localizedTitle(in: locale))
+    }
+
     private var currencyRateText: String {
-        guard let rateToCNY else { return "汇率加载中..." }
-        return "1 \(normalizedCurrencyCode) ≈ \(rateToCNY.currencyText(code: "CNY", fractionDigits: 4))"
+        guard let rateToCNY else { return "汇率加载中...".appLocalized(in: locale) }
+        return L10n.string(
+            "entry.currencyRate",
+            locale: locale,
+            normalizedCurrencyCode,
+            rateToCNY.currencyText(code: "CNY", fractionDigits: 4, locale: locale)
+        )
     }
 
     private var convertedPreviewText: String {
         guard let convertedAmountCNY, convertedAmountCNY > 0 else { return "" }
-        return "折合 \(convertedAmountCNY.currencyText(code: "CNY", fractionDigits: 2))"
+        return L10n.string(
+            "entry.convertedAmount",
+            locale: locale,
+            convertedAmountCNY.currencyText(code: "CNY", fractionDigits: 2, locale: locale)
+        )
     }
 
     private var titleText: String {
         switch operation {
         case .create:
-            return "新增\(flow.rawValue)"
+            return L10n.string("entry.createFlow", locale: locale, flow.localizedTitle(in: locale))
         case .edit:
-            return "编辑\(flow.rawValue)"
+            return L10n.string("entry.editFlow", locale: locale, flow.localizedTitle(in: locale))
         case .copy:
-            return "复制\(flow.rawValue)"
+            return L10n.string("entry.copyFlow", locale: locale, flow.localizedTitle(in: locale))
         case .refund:
-            return "退款录入"
+            return "退款录入".appLocalized(in: locale)
         }
     }
 
     private var saveButtonTitle: String {
         switch operation {
         case .create:
-            return "保存"
+            return "保存".appLocalized(in: locale)
         case .edit:
-            return "更新"
+            return "更新".appLocalized(in: locale)
         case .copy:
-            return "复制"
+            return "复制".appLocalized(in: locale)
         case .refund:
-            return "退款"
+            return "退款".appLocalized(in: locale)
         }
     }
 
@@ -176,8 +203,8 @@ struct EntryEditorSheet: View {
     }
 
     private var sourceEntryAmountTitle: String {
-        guard let sourceFlow = entry?.flow else { return "原账单金额" }
-        return "\(sourceFlow.rawValue)金额"
+        guard let sourceFlow = entry?.flow else { return "原账单金额".appLocalized(in: locale) }
+        return L10n.string("entry.sourceAmountTitle", locale: locale, sourceFlow.localizedTitle(in: locale))
     }
 
     private var sourceEntryAmountValueText: String {
@@ -215,7 +242,7 @@ struct EntryEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
                     if isRefundOperation {
                         sourceAmountCard
                         refundAmountCard
@@ -224,6 +251,7 @@ struct EntryEditorSheet: View {
                     }
                     noteCard
                     dateCard
+                    tagCard
                     if !isRefundOperation {
                         categoryCard
                     }
@@ -264,7 +292,7 @@ struct EntryEditorSheet: View {
 
     private var amountCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "金额", subtitle: "输入本次\(flow.rawValue)金额")
+            SectionTitle(title: "金额", subtitle: amountSubtitle)
 
             HStack(spacing: 12) {
                 Text(sourceAmountSign)
@@ -273,11 +301,11 @@ struct EntryEditorSheet: View {
 
                 Text(selectedCurrencySymbol)
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.white.opacity(0.84))
+                    .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
                 TextField("0", text: $amountText)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .keyboardType(.decimalPad)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -322,11 +350,11 @@ struct EntryEditorSheet: View {
 
                 Text(selectedCurrencySymbol)
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.white.opacity(0.84))
+                    .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
                 Text(sourceEntryAmountValueText)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .minimumScaleFactor(0.75)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -357,11 +385,11 @@ struct EntryEditorSheet: View {
 
                 Text(selectedCurrencySymbol)
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.white.opacity(0.84))
+                    .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
                 TextField("0", text: $amountText)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .keyboardType(.decimalPad)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -422,7 +450,7 @@ struct EntryEditorSheet: View {
         }
         .padding(.horizontal, 2)
         .padding(.vertical, 2)
-        .accessibilityLabel("币种：\(selectedCurrencyDescriptor.code)")
+        .accessibilityLabel(L10n.string("entry.currencyAccessibility", locale: locale, selectedCurrencyDescriptor.code))
     }
 
     private var noteCard: some View {
@@ -437,7 +465,7 @@ struct EntryEditorSheet: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.04))
                 )
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
         }
         .fitnessCard()
     }
@@ -484,9 +512,9 @@ struct EntryEditorSheet: View {
                                     .foregroundStyle(category.color)
                             }
 
-                            Text(category.name)
+                            Text(category.localizedName(in: locale))
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SWTheme.primaryText)
                                 .lineLimit(1)
                         }
                         .frame(maxWidth: .infinity)
@@ -506,6 +534,64 @@ struct EntryEditorSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
+                }
+            }
+            .id(locale.identifier)
+        }
+        .fitnessCard()
+    }
+
+    private var tagCard: some View {
+        let columns = [GridItem(.adaptive(minimum: 82), spacing: 10)]
+
+        return VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(title: "标签", subtitle: "可选，为账单补充标签")
+
+            if managedTags.isEmpty {
+                Text("还没有可选标签，请先到设置中的“标签管理”添加。".appLocalized(in: locale))
+                    .font(.caption)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+            } else {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(managedTags) { tag in
+                        let isSelected = selectedTagNames.contains(tag.name)
+
+                        Button {
+                            toggleTag(named: tag.name)
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "tag.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(tag.tintColor)
+                                Text(tag.name)
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(isSelected ? Color.white : SWTheme.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(isSelected ? flow.accent.opacity(0.24) : Color.white.opacity(0.03))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(
+                                                isSelected ? flow.accent.opacity(0.72) : Color.white.opacity(0.08),
+                                                lineWidth: isSelected ? 1.4 : 1
+                                            )
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -547,6 +633,7 @@ struct EntryEditorSheet: View {
             entry.categoryName = categoryToSave.name
             entry.categorySymbol = categoryToSave.symbol
             entry.categoryColorHex = categoryToSave.colorHex
+            entry.tagNames = selectedTagNames
         } else {
             let newEntry = LedgerEntry(
                 createdAt: finalDate,
@@ -556,7 +643,8 @@ struct EntryEditorSheet: View {
                 exchangeRateToCNY: exchangeRateToCNY,
                 note: noteToSave,
                 flow: flow,
-                category: categoryToSave
+                category: categoryToSave,
+                tagNames: selectedTagNames
             )
             modelContext.insert(newEntry)
         }
@@ -571,15 +659,29 @@ struct EntryEditorSheet: View {
             .replacingOccurrences(of: ".00", with: "")
             .replacingOccurrences(of: ",", with: "")
     }
+
+    private func toggleTag(named name: String) {
+        if let index = selectedTagNames.firstIndex(of: name) {
+            selectedTagNames.remove(at: index)
+        } else {
+            selectedTagNames.append(name)
+        }
+    }
+
 }
 
 @MainActor
 private struct CurrencyPickerSheet: View {
+    @Environment(\.locale) private var locale
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var currencyStore = CurrencyStore.shared
 
     @Binding var selectedCode: String
     @State private var searchText = ""
+
+    private var normalizedSelectedCode: String {
+        CurrencyCatalog.normalize(code: selectedCode)
+    }
 
     private var filteredDescriptors: [CurrencyDescriptor] {
         let list = currencyStore.descriptors
@@ -594,44 +696,101 @@ private struct CurrencyPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("币种列表") {
-                    ForEach(filteredDescriptors) { descriptor in
-                        Button {
-                            selectedCode = descriptor.code
-                            HapticService.selection()
-                            dismiss()
-                        } label: {
-                            HStack(spacing: 10) {
-                                Text(descriptor.flag)
-                                    .font(.title3)
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 16) {
+                    SettingsSectionCard(title: "搜索") {
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(SWTheme.textSecondary)
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(descriptor.code)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
-                                    Text(descriptor.name)
-                                        .font(.caption)
-                                        .foregroundStyle(SWTheme.textSecondary)
-                                }
+                            TextField("搜索币种代码或名称", text: $searchText)
+                                .textInputAutocapitalization(.never)
+                                .foregroundStyle(SWTheme.primaryText)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                    }
 
-                                Spacer()
+                    SettingsSectionCard(title: "币种列表") {
+                        if filteredDescriptors.isEmpty {
+                            Text("没有找到匹配的币种。")
+                                .font(.subheadline)
+                                .foregroundStyle(SWTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 4)
+                        } else {
+                            ForEach(Array(filteredDescriptors.enumerated()), id: \.element.id) { index, descriptor in
+                                HStack(spacing: 10) {
+                                    Text(descriptor.flag)
+                                        .font(.title3)
 
-                                if descriptor.code == CurrencyCatalog.normalize(code: selectedCode) {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption.weight(.bold))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(descriptor.code)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(SWTheme.primaryText)
+                                        Text(descriptor.name)
+                                            .font(.caption)
+                                            .foregroundStyle(SWTheme.textSecondary)
+                                    }
+
+                                    Spacer()
+
+                                    if descriptor.code == normalizedSelectedCode {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "checkmark")
+                                                .font(.caption.weight(.bold))
+                                            Text("已选")
+                                                .font(.caption2.weight(.bold))
+                                        }
                                         .foregroundStyle(SWTheme.accentGreen)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(SWTheme.accentGreen.opacity(0.18))
+                                        )
+                                    } else {
+                                        Button {
+                                            selectedCode = descriptor.code
+                                            HapticService.selection()
+                                            dismiss()
+                                        } label: {
+                                            Text("选择")
+                                                .font(.caption.weight(.bold))
+                                                .foregroundStyle(.white)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    Capsule(style: .continuous)
+                                                        .fill(SWTheme.accentBlue.opacity(0.22))
+                                                        .overlay(
+                                                            Capsule(style: .continuous)
+                                                                .stroke(SWTheme.accentBlue.opacity(0.4), lineWidth: 1)
+                                                        )
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+
+                                if index < filteredDescriptors.count - 1 {
+                                    SettingsRowDivider()
                                 }
                             }
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 26)
             }
             .navigationTitle("选择币种")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "搜索币种代码或名称")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("取消") {
@@ -653,6 +812,7 @@ private struct CurrencyPickerSheet: View {
             .task {
                 await currencyStore.refreshRates(force: false)
             }
+            .appBackground()
         }
     }
 }

@@ -7,6 +7,7 @@ private struct GoalEditTarget: Identifiable {
 }
 
 struct VaultView: View {
+    @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .forward)])
@@ -49,7 +50,7 @@ struct VaultView: View {
     }
 
     private var selectedPeriodLabel: String {
-        "\(selectedYear)年\(selectedMonth)月"
+        L10n.yearMonth(year: selectedYear, month: selectedMonth, locale: locale)
     }
 
     private var recentDeposits: [VaultDepositRecord] {
@@ -58,7 +59,7 @@ struct VaultView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            LazyVStack(spacing: 18) {
                 vaultOverview
                 goalsCard
                 depositsCard
@@ -122,15 +123,15 @@ struct VaultView: View {
                     HapticService.selection()
                 } label: {
                     if year == selectedYear {
-                        Label("\(year)年", systemImage: "checkmark")
+                        Label(L10n.year(year, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(year)年")
+                        Text(L10n.year(year, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedYear)年")
+                Text(L10n.year(selectedYear, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -154,15 +155,15 @@ struct VaultView: View {
                     HapticService.selection()
                 } label: {
                     if month == selectedMonth {
-                        Label("\(month)月", systemImage: "checkmark")
+                        Label(L10n.month(month, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(month)月")
+                        Text(L10n.month(month, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedMonth)月")
+                Text(L10n.month(selectedMonth, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -183,14 +184,14 @@ struct VaultView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("当前小金库")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
 
-                Text(totalCurrent.cnyText)
+                Text(totalCurrent.cnyText(in: locale))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .minimumScaleFactor(0.75)
 
-                Text("总目标 \(totalTarget.cnyText)")
+                Text(L10n.string("vault.totalTarget", locale: locale, totalTarget.cnyText(in: locale)))
                     .font(.footnote)
                     .foregroundStyle(SWTheme.textSecondary)
             }
@@ -207,7 +208,7 @@ struct VaultView: View {
                         .foregroundStyle(SWTheme.textSecondary)
                     Text("\((totalProgress * 100).formatted(.number.precision(.fractionLength(0))))%")
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SWTheme.primaryText)
                 }
             }
         }
@@ -258,7 +259,7 @@ struct VaultView: View {
             if recentDeposits.isEmpty {
                 EmptyStateCard(
                     title: "暂无存入记录",
-                    subtitle: "\(selectedPeriodLabel)暂无存入记录，点击右上角 + 记录第一笔存入",
+                    subtitle: L10n.string("vault.emptyDeposits", locale: locale, selectedPeriodLabel),
                     symbol: "tray.fill"
                 )
             } else {
@@ -267,10 +268,10 @@ struct VaultView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.note)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SWTheme.primaryText)
 
                             HStack(spacing: 6) {
-                                Text(item.date.depositDateText)
+                                Text(item.date.depositDateText(in: locale))
                                     .font(.caption)
                                     .foregroundStyle(SWTheme.textSecondary)
 
@@ -290,7 +291,7 @@ struct VaultView: View {
 
                         Spacer(minLength: 8)
 
-                        Text(item.amount.cnyText)
+                        Text(item.amount.cnyText(in: locale))
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(SWTheme.accentGreen)
                     }
@@ -344,6 +345,7 @@ struct VaultView: View {
 }
 
 private struct GoalProgressCard: View {
+    @Environment(\.locale) private var locale
     let goal: SavingsGoalRecord
 
     var body: some View {
@@ -360,8 +362,8 @@ private struct GoalProgressCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(goal.name)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text("截止: \(goal.deadlineText)")
+                        .foregroundStyle(SWTheme.primaryText)
+                    Text(L10n.string("vault.deadline", locale: locale, goal.deadlineText(in: locale)))
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
                 }
@@ -381,11 +383,11 @@ private struct GoalProgressCard: View {
 
             VStack(spacing: 6) {
                 HStack {
-                    Text(goal.currentAmount.cnyText)
+                    Text(goal.currentAmount.cnyText(in: locale))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SWTheme.primaryText)
                     Spacer()
-                    Text(goal.targetAmount.cnyText)
+                    Text(goal.targetAmount.cnyText(in: locale))
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
                 }

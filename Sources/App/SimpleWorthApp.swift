@@ -3,25 +3,44 @@ import SwiftUI
 
 @main
 struct SimpleWorthApp: App {
-    @AppStorage("settings.darkModeEnabled") private var darkModeEnabled = true
+    @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.system.rawValue
+    @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw = AppLanguage.simplifiedChinese.rawValue
 
     private let sharedModelContainer: ModelContainer
 
     init() {
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: SettingsKeys.themeMode) == nil {
+            defaults.set(ThemeMode.resolved(from: defaults).rawValue, forKey: SettingsKeys.themeMode)
+        }
+        if defaults.string(forKey: SettingsKeys.appLanguage) == nil {
+            defaults.set(AppLanguage.simplifiedChinese.rawValue, forKey: SettingsKeys.appLanguage)
+        }
+
         let iCloudSyncEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.iCloudSyncEnabled)
         sharedModelContainer = Self.makeModelContainer(iCloudSyncEnabled: iCloudSyncEnabled)
+    }
+
+    private var themeMode: ThemeMode {
+        ThemeMode(rawValue: themeModeRaw) ?? ThemeMode.resolved()
+    }
+
+    private var appLanguage: AppLanguage {
+        AppLanguage(rawValue: appLanguageRaw) ?? .simplifiedChinese
     }
 
     var body: some Scene {
         WindowGroup {
             SeededRootView()
-                .preferredColorScheme(darkModeEnabled ? .dark : .light)
+                .environment(\.locale, appLanguage.locale)
+                .preferredColorScheme(themeMode.preferredColorScheme)
         }
         .modelContainer(sharedModelContainer)
     }
 
     private static func makeModelContainer(iCloudSyncEnabled: Bool) -> ModelContainer {
         let schema = Schema([
+            TagRecord.self,
             LedgerEntry.self,
             SavingsGoalRecord.self,
             VaultDepositRecord.self

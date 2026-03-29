@@ -26,6 +26,14 @@ enum FlowType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    var localizedTitle: String {
+        rawValue.appLocalized
+    }
+
+    func localizedTitle(in locale: Locale) -> String {
+        rawValue.appLocalized(in: locale)
+    }
+
     var accent: Color {
         switch self {
         case .expense: SWTheme.accentOrange
@@ -56,6 +64,14 @@ struct CategoryItem: Identifiable, Hashable {
     var color: Color {
         Color.sw(UInt(colorHex))
     }
+
+    var localizedName: String {
+        name.appLocalized
+    }
+
+    func localizedName(in locale: Locale) -> String {
+        name.appLocalized(in: locale)
+    }
 }
 
 struct MonthlyCashflow: Identifiable {
@@ -73,11 +89,69 @@ struct CategoryStat: Identifiable {
     let symbol: String
     let colorHex: Int
     let amount: Double
+    let usesEmoji: Bool
 
     var id: String { key }
 
     var color: Color {
         Color.sw(UInt(colorHex))
+    }
+}
+
+enum TagEmojiLibrary {
+    static let defaultEmoji = "🏷️"
+    static let tintOptions: [Int] = [
+        0x5B8DEF, 0x67C587, 0xF59D5B, 0xE27AB0,
+        0x9B8CFF, 0x53C4D1, 0xE4B84A, 0xF06A6A
+    ]
+    static let defaultTintHex = tintOptions[0]
+
+    static func normalized(_ emoji: String) -> String {
+        let trimmed = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = trimmed.first else { return defaultEmoji }
+        return String(value)
+    }
+
+    static func colorHex(for name: String) -> Int {
+        let hash = name.unicodeScalars.reduce(0) { partialResult, scalar in
+            ((partialResult * 31) + Int(scalar.value)) & 0x7fffffff
+        }
+        return tintOptions[hash % tintOptions.count]
+    }
+}
+
+@Model
+final class TagRecord {
+    var id: UUID = UUID()
+    var name: String = ""
+    var emoji: String = TagEmojiLibrary.defaultEmoji
+    var tintHex: Int = TagEmojiLibrary.defaultTintHex
+    var createdAt: Date = Date.now
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        emoji: String = TagEmojiLibrary.defaultEmoji,
+        tintHex: Int = TagEmojiLibrary.defaultTintHex,
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.name = name
+        self.emoji = TagEmojiLibrary.normalized(emoji)
+        self.tintHex = tintHex
+        self.createdAt = createdAt
+    }
+
+    var emojiValue: String {
+        TagEmojiLibrary.normalized(emoji)
+    }
+
+    var resolvedTintHex: Int {
+        tintHex == 0 ? TagEmojiLibrary.colorHex(for: name) : tintHex
+    }
+
+    var tintColor: Color {
+        Color.sw(UInt(resolvedTintHex))
     }
 }
 
@@ -97,6 +171,7 @@ final class LedgerEntry {
     var categoryName: String = ""
     var categorySymbol: String = ""
     var categoryColorHex: Int = 0x9CA3AF
+    var tagNamesRaw: String = "[]"
 
     init(
         id: UUID = UUID(),
@@ -107,7 +182,8 @@ final class LedgerEntry {
         exchangeRateToCNY: Double = 1,
         note: String,
         flow: FlowType,
-        category: CategoryItem
+        category: CategoryItem,
+        tagNames: [String] = []
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -120,6 +196,7 @@ final class LedgerEntry {
         self.categoryName = category.name
         self.categorySymbol = category.symbol
         self.categoryColorHex = category.colorHex
+        self.tagNames = tagNames
     }
 
     var flow: FlowType {
@@ -133,6 +210,41 @@ final class LedgerEntry {
 
     var displayAmount: Double {
         originalAmount > 0 ? originalAmount : amount
+    }
+
+    var tagNames: [String] {
+        get {
+            guard let data = tagNamesRaw.data(using: .utf8) else { return [] }
+            if let decoded = try? JSONDecoder().decode([String].self, from: data) {
+                return decoded
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+
+            return tagNamesRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            var seen = Set<String>()
+            let normalized = newValue.compactMap { rawName -> String? in
+                let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return nil }
+                let lookup = name.lowercased()
+                guard seen.insert(lookup).inserted else { return nil }
+                return name
+            }
+
+            if
+                let encoded = try? JSONEncoder().encode(normalized),
+                let rawValue = String(data: encoded, encoding: .utf8)
+            {
+                tagNamesRaw = rawValue
+            } else {
+                tagNamesRaw = "[]"
+            }
+        }
     }
 
     var isRefundEntry: Bool {
@@ -227,12 +339,22 @@ final class SavingsGoalRecord {
     }
 
     var deadlineText: String {
-        guard let deadline else { return "长期" }
+        guard let deadline else { return "长期".appLocalized }
         return deadline.formatted(
             .dateTime
                 .year()
                 .month(.defaultDigits)
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(L10n.locale)
+        )
+    }
+
+    func deadlineText(in locale: Locale) -> String {
+        guard let deadline else { return "长期".appLocalized(in: locale) }
+        return deadline.formatted(
+            .dateTime
+                .year()
+                .month(.defaultDigits)
+                .locale(locale)
         )
     }
 }
@@ -487,33 +609,41 @@ extension Date {
     }
 
     var monthLabel: String {
+        monthLabel(in: L10n.locale)
+    }
+
+    func monthLabel(in locale: Locale) -> String {
         formatted(
             .dateTime
                 .month(.defaultDigits)
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(locale)
         )
     }
 
     func ledgerDateText(showTime: Bool) -> String {
+        ledgerDateText(showTime: showTime, locale: L10n.locale)
+    }
+
+    func ledgerDateText(showTime: Bool, locale: Locale) -> String {
         let calendar = Calendar.current
         if showTime, calendar.isDateInToday(self) {
             let timeText = formatted(
                 .dateTime
                     .hour(.twoDigits(amPM: .omitted))
                     .minute(.twoDigits)
-                    .locale(Locale(identifier: "zh_CN"))
+                    .locale(locale)
             )
-            return "今天 \(timeText)"
+            return L10n.string("date.todayWithTime", locale: locale, timeText)
         }
         if calendar.isDateInYesterday(self) {
-            return "昨天"
+            return L10n.string("昨天", locale: locale)
         }
 
         return formatted(
             .dateTime
                 .month(.defaultDigits)
                 .day()
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(locale)
         )
     }
 
@@ -522,34 +652,54 @@ extension Date {
     }
 
     var depositDateText: String {
+        depositDateText(in: L10n.locale)
+    }
+
+    func depositDateText(in locale: Locale) -> String {
         formatted(
             .dateTime
                 .month(.defaultDigits)
                 .day()
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(locale)
         )
     }
 }
 
 extension Double {
     func currencyText(code: String, fractionDigits: Int = 0) -> String {
+        currencyText(code: code, fractionDigits: fractionDigits, locale: L10n.locale)
+    }
+
+    func currencyText(code: String, fractionDigits: Int = 0, locale: Locale) -> String {
         formatted(
             .currency(code: code)
-                .locale(Locale(identifier: "zh_CN"))
+                .locale(locale)
                 .precision(.fractionLength(fractionDigits))
         )
     }
 
     func signedCurrencyText(code: String, fractionDigits: Int = 0) -> String {
+        signedCurrencyText(code: code, fractionDigits: fractionDigits, locale: L10n.locale)
+    }
+
+    func signedCurrencyText(code: String, fractionDigits: Int = 0, locale: Locale) -> String {
         let sign = self >= 0 ? "+" : "-"
-        return "\(sign)\(abs(self).currencyText(code: code, fractionDigits: fractionDigits))"
+        return "\(sign)\(abs(self).currencyText(code: code, fractionDigits: fractionDigits, locale: locale))"
     }
 
     var cnyText: String {
         currencyText(code: "CNY", fractionDigits: 0)
     }
 
+    func cnyText(in locale: Locale) -> String {
+        currencyText(code: "CNY", fractionDigits: 0, locale: locale)
+    }
+
     var signedCNYText: String {
         signedCurrencyText(code: "CNY", fractionDigits: 0)
+    }
+
+    func signedCNYText(in locale: Locale) -> String {
+        signedCurrencyText(code: "CNY", fractionDigits: 0, locale: locale)
     }
 }

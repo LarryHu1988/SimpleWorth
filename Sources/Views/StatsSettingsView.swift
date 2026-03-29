@@ -1,26 +1,35 @@
-import CloudKit
+import AuthenticationServices
 import StoreKit
 import SwiftData
 import SwiftUI
 
+private enum SettingsRoute: Hashable {
+    case currency
+    case tags
+    case iCloud
+}
+
 struct StatsSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .reverse)]) private var goals: [SavingsGoalRecord]
     @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
 
     @AppStorage("settings.hapticsEnabled") private var hapticsEnabled = true
-    @AppStorage("settings.darkModeEnabled") private var darkModeEnabled = true
-    @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
-
+    @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.resolved().rawValue
+    @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @State private var showDeveloperSheet = false
     @State private var showDetailedTimeInfo = false
-    @State private var iCloudAccountState: ICloudAccountState = .idle
+    @State private var navigationPath = NavigationPath()
 
     @State private var exportDocument: LedgerBackupDocument?
     @State private var showFileExporter = false
@@ -28,12 +37,21 @@ struct StatsSettingsView: View {
 
     @State private var noticeMessage = ""
     @State private var showNotice = false
+    @StateObject private var appleAccountStore = AppleAccountStore.shared
 
     private let shareURL = URL(string: "https://github.com/LarryHu1988/SimpleWorth")
-    private let supportEmail = "larry_hu@163.com"
+    private let supportEmail = "simpleworth@larryhu.com"
+
+    private var selectedThemeMode: ThemeMode {
+        ThemeMode(rawValue: themeModeRaw) ?? ThemeMode.resolved()
+    }
+
+    private var selectedAppLanguage: AppLanguage {
+        AppLanguage(rawValue: appLanguageRaw) ?? .simplifiedChinese
+    }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.0"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.5.5"
         return "V\(version)"
     }
 
@@ -52,161 +70,167 @@ struct StatsSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
+        NavigationStack(path: $navigationPath) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 16) {
+                    appleAccountCard
                     statsHeaderCard
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-                        .listRowBackground(Color.clear)
-                }
 
-                Section("个人偏好") {
-                    settingToggleRow(
-                        title: "震动反馈",
-                        symbol: "iphone.radiowaves.left.and.right",
-                        iconColor: SWTheme.accentPink,
-                        isOn: $hapticsEnabled
-                    )
-                    .onChange(of: hapticsEnabled) { _, newValue in
-                        if newValue { HapticService.impact() }
-                    }
-
-                    settingToggleRow(
-                        title: "深色模式",
-                        symbol: "moon.stars.fill",
-                        iconColor: SWTheme.accentBlue,
-                        isOn: $darkModeEnabled
-                    )
-                    .onChange(of: darkModeEnabled) { _, _ in
-                        HapticService.impact()
-                    }
-
-                    settingToggleRow(
-                        title: "账单详细时间",
-                        symbol: "clock.badge.checkmark.fill",
-                        iconColor: SWTheme.accentOrange,
-                        isOn: $detailedTimeEnabled,
-                        infoAction: {
-                            showDetailedTimeInfo = true
+                    SettingsSectionCard(title: "个人偏好") {
+                        settingToggleRow(
+                            title: "震动反馈",
+                            symbol: "iphone.radiowaves.left.and.right",
+                            iconColor: SWTheme.accentPink,
+                            isOn: $hapticsEnabled
+                        )
+                        .onChange(of: hapticsEnabled) { _, newValue in
+                            if newValue { HapticService.impact() }
                         }
-                    )
-                    .onChange(of: detailedTimeEnabled) { _, _ in
-                        HapticService.impact()
+
+                        SettingsRowDivider()
+
+                        themeModeInlineRow
+
+                        SettingsRowDivider()
+
+                        languageInlineRow
+
+                        SettingsRowDivider()
+
+                        settingToggleRow(
+                            title: "账单详细时间",
+                            symbol: "clock.badge.checkmark.fill",
+                            iconColor: SWTheme.accentOrange,
+                            isOn: $detailedTimeEnabled,
+                            infoAction: {
+                                showDetailedTimeInfo = true
+                            }
+                        )
+                        .onChange(of: detailedTimeEnabled) { _, _ in
+                            HapticService.impact()
+                        }
+
+                        SettingsRowDivider()
+
+                        Button {
+                            push(.currency)
+                        } label: {
+                            settingsNavigationRowLabel(
+                                title: "货币选择",
+                                symbol: "dollarsign.circle.fill",
+                                iconColor: SWTheme.accentGreen
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        SettingsRowDivider()
+
+                        Button {
+                            push(.tags)
+                        } label: {
+                            settingsNavigationRowLabel(
+                                title: "标签管理",
+                                symbol: "tag.fill",
+                                iconColor: SWTheme.accentBlue
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
 
-                    NavigationLink {
-                        CurrencySettingsView()
-                    } label: {
-                        settingsNavigationRowLabel(
-                            title: "货币选择",
-                            symbol: "dollarsign.circle.fill",
+                    SettingsSectionCard(title: "数据安全") {
+                        Button {
+                            push(.iCloud)
+                        } label: {
+                            settingsNavigationRowLabel(
+                                title: "iCloud 同步",
+                                symbol: "icloud.fill",
+                                iconColor: SWTheme.accentBlue
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        SettingsRowDivider()
+
+                        settingsActionRow(
+                            title: "账单导出",
+                            symbol: "square.and.arrow.up.on.square",
                             iconColor: SWTheme.accentGreen
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Section("数据安全") {
-                    settingToggleRow(
-                        title: "iCloud 同步",
-                        symbol: "icloud.fill",
-                        iconColor: SWTheme.accentBlue,
-                        isOn: $iCloudSyncEnabled
-                    )
-                    .onChange(of: iCloudSyncEnabled) { _, newValue in
-                        HapticService.impact()
-                        refreshICloudAccountStatus()
-                        presentNotice(
-                            message: newValue
-                                ? "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。"
-                                : "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。"
-                        )
-                    }
-
-                    iCloudStatusRow
-
-                    settingsActionRow(
-                        title: "检测 iCloud 状态",
-                        symbol: "arrow.clockwise.icloud",
-                        iconColor: SWTheme.accentBlue
-                    ) {
-                        HapticService.impact()
-                        refreshICloudAccountStatus()
-                    }
-
-                    settingsActionRow(
-                        title: "账单导出",
-                        symbol: "square.and.arrow.up.on.square",
-                        iconColor: SWTheme.accentGreen
-                    ) {
-                        exportBackup()
-                    }
-
-                    settingsActionRow(
-                        title: "账单导入",
-                        symbol: "square.and.arrow.down.on.square",
-                        iconColor: SWTheme.accentOrange
-                    ) {
-                        showFileImporter = true
-                    }
-                }
-
-                Section("良性互动") {
-                    settingsActionRow(
-                        title: "意见反馈",
-                        symbol: "envelope.fill",
-                        iconColor: SWTheme.accentBlue
-                    ) {
-                        sendFeedback()
-                    }
-
-                    settingsActionRow(
-                        title: "好评鼓励",
-                        symbol: "hand.thumbsup.fill",
-                        iconColor: SWTheme.accentGreen
-                    ) {
-                        requestReview()
-                        HapticService.impact()
-                    }
-
-                    if let shareURL {
-                        ShareLink(
-                            item: shareURL,
-                            subject: Text("SimpleWorth 简值"),
-                            message: Text("我在用这款记账 App：SimpleWorth（简值），推荐你试试。")
                         ) {
+                            exportBackup()
+                        }
+
+                        SettingsRowDivider()
+
+                        settingsActionRow(
+                            title: "账单导入",
+                            symbol: "square.and.arrow.down.on.square",
+                            iconColor: SWTheme.accentOrange
+                        ) {
+                            showFileImporter = true
+                        }
+                    }
+
+                    SettingsSectionCard(title: "良性互动") {
+                        settingsActionRow(
+                            title: "意见反馈",
+                            symbol: "envelope.fill",
+                            iconColor: SWTheme.accentBlue
+                        ) {
+                            sendFeedback()
+                        }
+
+                        SettingsRowDivider()
+
+                        settingsActionRow(
+                            title: "好评鼓励",
+                            symbol: "hand.thumbsup.fill",
+                            iconColor: SWTheme.accentGreen
+                        ) {
+                            requestReview()
+                            HapticService.impact()
+                        }
+
+                        SettingsRowDivider()
+
+                        if let shareURL {
+                            ShareLink(
+                                item: shareURL,
+                                subject: Text("SimpleWorth 简值"),
+                                message: Text("我在用这款记账 App：SimpleWorth（简值），推荐你试试。")
+                            ) {
+                                settingsShareLabel(
+                                    title: "分享给朋友",
+                                    symbol: "square.and.arrow.up",
+                                    iconColor: SWTheme.accentPink
+                                )
+                            }
+                        } else {
                             settingsShareLabel(
                                 title: "分享给朋友",
                                 symbol: "square.and.arrow.up",
                                 iconColor: SWTheme.accentPink
                             )
+                            .foregroundStyle(SWTheme.textSecondary)
                         }
-                    } else {
-                        settingsShareLabel(
-                            title: "分享给朋友",
-                            symbol: "square.and.arrow.up",
-                            iconColor: SWTheme.accentPink
-                        )
-                        .foregroundStyle(SWTheme.textSecondary)
                     }
-                }
 
-                Section("开发者信息") {
-                    settingsActionRow(
-                        title: "开发者信息",
-                        symbol: "person.crop.circle",
-                        iconColor: SWTheme.accentOrange
-                    ) {
-                        showDeveloperSheet = true
+                    SettingsSectionCard(title: "开发者信息") {
+                        settingsActionRow(
+                            title: "开发者信息",
+                            symbol: "person.crop.circle",
+                            iconColor: SWTheme.accentOrange
+                        ) {
+                            showDeveloperSheet = true
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 28)
             }
-            .scrollContentBackground(.hidden)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
-                refreshICloudAccountStatus()
-            }
+            .preferredColorScheme(selectedThemeMode.preferredColorScheme)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") {
@@ -228,6 +252,16 @@ struct StatsSettingsView: View {
             .sheet(isPresented: $showDeveloperSheet) {
                 DeveloperInfoView(email: supportEmail, appVersionText: appVersionText)
             }
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .currency:
+                    CurrencySettingsView()
+                case .tags:
+                    TagManagementView()
+                case .iCloud:
+                    ICloudSettingsView()
+                }
+            }
             .fileExporter(
                 isPresented: $showFileExporter,
                 document: exportDocument,
@@ -237,9 +271,9 @@ struct StatsSettingsView: View {
                 switch result {
                 case .success:
                     HapticService.impact()
-                    presentNotice(message: "账单已成功导出。")
+                    presentNotice(message: "账单已成功导出。".appLocalized(in: locale))
                 case .failure(let error):
-                    presentNotice(message: "导出失败：\(error.localizedDescription)")
+                    presentNotice(message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription))
                 }
             }
             .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.json]) { result in
@@ -247,10 +281,112 @@ struct StatsSettingsView: View {
                 case .success(let url):
                     importBackup(from: url)
                 case .failure(let error):
-                    presentNotice(message: "导入失败：\(error.localizedDescription)")
+                    presentNotice(message: L10n.string("settings.importFailed", locale: locale, error.localizedDescription))
                 }
             }
+            .appBackground()
+            .task {
+                await appleAccountStore.refreshStatus()
+            }
         }
+    }
+
+    private var appleAccountCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(SWTheme.primaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Apple 账号".appLocalized(in: locale))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(SWTheme.primaryText)
+                    Text(appleAccountSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(appleAccountSubtitleTint)
+                }
+
+                Spacer()
+            }
+
+            if appleAccountStore.isSignedIn {
+                if !appleAccountDisplayTitle.isEmpty {
+                    Text(appleAccountDisplayTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SWTheme.primaryText)
+                }
+
+                if let email = appleAccountStore.email, !email.isEmpty {
+                    Text(email)
+                        .font(.caption)
+                        .foregroundStyle(SWTheme.textSecondary)
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        enableAppleSync()
+                    } label: {
+                        Text("同步到当前账号".appLocalized(in: locale))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SWTheme.primaryText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.14))
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Task {
+                            await appleAccountStore.refreshStatus()
+                            HapticService.selection()
+                        }
+                    } label: {
+                        Text("重新检测".appLocalized(in: locale))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SWTheme.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    appleAccountStore.configure(request)
+                } onCompletion: { result in
+                    Task {
+                        let outcome = await appleAccountStore.handleAuthorizationResult(result)
+                        switch outcome {
+                        case .signedIn:
+                            enableAppleSync()
+                        case .cancelled:
+                            break
+                        case .failed(let message):
+                            presentNotice(message: message)
+                        }
+                    }
+                }
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                .frame(height: 46)
+
+                Text("登录后会自动开启 iCloud 同步，请完全退出并重新打开 App 后生效。".appLocalized(in: locale))
+                    .font(.caption)
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+        }
+        .fitnessCard()
     }
 
     private var statsHeaderCard: some View {
@@ -258,25 +394,158 @@ struct StatsSettingsView: View {
             SettingsMetricCard(title: "记账总天数", value: "\(totalLedgerDays)", tint: SWTheme.accentBlue)
             SettingsMetricCard(title: "记账总笔数", value: "\(totalEntryCount)", tint: SWTheme.accentGreen)
         }
-        .padding(.horizontal, 16)
     }
 
-    private var iCloudStatusRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: iCloudAccountState.symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(iCloudAccountState.tint)
-                .frame(width: 22)
+    private var appleAccountDisplayTitle: String {
+        if let displayName = appleAccountStore.displayName, !displayName.isEmpty {
+            return displayName
+        }
+        return "Apple 用户".appLocalized(in: locale)
+    }
 
-            Text("iCloud 状态")
-                .foregroundStyle(.white)
+    private var appleAccountSubtitle: String {
+        switch appleAccountStore.credentialStatus {
+        case .authorized:
+            switch appleAccountStore.iCloudStatus {
+            case .available:
+                return "同步已准备就绪".appLocalized(in: locale)
+            case .noAccount:
+                return "Apple 已登录，但当前设备未登录 iCloud。".appLocalized(in: locale)
+            case .restricted:
+                return "Apple 已登录，但当前 iCloud 账号受限。".appLocalized(in: locale)
+            case .couldNotDetermine:
+                return "Apple 已登录，iCloud 状态待检测。".appLocalized(in: locale)
+            case .temporarilyUnavailable:
+                return "Apple 已登录，iCloud 当前暂时不可用。".appLocalized(in: locale)
+            @unknown default:
+                return "Apple 已登录，iCloud 状态待检测。".appLocalized(in: locale)
+            }
+        case .checking:
+            return "正在检测 Apple 账号状态...".appLocalized(in: locale)
+        case .revoked:
+            return "Apple 授权已失效，请重新登录。".appLocalized(in: locale)
+        case .unavailable:
+            return "当前无法读取 Apple 账号状态。".appLocalized(in: locale)
+        case .signedOut:
+            return "登录后将账单同步到当前 Apple 账号".appLocalized(in: locale)
+        }
+    }
+
+    private var appleAccountSubtitleTint: Color {
+        switch appleAccountStore.credentialStatus {
+        case .authorized:
+            return appleAccountStore.iCloudStatus == .available ? SWTheme.accentGreen : SWTheme.accentOrange
+        case .checking:
+            return SWTheme.accentBlue
+        case .revoked, .unavailable:
+            return SWTheme.accentOrange
+        case .signedOut:
+            return SWTheme.textSecondary
+        }
+    }
+
+    private var themeModeInlineRow: some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Image(systemName: "paintpalette.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(selectedThemeMode == .daylight ? SWTheme.accentOrange : SWTheme.accentBlue)
+                .frame(width: SettingsLayout.rowIconWidth)
+
+            Text("主题颜色")
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
 
             Spacer()
 
-            Text(iCloudAccountState.text)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(iCloudAccountState.tint)
+            HStack(spacing: 8) {
+                ForEach(ThemeMode.allCases) { mode in
+                    Button {
+                        themeModeRaw = mode.rawValue
+                        HapticService.selection()
+                    } label: {
+                        Image(systemName: mode.symbol)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(mode == selectedThemeMode ? SWTheme.primaryText : SWTheme.textSecondary)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(
+                                        mode == selectedThemeMode
+                                            ? Color.white.opacity(0.22)
+                                            : Color.white.opacity(0.08)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(
+                                                mode == selectedThemeMode
+                                                    ? Color.white.opacity(0.48)
+                                                    : Color.white.opacity(0.12),
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(mode.title)
+                }
+            }
         }
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+
+    private var languageInlineRow: some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Image(systemName: "globe")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SWTheme.accentGreen)
+                .frame(width: SettingsLayout.rowIconWidth)
+
+            Text("语言选择")
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 6) {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        appLanguageRaw = language.rawValue
+                        HapticService.selection()
+                    } label: {
+                        Text(language.shortLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(
+                                language == selectedAppLanguage
+                                    ? SWTheme.primaryText
+                                    : SWTheme.textSecondary
+                            )
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .frame(height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(
+                                        language == selectedAppLanguage
+                                            ? Color.white.opacity(0.22)
+                                            : Color.white.opacity(0.08)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(
+                                                language == selectedAppLanguage
+                                                    ? Color.white.opacity(0.48)
+                                                    : Color.white.opacity(0.12),
+                                                lineWidth: 1
+                                            )
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(language.displayName)
+                }
+            }
+        }
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
     private func settingsActionRow(
@@ -286,14 +555,15 @@ struct StatsSettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: SettingsLayout.rowSpacing) {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(iconColor)
-                    .frame(width: 22)
+                    .frame(width: SettingsLayout.rowIconWidth)
 
-                Text(title)
-                    .foregroundStyle(.white)
+                Text(title.appLocalized(in: locale))
+                    .font(SettingsLayout.titleFont)
+                    .foregroundStyle(SWTheme.primaryText)
 
                 Spacer()
 
@@ -302,6 +572,8 @@ struct StatsSettingsView: View {
                     .foregroundStyle(SWTheme.textSecondary)
             }
             .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, SettingsLayout.rowVerticalPadding)
         }
         .buttonStyle(.plain)
     }
@@ -313,15 +585,16 @@ struct StatsSettingsView: View {
         isOn: Binding<Bool>,
         infoAction: (() -> Void)? = nil
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SettingsLayout.rowSpacing) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(iconColor)
-                .frame(width: 22)
+                .frame(width: SettingsLayout.rowIconWidth)
 
             HStack(spacing: 6) {
-                Text(title)
-                    .foregroundStyle(.white)
+                Text(title.appLocalized(in: locale))
+                    .font(SettingsLayout.titleFont)
+                    .foregroundStyle(SWTheme.primaryText)
 
                 if let infoAction {
                     Button(action: infoAction) {
@@ -330,7 +603,7 @@ struct StatsSettingsView: View {
                             .foregroundStyle(SWTheme.accentBlue)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(title)说明")
+                    .accessibilityLabel(L10n.string("settings.infoAccessibility", locale: locale, title.appLocalized(in: locale)))
                 }
             }
 
@@ -339,6 +612,9 @@ struct StatsSettingsView: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
     private func settingsShareLabel(
@@ -346,17 +622,25 @@ struct StatsSettingsView: View {
         symbol: String,
         iconColor: Color
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SettingsLayout.rowSpacing) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(iconColor)
-                .frame(width: 22)
+                .frame(width: SettingsLayout.rowIconWidth)
 
-            Text(title)
-                .foregroundStyle(.white)
+            Text(title.appLocalized(in: locale))
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
 
             Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SWTheme.textSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
     private func settingsNavigationRowLabel(
@@ -364,22 +648,30 @@ struct StatsSettingsView: View {
         symbol: String,
         iconColor: Color
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SettingsLayout.rowSpacing) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(iconColor)
-                .frame(width: 22)
+                .frame(width: SettingsLayout.rowIconWidth)
 
-            Text(title)
-                .foregroundStyle(.white)
+            Text(title.appLocalized(in: locale))
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
 
             Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SWTheme.textSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
     private func sendFeedback() {
-        let subject = "SimpleWorth 意见反馈".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let body = "请描述你的建议或问题：".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let subject = "SimpleWorth 意见反馈".appLocalized(in: locale).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let body = "请描述你的建议或问题：".appLocalized(in: locale).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         guard let url = URL(string: "mailto:\(supportEmail)?subject=\(subject)&body=\(body)") else {
             return
         }
@@ -401,10 +693,20 @@ struct StatsSettingsView: View {
                     currencyCode: $0.currencyCode,
                     exchangeRateToCNY: $0.exchangeRateToCNY,
                     note: $0.note,
+                    tagNames: $0.tagNames,
                     flow: $0.flow,
                     categoryName: $0.categoryName,
                     categorySymbol: $0.categorySymbol,
                     categoryColorHex: $0.categoryColorHex
+                )
+            },
+            tags: tags.map {
+                TagSnapshot(
+                    id: $0.id,
+                    name: $0.name,
+                    emoji: $0.emojiValue,
+                    tintHex: $0.resolvedTintHex,
+                    createdAt: $0.createdAt
                 )
             },
             goals: goals.map {
@@ -444,9 +746,9 @@ struct StatsSettingsView: View {
 
             try replaceLocalData(with: payload)
             HapticService.impact()
-            presentNotice(message: "账单已成功导入。")
+            presentNotice(message: "账单已成功导入。".appLocalized(in: locale))
         } catch {
-            presentNotice(message: "导入失败：\(error.localizedDescription)")
+            presentNotice(message: L10n.string("settings.importFailed", locale: locale, error.localizedDescription))
         }
     }
 
@@ -454,6 +756,19 @@ struct StatsSettingsView: View {
         deposits.forEach { modelContext.delete($0) }
         goals.forEach { modelContext.delete($0) }
         entries.forEach { modelContext.delete($0) }
+        tags.forEach { modelContext.delete($0) }
+
+        for snapshot in payload.tags ?? [] {
+            modelContext.insert(
+                TagRecord(
+                    id: snapshot.id,
+                    name: snapshot.name,
+                    emoji: snapshot.emoji ?? TagEmojiLibrary.defaultEmoji,
+                    tintHex: snapshot.tintHex ?? TagEmojiLibrary.colorHex(for: snapshot.name),
+                    createdAt: snapshot.createdAt
+                )
+            )
+        }
 
         var goalMap: [UUID: SavingsGoalRecord] = [:]
         for snapshot in payload.goals {
@@ -487,7 +802,8 @@ struct StatsSettingsView: View {
                 exchangeRateToCNY: snapshot.exchangeRateToCNY ?? 1,
                 note: snapshot.note,
                 flow: snapshot.flow,
-                category: category
+                category: category,
+                tagNames: snapshot.tagNames ?? []
             )
             modelContext.insert(entry)
         }
@@ -511,99 +827,33 @@ struct StatsSettingsView: View {
         showNotice = true
     }
 
-    private func refreshICloudAccountStatus() {
-        iCloudAccountState = .checking
-
-        Task {
-            let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
-            do {
-                let status = try await container.accountStatus()
-                await MainActor.run {
-                    iCloudAccountState = mapICloudStatus(status)
-                }
-            } catch {
-                await MainActor.run {
-                    iCloudAccountState = .unavailable("检测失败")
-                }
-            }
-        }
+    private func enableAppleSync() {
+        iCloudSyncEnabled = true
+        HapticService.impact()
+        presentNotice(message: "登录后会自动开启 iCloud 同步，请完全退出并重新打开 App 后生效。".appLocalized(in: locale))
     }
 
-    private func mapICloudStatus(_ status: CKAccountStatus) -> ICloudAccountState {
-        switch status {
-        case .available:
-            .available
-        case .noAccount:
-            .unavailable("未登录账号")
-        case .restricted:
-            .unavailable("账号受限")
-        case .couldNotDetermine:
-            .unavailable("无法确定")
-        case .temporarilyUnavailable:
-            .unavailable("暂时不可用")
-        @unknown default:
-            .unavailable("未知状态")
-        }
-    }
-}
-
-private enum ICloudAccountState {
-    case idle
-    case checking
-    case available
-    case unavailable(String)
-
-    var text: String {
-        switch self {
-        case .idle:
-            "未检测"
-        case .checking:
-            "检测中"
-        case .available:
-            "可用"
-        case .unavailable(let message):
-            message
-        }
+    private func push(_ route: SettingsRoute) {
+        navigationPath.append(route)
+        HapticService.selection()
     }
 
-    var symbol: String {
-        switch self {
-        case .idle:
-            "icloud"
-        case .checking:
-            "icloud.and.arrow.down"
-        case .available:
-            "checkmark.icloud.fill"
-        case .unavailable:
-            "xmark.icloud.fill"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .idle, .checking:
-            SWTheme.textSecondary
-        case .available:
-            SWTheme.accentGreen
-        case .unavailable:
-            SWTheme.accentOrange
-        }
-    }
 }
 
 private struct SettingsMetricCard: View {
+    @Environment(\.locale) private var locale
     let title: String
     let value: String
     let tint: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(title.appLocalized(in: locale))
                 .font(.caption)
                 .foregroundStyle(SWTheme.textSecondary)
             Text(value)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)
@@ -621,6 +871,7 @@ private struct SettingsMetricCard: View {
 
 private struct DeveloperInfoView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
     @Environment(\.openURL) private var openURL
 
     let email: String

@@ -10,10 +10,19 @@ struct LedgerEntrySnapshot: Codable {
     let currencyCode: String?
     let exchangeRateToCNY: Double?
     let note: String
+    let tagNames: [String]?
     let flow: FlowType
     let categoryName: String
     let categorySymbol: String
     let categoryColorHex: Int
+}
+
+struct TagSnapshot: Codable {
+    let id: UUID
+    let name: String
+    let emoji: String?
+    let tintHex: Int?
+    let createdAt: Date
 }
 
 struct SavingsGoalSnapshot: Codable {
@@ -39,6 +48,7 @@ struct LedgerBackupPayload: Codable {
     let exportedAt: Date
     let appVersion: String
     let entries: [LedgerEntrySnapshot]
+    let tags: [TagSnapshot]?
     let goals: [SavingsGoalSnapshot]
     let deposits: [VaultDepositSnapshot]
 }

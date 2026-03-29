@@ -9,23 +9,29 @@
 /* Begin PBXBuildFile section */
 		21B012224D40F40D4995CA5A /* CurrencySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04970AE91E610D9A97C9FA7 /* CurrencySettingsView.swift */; };
 		2AFA23BF4AE713CE5415D26C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FFAA3B423C68B2A8201B4A /* Theme.swift */; };
+		35C2326DDA5575DB3E6C4E90 /* AppleAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D23E7D0F66A452CCF1B58E2 /* AppleAccountStore.swift */; };
 		3C94E79BC00BA6096F81FBBD /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACFB660981CCAB5E95F673B /* BackupDocument.swift */; };
 		3DD5C4237E2695C40C14B1F8 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0FA100434E5834E942F5BB1 /* MainTabView.swift */; };
+		41A6E048A92E831FB74B2767 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C640BDC7A0EB74F51E211624 /* SettingsComponents.swift */; };
 		49C713741833D77D1CAA7114 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C84D1FA79FE8DA3C841040 /* AppConfig.swift */; };
 		7A1A28AE38C2DBF30E497DB3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */; };
 		80FFA59FE5CA4300CA760A16 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD50A24856491E3AA53963E /* VaultView.swift */; };
 		8426C25AB8AB5A7A8F73EBC8 /* EntryEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */; };
 		8C4BC15282FDA9D75A5D52E7 /* ExpenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015262E5CB25D039C4152B1 /* ExpenseView.swift */; };
+		9189748DDFFA202DB03684CF /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */; };
 		A2B0222A7E2498CF07565BB2 /* LedgerFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0081162AD6EA4A233BEBAEF1 /* LedgerFlowView.swift */; };
 		A83243D4AC7326913A51FB24 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8CC5A0E0618DE5718CA19A /* StatsView.swift */; };
+		B6F776736C77E5C3B9AF29A1 /* ICloudSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */; };
 		BABFF300651E855FABF2549A /* HapticService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C96A3031E8C6C9E884649D0 /* HapticService.swift */; };
 		BAEB9F81A2426A73F867422E /* SimpleWorthApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30EC476011B7F2C6DBAF920 /* SimpleWorthApp.swift */; };
 		C993890191256770B6D56F67 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1D57EC02BE1325AC708FF4A9 /* Preview Assets.xcassets */; };
 		CA2BBA598C4BCFEC05987C7B /* VaultSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77B72DEDDBDBC84A6EB7467 /* VaultSheets.swift */; };
 		CDC38BEC5BAB8FF13F47F762 /* DashboardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A9EDD704DD7365DE005C40 /* DashboardComponents.swift */; };
+		CE0A63960CF586C22F6B46B6 /* TagManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C2369B549E0ECCEAFFB661 /* TagManagementView.swift */; };
 		D3095B2FB03E1DC5C07AC05D /* IncomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B94BEFD9C323A270E01E209C /* IncomeView.swift */; };
 		D5E2109C6BDB545A5B0B3766 /* CurrencyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00BD27896032AD314F49535 /* CurrencyModels.swift */; };
 		D7319AE5DA9FE7879C53796C /* FinanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE152A23C83913C552261AF /* FinanceModels.swift */; };
+		ED782BB767E744A35C69ACE2 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF770E7D5B3F22C8237C0A0 /* Localization.swift */; };
 		FA0E5C8B4C9320B35B972A65 /* StatsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -36,20 +42,29 @@
 		1ACFB660981CCAB5E95F673B /* BackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDocument.swift; sourceTree = "<group>"; };
 		1D57EC02BE1325AC708FF4A9 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		2A8CC5A0E0618DE5718CA19A /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
+		3362111762B8F8D347B7CEE0 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		33DA35F8A0F5D42A8BF6F79A /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsSettingsView.swift; sourceTree = "<group>"; };
 		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudSettingsView.swift; sourceTree = "<group>"; };
 		7A1A84C9C1CD234D84984D79 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7C96A3031E8C6C9E884649D0 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
 		80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SimpleWorth.entitlements; sourceTree = "<group>"; };
+		8DF770E7D5B3F22C8237C0A0 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		9D23E7D0F66A452CCF1B58E2 /* AppleAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleAccountStore.swift; sourceTree = "<group>"; };
 		A015262E5CB25D039C4152B1 /* ExpenseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseView.swift; sourceTree = "<group>"; };
 		A0FA100434E5834E942F5BB1 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		A5C2369B549E0ECCEAFFB661 /* TagManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagManagementView.swift; sourceTree = "<group>"; };
 		A77B72DEDDBDBC84A6EB7467 /* VaultSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultSheets.swift; sourceTree = "<group>"; };
 		B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B94BEFD9C323A270E01E209C /* IncomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomeView.swift; sourceTree = "<group>"; };
 		BBD50A24856491E3AA53963E /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
 		C30EC476011B7F2C6DBAF920 /* SimpleWorthApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleWorthApp.swift; sourceTree = "<group>"; };
 		C4A9EDD704DD7365DE005C40 /* DashboardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardComponents.swift; sourceTree = "<group>"; };
+		C640BDC7A0EB74F51E211624 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		CAFDFABD0EDA06C62B2B97FD /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		D00BD27896032AD314F49535 /* CurrencyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyModels.swift; sourceTree = "<group>"; };
+		DEC7544A5E1782BD50F1F16B /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		E04970AE91E610D9A97C9FA7 /* CurrencySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencySettingsView.swift; sourceTree = "<group>"; };
 		EEE152A23C83913C552261AF /* FinanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceModels.swift; sourceTree = "<group>"; };
 		EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorSheet.swift; sourceTree = "<group>"; };
@@ -61,6 +76,7 @@
 			children = (
 				B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */,
 				7A1A84C9C1CD234D84984D79 /* Info.plist */,
+				2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */,
 				80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */,
 				C71ACF11F43F0A3E38043196 /* App */,
 				E9DEEA706D0037D1F4D93A4F /* Models */,
@@ -86,11 +102,14 @@
 				C4A9EDD704DD7365DE005C40 /* DashboardComponents.swift */,
 				EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */,
 				A015262E5CB25D039C4152B1 /* ExpenseView.swift */,
+				5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */,
 				B94BEFD9C323A270E01E209C /* IncomeView.swift */,
 				0081162AD6EA4A233BEBAEF1 /* LedgerFlowView.swift */,
 				A0FA100434E5834E942F5BB1 /* MainTabView.swift */,
+				C640BDC7A0EB74F51E211624 /* SettingsComponents.swift */,
 				40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */,
 				2A8CC5A0E0618DE5718CA19A /* StatsView.swift */,
+				A5C2369B549E0ECCEAFFB661 /* TagManagementView.swift */,
 				A77B72DEDDBDBC84A6EB7467 /* VaultSheets.swift */,
 				BBD50A24856491E3AA53963E /* VaultView.swift */,
 			);
@@ -126,6 +145,8 @@
 			isa = PBXGroup;
 			children = (
 				07C84D1FA79FE8DA3C841040 /* AppConfig.swift */,
+				9D23E7D0F66A452CCF1B58E2 /* AppleAccountStore.swift */,
+				8DF770E7D5B3F22C8237C0A0 /* Localization.swift */,
 				C30EC476011B7F2C6DBAF920 /* SimpleWorthApp.swift */,
 			);
 			path = App;
@@ -178,6 +199,9 @@
 			knownRegions = (
 				Base,
 				en,
+				ja,
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = 537E2A7B543AC8E96392DF3D;
 			minimizedProjectReferenceProxies = 1;
@@ -196,6 +220,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7A1A28AE38C2DBF30E497DB3 /* Assets.xcassets in Resources */,
+				9189748DDFFA202DB03684CF /* Localizable.strings in Resources */,
 				C993890191256770B6D56F67 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -208,6 +233,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				49C713741833D77D1CAA7114 /* AppConfig.swift in Sources */,
+				35C2326DDA5575DB3E6C4E90 /* AppleAccountStore.swift in Sources */,
 				3C94E79BC00BA6096F81FBBD /* BackupDocument.swift in Sources */,
 				D5E2109C6BDB545A5B0B3766 /* CurrencyModels.swift in Sources */,
 				21B012224D40F40D4995CA5A /* CurrencySettingsView.swift in Sources */,
@@ -216,12 +242,16 @@
 				8C4BC15282FDA9D75A5D52E7 /* ExpenseView.swift in Sources */,
 				D7319AE5DA9FE7879C53796C /* FinanceModels.swift in Sources */,
 				BABFF300651E855FABF2549A /* HapticService.swift in Sources */,
+				B6F776736C77E5C3B9AF29A1 /* ICloudSettingsView.swift in Sources */,
 				D3095B2FB03E1DC5C07AC05D /* IncomeView.swift in Sources */,
 				A2B0222A7E2498CF07565BB2 /* LedgerFlowView.swift in Sources */,
+				ED782BB767E744A35C69ACE2 /* Localization.swift in Sources */,
 				3DD5C4237E2695C40C14B1F8 /* MainTabView.swift in Sources */,
+				41A6E048A92E831FB74B2767 /* SettingsComponents.swift in Sources */,
 				BAEB9F81A2426A73F867422E /* SimpleWorthApp.swift in Sources */,
 				FA0E5C8B4C9320B35B972A65 /* StatsSettingsView.swift in Sources */,
 				A83243D4AC7326913A51FB24 /* StatsView.swift in Sources */,
+				CE0A63960CF586C22F6B46B6 /* TagManagementView.swift in Sources */,
 				2AFA23BF4AE713CE5415D26C /* Theme.swift in Sources */,
 				CA2BBA598C4BCFEC05987C7B /* VaultSheets.swift in Sources */,
 				80FFA59FE5CA4300CA760A16 /* VaultView.swift in Sources */,
@@ -229,6 +259,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				33DA35F8A0F5D42A8BF6F79A /* en */,
+				3362111762B8F8D347B7CEE0 /* ja */,
+				DEC7544A5E1782BD50F1F16B /* zh-Hans */,
+				CAFDFABD0EDA06C62B2B97FD /* zh-Hant */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		1767041B8148000208272B0F /* Release */ = {

@@ -61,7 +61,7 @@ enum CurrencyCatalog {
 
     static func localizedName(for code: String) -> String {
         let normalized = normalize(code: code)
-        let locale = Locale(identifier: "zh_CN")
+        let locale = L10n.locale
         return locale.localizedString(forCurrencyCode: normalized) ?? normalized
     }
 
@@ -70,7 +70,7 @@ enum CurrencyCatalog {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = normalized
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = L10n.locale
         let resolved = formatter.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return resolved.isEmpty ? normalized : resolved
     }
@@ -236,7 +236,7 @@ final class CurrencyStore: ObservableObject {
             lastUpdated = payload.updatedAt
             persistCache()
         } catch {
-            errorMessage = "汇率更新失败，已使用本地缓存"
+            errorMessage = "汇率更新失败，已使用本地缓存".appLocalized
         }
 
         isLoading = false

@@ -10,13 +10,30 @@ private struct MonthlyTrendRow: Identifiable {
     var id: Int { month }
 }
 
+private enum DistributionMode: String, CaseIterable, Identifiable {
+    case category = "分类"
+    case tag = "标签"
+
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        rawValue.appLocalized
+    }
+
+    func localizedTitle(in locale: Locale) -> String {
+        rawValue.appLocalized(in: locale)
+    }
+}
+
 struct StatsView: View {
+    @Environment(\.locale) private var locale
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
 
     @State private var selectedFlow: FlowType = .expense
+    @State private var selectedDistributionMode: DistributionMode = .category
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
-    @State private var chartMonthSelection: Double?
     @State private var chartScrollStartMonth = max(
         1.0,
         Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
@@ -45,6 +62,20 @@ struct StatsView: View {
     private var totalIncome: Double {
         selectedMonthEntries
             .reduce(0) { $0 + $1.incomeContribution }
+    }
+
+    private var tagTintHexByName: [String: Int] {
+        var result: [String: Int] = [:]
+
+        for tag in tags {
+            let normalizedName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedName.isEmpty else { continue }
+            if result[normalizedName] == nil {
+                result[normalizedName] = tag.resolvedTintHex
+            }
+        }
+
+        return result
     }
 
     private var netBalance: Double {
@@ -78,24 +109,58 @@ struct StatsView: View {
 
     private var selectedStats: [CategoryStat] {
         let filtered = selectedMonthEntries.filter { $0.flow == selectedFlow }
-        let grouped = Dictionary(grouping: filtered) {
-            "\($0.categoryName)|\($0.categorySymbol)|\($0.categoryColorHex)"
-        }
+        let stats: [CategoryStat]
 
-        let stats = grouped.compactMap { key, values -> CategoryStat? in
-            guard let first = values.first else { return nil }
-            let total = values.reduce(0) { $0 + $1.amount }
-            return CategoryStat(
-                key: key,
-                name: first.categoryName,
-                symbol: first.categorySymbol,
-                colorHex: first.categoryColorHex,
-                amount: total
-            )
+        switch selectedDistributionMode {
+        case .category:
+            let grouped = Dictionary(grouping: filtered) {
+                "\($0.categoryName)|\($0.categorySymbol)|\($0.categoryColorHex)"
+            }
+
+            stats = grouped.compactMap { key, values -> CategoryStat? in
+                guard let first = values.first else { return nil }
+                let total = values.reduce(0) { $0 + $1.amount }
+                return CategoryStat(
+                    key: key,
+                    name: first.categoryName,
+                    symbol: first.categorySymbol,
+                    colorHex: first.categoryColorHex,
+                    amount: total,
+                    usesEmoji: false
+                )
+            }
+
+        case .tag:
+            var totals: [String: Double] = [:]
+
+            for entry in filtered {
+                let tagNames = entry.tagNames
+
+                if tagNames.isEmpty {
+                    totals["__untagged__", default: 0] += entry.amount
+                    continue
+                }
+
+                let sharedAmount = entry.amount / Double(tagNames.count)
+                for tagName in tagNames {
+                    totals[tagName, default: 0] += sharedAmount
+                }
+            }
+
+            stats = totals.map { tagName, total in
+                CategoryStat(
+                    key: "tag|\(tagName)",
+                    name: tagName == "__untagged__" ? "未标记".appLocalized(in: locale) : tagName,
+                    symbol: "tag.fill",
+                    colorHex: tagTintHexByName[tagName] ?? TagEmojiLibrary.colorHex(for: tagName),
+                    amount: total,
+                    usesEmoji: false
+                )
+            }
         }
 
         return stats
-            .filter { $0.amount > 0 }
+            .filter { $0.amount > 0.001 }
             .sorted { $0.amount > $1.amount }
             .prefix(6)
             .map { $0 }
@@ -105,9 +170,24 @@ struct StatsView: View {
         selectedStats.reduce(0) { $0 + $1.amount }
     }
 
+    private var distributionEmptyTitle: String {
+        L10n.string(
+            "stats.emptyDistribution",
+            locale: locale,
+            selectedFlow.localizedTitle(in: locale),
+            selectedDistributionMode.localizedTitle(in: locale)
+        )
+    }
+
+    private var distributionEmptySubtitle: String {
+        selectedDistributionMode == .tag
+            ? "先为账单补充标签，或点击趋势图中的月份切换统计范围".appLocalized(in: locale)
+            : "点击趋势图中的月份可以切换统计范围".appLocalized(in: locale)
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            LazyVStack(spacing: 18) {
                 overviewCard
                 monthlyChartCard
                 distributionCard
@@ -141,21 +221,11 @@ struct StatsView: View {
             normalizeSelectionIfNeeded()
             syncScrollWithSelection()
         }
-        .onChange(of: chartMonthSelection) { _, newValue in
-            guard let newValue else { return }
-            let normalizedMonth = monthFromChartX(newValue)
-            if selectedMonth != normalizedMonth {
-                selectedMonth = normalizedMonth
-                syncScrollWithSelection()
-                HapticService.selection()
-            }
-        }
         .onChange(of: selectedMonth) { _, _ in
             syncScrollWithSelection()
         }
         .onAppear {
             resetToCurrentPeriod()
-            chartMonthSelection = monthAnchor(for: selectedMonth)
             syncScrollWithSelection()
         }
         .appBackground()
@@ -166,20 +236,19 @@ struct StatsView: View {
             ForEach(availableYears, id: \.self) { year in
                 Button {
                     selectedYear = year
-                    chartMonthSelection = monthAnchor(for: selectedMonth)
                     syncScrollWithSelection()
                     HapticService.selection()
                 } label: {
                     if year == selectedYear {
-                        Label("\(year)年", systemImage: "checkmark")
+                        Label(L10n.year(year, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(year)年")
+                        Text(L10n.year(year, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedYear)年")
+                Text(L10n.year(selectedYear, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -204,12 +273,12 @@ struct StatsView: View {
             }
 
             HStack(spacing: 12) {
-                StatMetric(title: "收入", valueText: totalIncome.cnyText, tint: SWTheme.accentGreen)
-                StatMetric(title: "支出", valueText: totalExpense.cnyText, tint: SWTheme.accentOrange)
+                StatMetric(title: "收入", valueText: totalIncome.cnyText(in: locale), tint: SWTheme.accentGreen)
+                StatMetric(title: "支出", valueText: totalExpense.cnyText(in: locale), tint: SWTheme.accentOrange)
             }
 
             HStack(spacing: 12) {
-                StatMetric(title: "净结余", valueText: netBalance.signedCNYText, tint: SWTheme.accentBlue)
+                StatMetric(title: "净结余", valueText: netBalance.signedCNYText(in: locale), tint: SWTheme.accentBlue)
                 StatMetric(
                     title: "储蓄率",
                     valueText: "\((savingRate * 100).formatted(.number.precision(.fractionLength(1))))%",
@@ -251,7 +320,6 @@ struct StatsView: View {
                 .chartScrollableAxes(.horizontal)
                 .chartXVisibleDomain(length: 6)
                 .chartScrollPosition(x: $chartScrollStartMonth)
-                .chartXSelection(value: $chartMonthSelection)
                 .chartYAxis {
                     AxisMarks(position: .leading) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
@@ -265,10 +333,23 @@ struct StatsView: View {
                         AxisValueLabel {
                             if let x = value.as(Double.self) {
                                 let month = monthFromChartX(x)
-                                Text("\(month)月")
+                                Text(L10n.month(month, locale: locale))
                                     .foregroundStyle(SWTheme.textSecondary)
                             }
                         }
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(
+                                SpatialTapGesture()
+                                    .onEnded { value in
+                                        selectMonth(at: value.location, proxy: proxy, geometry: geometry)
+                                    }
+                            )
                     }
                 }
                 .frame(height: 238)
@@ -287,15 +368,22 @@ struct StatsView: View {
 
             Picker("类型", selection: $selectedFlow) {
                 ForEach(FlowType.allCases) { flow in
-                    Text(flow.rawValue).tag(flow)
+                    Text(flow.localizedTitle(in: locale)).tag(flow)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("维度", selection: $selectedDistributionMode) {
+                ForEach(DistributionMode.allCases) { mode in
+                    Text(mode.localizedTitle(in: locale)).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
 
             if selectedStats.isEmpty {
                 EmptyStateCard(
-                    title: "暂无\(selectedFlow.rawValue)分类数据",
-                    subtitle: "点击趋势图中的月份可以切换统计范围",
+                    title: distributionEmptyTitle,
+                    subtitle: distributionEmptySubtitle,
                     symbol: selectedFlow == .expense ? "minus.circle" : "plus.circle"
                 )
             } else {
@@ -311,12 +399,12 @@ struct StatsView: View {
                     .frame(height: 250)
 
                     VStack(spacing: 6) {
-                        Text(selectedFlow.rawValue)
+                        Text("\(selectedFlow.localizedTitle(in: locale))\(selectedDistributionMode.localizedTitle(in: locale))")
                             .font(.caption)
                             .foregroundStyle(SWTheme.textSecondary)
-                        Text(selectedTotal.cnyText)
+                        Text(selectedTotal.cnyText(in: locale))
                             .font(.title3.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SWTheme.primaryText)
                     }
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedFlow)
@@ -324,17 +412,23 @@ struct StatsView: View {
                 VStack(spacing: 10) {
                     ForEach(selectedStats) { item in
                         HStack(spacing: 10) {
-                            Image(systemName: item.symbol)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(item.color)
-                                .frame(width: 20)
-                            Text(item.name)
+                            if item.usesEmoji {
+                                Text(item.symbol)
+                                    .font(.headline)
+                                    .frame(width: 20)
+                            } else {
+                                Image(systemName: item.symbol)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(item.color)
+                                    .frame(width: 20)
+                            }
+                            Text(selectedDistributionMode == .category ? item.name.appLocalized(in: locale) : item.name)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SWTheme.primaryText)
                             Spacer()
-                            Text(item.amount.cnyText)
+                            Text(item.amount.cnyText(in: locale))
                                 .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SWTheme.primaryText)
                         }
                         .padding(.vertical, 6)
                     }
@@ -349,20 +443,19 @@ struct StatsView: View {
             ForEach(1...12, id: \.self) { month in
                 Button {
                     selectedMonth = month
-                    chartMonthSelection = monthAnchor(for: month)
                     syncScrollWithSelection()
                     HapticService.selection()
                 } label: {
                     if month == selectedMonth {
-                        Label("\(month)月", systemImage: "checkmark")
+                        Label(L10n.month(month, locale: locale), systemImage: "checkmark")
                     } else {
-                        Text("\(month)月")
+                        Text(L10n.month(month, locale: locale))
                     }
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text("\(selectedMonth)月")
+                Text(L10n.month(selectedMonth, locale: locale))
                     .font(SWTheme.toolbarPickerTextFont)
                 Image(systemName: "chevron.down")
                     .font(SWTheme.toolbarPickerChevronFont)
@@ -440,9 +533,26 @@ struct StatsView: View {
     private func monthFromChartX(_ x: Double) -> Int {
         max(1, min(12, Int((x - 0.5).rounded())))
     }
+
+    private func selectMonth(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
+        guard let plotFrameAnchor = proxy.plotFrame else { return }
+        let plotFrame = geometry[plotFrameAnchor]
+        guard plotFrame.contains(location) else { return }
+
+        let relativeX = location.x - plotFrame.origin.x
+        guard let rawXValue = proxy.value(atX: relativeX, as: Double.self) else { return }
+
+        let tappedMonth = monthFromChartX(rawXValue)
+        guard tappedMonth != selectedMonth else { return }
+
+        selectedMonth = tappedMonth
+        syncScrollWithSelection()
+        HapticService.selection()
+    }
 }
 
 private struct TrendLegendItem: View {
+    @Environment(\.locale) private var locale
     let name: String
     let color: Color
 
@@ -451,7 +561,7 @@ private struct TrendLegendItem: View {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(color)
                 .frame(width: 12, height: 12)
-            Text(name)
+            Text(name.appLocalized(in: locale))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(SWTheme.textSecondary)
         }
@@ -459,18 +569,19 @@ private struct TrendLegendItem: View {
 }
 
 private struct StatMetric: View {
+    @Environment(\.locale) private var locale
     let title: String
     let valueText: String
     let tint: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(title.appLocalized(in: locale))
                 .font(.caption)
                 .foregroundStyle(SWTheme.textSecondary)
             Text(valueText)
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
                 .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

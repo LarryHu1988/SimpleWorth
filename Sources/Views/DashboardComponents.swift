@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct SectionTitle: View {
+    @Environment(\.locale) private var locale
     let title: String
     let subtitle: String
 
     var body: some View {
-        Text(title)
+        Text(title.appLocalized(in: locale))
             .font(.title3.weight(.bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(SWTheme.primaryText)
     }
 }
 
@@ -37,6 +38,7 @@ struct ProgressRing: View {
 }
 
 struct FlowSummaryCard: View {
+    @Environment(\.locale) private var locale
     let flow: FlowType
     let periodTitle: String
     let amount: Double
@@ -52,10 +54,10 @@ struct FlowSummaryCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(periodTitle)
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text(signedAmount.signedCNYText)
+                    .foregroundStyle(SWTheme.primaryText)
+                Text(signedAmount.signedCNYText(in: locale))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
                     .minimumScaleFactor(0.75)
                 Text(compareText)
                     .font(.footnote)
@@ -77,6 +79,7 @@ struct FlowSummaryCard: View {
 }
 
 struct CategoryGridSection: View {
+    @Environment(\.locale) private var locale
     let title: String
     let subtitle: String
     let categories: [CategoryItem]
@@ -99,12 +102,14 @@ struct CategoryGridSection: View {
                         }
                 }
             }
+            .id(locale.identifier)
         }
         .fitnessCard()
     }
 }
 
 struct CategoryIconCell: View {
+    @Environment(\.locale) private var locale
     let item: CategoryItem
 
     var body: some View {
@@ -121,9 +126,9 @@ struct CategoryIconCell: View {
                     .foregroundStyle(item.color)
             }
 
-            Text(item.name)
+            Text(item.localizedName(in: locale))
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SWTheme.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -141,8 +146,10 @@ struct CategoryIconCell: View {
 }
 
 struct LedgerRow: View {
+    @Environment(\.locale) private var locale
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     let entry: LedgerEntry
+    var tagTintHexByName: [String: Int] = [:]
 
     private var signedDisplayAmount: Double {
         entry.signedDisplayAmount
@@ -155,7 +162,15 @@ struct LedgerRow: View {
     private var signedDisplayAmountText: String {
         let code = CurrencyCatalog.normalize(code: entry.currencyCode)
         let digits = CurrencyCatalog.fractionDigits(for: code)
-        return signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits)
+        return signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits, locale: locale)
+    }
+
+    private var allTagNames: [String] {
+        entry.tagNames
+    }
+
+    private var visibleTags: [String] {
+        Array(allTagNames.prefix(2))
     }
 
     var body: some View {
@@ -172,17 +187,44 @@ struct LedgerRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.note)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SWTheme.primaryText)
 
                 HStack(spacing: 6) {
-                    Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled))
+                    Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
 
                     if CurrencyCatalog.normalize(code: entry.currencyCode) != "CNY" {
-                        Text("折合\(signedCNYAmount.signedCNYText)")
+                        Text(L10n.string("entry.convertedInline", locale: locale, signedCNYAmount.signedCNYText(in: locale)))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(SWTheme.textSecondary)
+                    }
+                }
+
+                if !visibleTags.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(visibleTags, id: \.self) { tagName in
+                            HStack(spacing: 4) {
+                                Image(systemName: "tag.fill")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(tagTint(for: tagName))
+                                Text(tagName)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(SWTheme.primaryText.opacity(0.92))
+                            }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.white.opacity(0.08))
+                                )
+                        }
+
+                        if allTagNames.count > visibleTags.count {
+                            Text("+\(allTagNames.count - visibleTags.count)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(SWTheme.textSecondary)
+                        }
                     }
                 }
             }
@@ -199,10 +241,17 @@ struct LedgerRow: View {
                 .fill(Color.white.opacity(0.04))
         )
     }
+
+    private func tagTint(for tagName: String) -> Color {
+        let tintHex = tagTintHexByName[tagName] ?? TagEmojiLibrary.colorHex(for: tagName)
+        return Color.sw(UInt(tintHex))
+    }
 }
 
 struct SwipeableLedgerRow: View {
+    @Environment(\.locale) private var locale
     let entry: LedgerEntry
+    var tagTintHexByName: [String: Int] = [:]
     var showCopyAction: Bool = true
     var showRefundAction: Bool = true
     let onTap: () -> Void
@@ -237,7 +286,7 @@ struct SwipeableLedgerRow: View {
         ZStack {
             actionBackground
 
-            LedgerRow(entry: entry)
+            LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName)
                 .offset(x: offsetX)
                 .contentShape(Rectangle())
                 .allowsHitTesting(!isOpen || isHorizontalDragging)
@@ -247,6 +296,9 @@ struct SwipeableLedgerRow: View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
+        .onDisappear {
+            resetImmediately()
+        }
         .onTapGesture {
             if isOpen {
                 closeActions()
@@ -354,12 +406,23 @@ struct SwipeableLedgerRow: View {
         }
     }
 
+    private func resetImmediately() {
+        offsetX = 0
+        baseOffsetX = 0
+        isHorizontalDragging = false
+    }
+
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 6)
+        DragGesture(minimumDistance: abs(baseOffsetX) > 0.5 ? 10 : 24)
             .onChanged { value in
                 let translation = value.translation
                 if !isHorizontalDragging {
-                    if abs(translation.width) <= abs(translation.height) {
+                    let intentThreshold = abs(baseOffsetX) > 0.5 ? 10.0 : 24.0
+                    let directionRatio = abs(baseOffsetX) > 0.5 ? 1.2 : 2.4
+                    let isStrongHorizontalIntent =
+                        abs(translation.width) > max(intentThreshold, abs(translation.height) * directionRatio)
+
+                    if !isStrongHorizontalIntent {
                         return
                     }
                     isHorizontalDragging = true
@@ -394,7 +457,7 @@ struct SwipeableLedgerRow: View {
         VStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.bold))
-            Text(title)
+            Text(title.appLocalized(in: locale))
                 .font(.caption2.weight(.semibold))
         }
         .frame(width: width)
@@ -412,6 +475,7 @@ struct SwipeableLedgerRow: View {
 }
 
 struct EmptyStateCard: View {
+    @Environment(\.locale) private var locale
     let title: String
     let subtitle: String
     let symbol: String
@@ -421,10 +485,10 @@ struct EmptyStateCard: View {
             Image(systemName: symbol)
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.85))
-            Text(title)
+            Text(title.appLocalized(in: locale))
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
-            Text(subtitle)
+                .foregroundStyle(SWTheme.primaryText)
+            Text(subtitle.appLocalized(in: locale))
                 .font(.footnote)
                 .foregroundStyle(SWTheme.textSecondary)
                 .multilineTextAlignment(.center)
