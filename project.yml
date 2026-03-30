@@ -32,7 +32,7 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.5.6
+        CFBundleShortVersionString: 0.6.0
         CFBundleVersion: "6"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:

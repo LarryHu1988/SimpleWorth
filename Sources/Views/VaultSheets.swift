@@ -292,6 +292,7 @@ struct DepositEditorSheet: View {
     @State private var amountText: String = ""
     @State private var note: String = ""
     @State private var date: Date = .now
+    @State private var showGoalSelection = false
 
     init(goals: [SavingsGoalRecord]) {
         self.goals = goals
@@ -351,6 +352,9 @@ struct DepositEditorSheet: View {
             }
             .appBackground()
         }
+        .sheet(isPresented: $showGoalSelection) {
+            DepositGoalSelectionSheet(goals: goals, selectedGoalID: $selectedGoalID)
+        }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -359,20 +363,44 @@ struct DepositEditorSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "选择目标", subtitle: "本次存入归属哪个小目标")
 
-            Picker("目标", selection: $selectedGoalID) {
-                ForEach(goals) { goal in
-                    Text(goal.name).tag(Optional(goal.id))
+            Button {
+                showGoalSelection = true
+                HapticService.selection()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedGoal?.symbol ?? "target")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(selectedGoal?.tintColor ?? SWTheme.textSecondary)
+                        .frame(width: 20)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selectedGoal?.name ?? "选择目标".appLocalized(in: locale))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(selectedGoal == nil ? SWTheme.textSecondary : SWTheme.primaryText)
+
+                        if let selectedGoal {
+                            Text(selectedGoal.targetAmount.cnyText(in: locale))
+                                .font(.caption)
+                                .foregroundStyle(SWTheme.textSecondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SWTheme.textSecondary)
                 }
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
             }
-            .pickerStyle(.menu)
-            .tint(SWTheme.primaryText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-            )
+            .buttonStyle(.plain)
         }
         .fitnessCard()
     }
@@ -461,5 +489,67 @@ struct DepositEditorSheet: View {
 
         try? modelContext.save()
         dismiss()
+    }
+}
+
+private struct DepositGoalSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
+
+    let goals: [SavingsGoalRecord]
+    @Binding var selectedGoalID: UUID?
+
+    var body: some View {
+        NavigationStack {
+            List(goals) { goal in
+                Button {
+                    selectedGoalID = goal.id
+                    HapticService.selection()
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: goal.symbol)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(goal.tintColor)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(goal.name)
+                                .foregroundStyle(SWTheme.primaryText)
+                            Text(goal.targetAmount.cnyText(in: locale))
+                                .font(.caption)
+                                .foregroundStyle(SWTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        if goal.id == selectedGoalID {
+                            Image(systemName: "checkmark")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(SWTheme.accentBlue)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+            }
+            .scrollContentBackground(.hidden)
+            .navigationTitle("选择目标")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .appBackground()
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
