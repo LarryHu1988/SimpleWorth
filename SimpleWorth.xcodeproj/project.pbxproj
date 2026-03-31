@@ -19,6 +19,7 @@
 		8426C25AB8AB5A7A8F73EBC8 /* EntryEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */; };
 		8C4BC15282FDA9D75A5D52E7 /* ExpenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015262E5CB25D039C4152B1 /* ExpenseView.swift */; };
 		9189748DDFFA202DB03684CF /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */; };
+		F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */; };
 		A2B0222A7E2498CF07565BB2 /* LedgerFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0081162AD6EA4A233BEBAEF1 /* LedgerFlowView.swift */; };
 		A83243D4AC7326913A51FB24 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8CC5A0E0618DE5718CA19A /* StatsView.swift */; };
 		B6F776736C77E5C3B9AF29A1 /* ICloudSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */; };
@@ -68,6 +69,7 @@
 		E04970AE91E610D9A97C9FA7 /* CurrencySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencySettingsView.swift; sourceTree = "<group>"; };
 		EEE152A23C83913C552261AF /* FinanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceModels.swift; sourceTree = "<group>"; };
 		EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorSheet.swift; sourceTree = "<group>"; };
+		F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -77,6 +79,7 @@
 				B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */,
 				7A1A84C9C1CD234D84984D79 /* Info.plist */,
 				2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */,
+				F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */,
 				80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */,
 				C71ACF11F43F0A3E38043196 /* App */,
 				E9DEEA706D0037D1F4D93A4F /* Models */,
@@ -222,6 +225,7 @@
 				7A1A28AE38C2DBF30E497DB3 /* Assets.xcassets in Resources */,
 				9189748DDFFA202DB03684CF /* Localizable.strings in Resources */,
 				C993890191256770B6D56F67 /* Preview Assets.xcassets in Resources */,
+				F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
