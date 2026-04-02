@@ -472,130 +472,13 @@ enum CategoryLibrary {
 enum SeedService {
     private static let seedKey = "simpleworth.seed.v0.1.0"
 
-    static func seedIfNeeded(context: ModelContext) {
+    static func seedIfNeeded(context _: ModelContext) {
         if UserDefaults.standard.bool(forKey: seedKey) {
             return
         }
 
-        let hasEntries = (try? context.fetchCount(FetchDescriptor<LedgerEntry>())) ?? 0
-        if hasEntries > 0 {
-            UserDefaults.standard.set(true, forKey: seedKey)
-            return
-        }
-
-        seedLedgerEntries(context: context)
-        seedGoalsAndDeposits(context: context)
-
-        try? context.save()
+        // Keep the one-time launch marker, but stop injecting demo data for new installs.
         UserDefaults.standard.set(true, forKey: seedKey)
-    }
-
-    private static func seedLedgerEntries(context: ModelContext) {
-        struct SeedEntry {
-            let note: String
-            let flow: FlowType
-            let category: String
-            let amount: Double
-            let daysAgo: Int
-        }
-
-        let entries: [SeedEntry] = [
-            .init(note: "午餐简餐", flow: .expense, category: "餐饮", amount: 48, daysAgo: 0),
-            .init(note: "地铁通勤", flow: .expense, category: "交通", amount: 6, daysAgo: 0),
-            .init(note: "咖啡", flow: .expense, category: "咖啡", amount: 26, daysAgo: 1),
-            .init(note: "家庭买菜", flow: .expense, category: "买菜", amount: 128, daysAgo: 1),
-            .init(note: "健身月卡", flow: .expense, category: "健身", amount: 299, daysAgo: 6),
-            .init(note: "电影", flow: .expense, category: "电影", amount: 59, daysAgo: 7),
-            .init(note: "宠物洗护", flow: .expense, category: "宠物", amount: 120, daysAgo: 8),
-            .init(note: "手机配件", flow: .expense, category: "数码", amount: 189, daysAgo: 9),
-            .init(note: "房租", flow: .expense, category: "住房", amount: 3200, daysAgo: 33),
-            .init(note: "家庭聚餐", flow: .expense, category: "餐饮", amount: 280, daysAgo: 36),
-            .init(note: "周末短途", flow: .expense, category: "旅行", amount: 760, daysAgo: 62),
-
-            .init(note: "月度工资", flow: .income, category: "工资", amount: 9800, daysAgo: 1),
-            .init(note: "项目奖金", flow: .income, category: "奖金", amount: 2200, daysAgo: 2),
-            .init(note: "副业设计稿", flow: .income, category: "创作", amount: 860, daysAgo: 4),
-            .init(note: "报销到账", flow: .income, category: "报销", amount: 320, daysAgo: 5),
-            .init(note: "基金分红", flow: .income, category: "分红", amount: 280, daysAgo: 7),
-            .init(note: "退款", flow: .income, category: "退款", amount: 139, daysAgo: 8),
-            .init(note: "租金收入", flow: .income, category: "租金", amount: 3500, daysAgo: 11),
-            .init(note: "利息", flow: .income, category: "利息", amount: 112, daysAgo: 15),
-            .init(note: "上月工资", flow: .income, category: "工资", amount: 9600, daysAgo: 33),
-            .init(note: "兼职收入", flow: .income, category: "兼职", amount: 1180, daysAgo: 47),
-            .init(note: "副业结算", flow: .income, category: "副业", amount: 1660, daysAgo: 74)
-        ]
-
-        for seed in entries {
-            let category = CategoryLibrary.category(named: seed.category, flow: seed.flow)
-                ?? CategoryLibrary.defaultCategory(for: seed.flow)
-
-            context.insert(
-                LedgerEntry(
-                    createdAt: .daysAgo(seed.daysAgo),
-                    amount: seed.amount,
-                    note: seed.note,
-                    flow: seed.flow,
-                    category: category
-                )
-            )
-        }
-    }
-
-    private static func seedGoalsAndDeposits(context: ModelContext) {
-        let travelGoal = SavingsGoalRecord(
-            name: "欧洲旅行",
-            symbol: "airplane",
-            currentAmount: 7900,
-            targetAmount: 20000,
-            deadline: .date(year: 2026, month: 9, day: 30),
-            tintHex: 0x38BDF8
-        )
-        let phoneGoal = SavingsGoalRecord(
-            name: "新手机",
-            symbol: "iphone",
-            currentAmount: 3080,
-            targetAmount: 8000,
-            deadline: .date(year: 2026, month: 6, day: 30),
-            tintHex: 0xA78BFA
-        )
-        let emergencyGoal = SavingsGoalRecord(
-            name: "应急金",
-            symbol: "shield.fill",
-            currentAmount: 14850,
-            targetAmount: 30000,
-            deadline: nil,
-            tintHex: 0x34D399
-        )
-        let learnGoal = SavingsGoalRecord(
-            name: "学习基金",
-            symbol: "graduationcap.fill",
-            currentAmount: 4520,
-            targetAmount: 12000,
-            deadline: .date(year: 2026, month: 12, day: 31),
-            tintHex: 0xF59E0B
-        )
-
-        let goals = [travelGoal, phoneGoal, emergencyGoal, learnGoal]
-        goals.forEach { context.insert($0) }
-
-        let deposits: [(SavingsGoalRecord, Double, String, Int)] = [
-            (travelGoal, 300, "工资日固定转入", 1),
-            (phoneGoal, 120, "副业收入转入", 4),
-            (learnGoal, 80, "减少外卖奖励", 7),
-            (emergencyGoal, 150, "退款到账转入", 10)
-        ]
-
-        for (goal, amount, note, daysAgo) in deposits {
-            goal.currentAmount += amount
-            context.insert(
-                VaultDepositRecord(
-                    date: .daysAgo(daysAgo),
-                    amount: amount,
-                    note: note,
-                    goal: goal
-                )
-            )
-        }
     }
 }
 

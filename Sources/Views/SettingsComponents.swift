@@ -52,10 +52,12 @@ struct SettingsSectionCard<Content: View>: View {
                 .tracking(SettingsLayout.sectionHeaderTracking)
                 .foregroundStyle(SettingsLayout.sectionHeaderColor)
 
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 content
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fitnessCard()
     }
 }
@@ -74,8 +76,81 @@ struct SettingsPressableButton<Label: View>: View {
     let action: () -> Void
     @ViewBuilder let label: Label
 
-    @GestureState private var isPressing = false
-    @State private var shouldSuppressTap = false
+    init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button(action: action) {
+            label
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(SettingsRowButtonStyle())
+    }
+}
+
+private struct SettingsRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+struct SettingsDetailContainer<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
+        }
+        .appBackground()
+    }
+}
+
+struct SettingsKeyValueRow: View {
+    @Environment(\.locale) private var locale
+
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Text(title.appLocalized(in: locale))
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(SWTheme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayout.rowContentMinHeight,
+            alignment: .leading
+        )
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+}
+
+struct SettingsWideActionButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: Label
 
     init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
         self.action = action
@@ -83,39 +158,55 @@ struct SettingsPressableButton<Label: View>: View {
     }
 
     var body: some View {
-        Button {
-            guard !shouldSuppressTap else {
-                shouldSuppressTap = false
-                return
-            }
-            action()
-        } label: {
+        Button(action: action) {
             label
-                .opacity(isPressing && !shouldSuppressTap ? 0.82 : 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .updating($isPressing) { value, state, _ in
-                    if !hasExceededTapTolerance(for: value.translation) {
-                        state = true
-                    }
-                }
-                .onChanged { value in
-                    if hasExceededTapTolerance(for: value.translation) {
-                        shouldSuppressTap = true
-                    }
-                }
-                .onEnded { _ in
-                    guard shouldSuppressTap else { return }
-                    DispatchQueue.main.async {
-                        shouldSuppressTap = false
-                    }
-                }
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    private func hasExceededTapTolerance(for translation: CGSize) -> Bool {
-        max(abs(translation.width), abs(translation.height)) > SettingsLayout.tapCancellationDistance
+struct SettingsDetailActionRow: View {
+    @Environment(\.locale) private var locale
+
+    let title: String
+    let symbol: String
+    let iconColor: Color
+    var trailingSymbol: String = "arrow.up.right"
+    let action: () -> Void
+
+    var body: some View {
+        SettingsPressableButton(action: action) {
+            HStack(spacing: SettingsLayout.rowSpacing) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: SettingsLayout.rowIconWidth)
+
+                Text(title.appLocalized(in: locale))
+                    .font(SettingsLayout.titleFont)
+                    .foregroundStyle(SWTheme.primaryText)
+
+                Spacer()
+
+                Image(systemName: trailingSymbol)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: SettingsLayout.rowContentMinHeight,
+                alignment: .leading
+            )
+            .padding(.vertical, SettingsLayout.rowVerticalPadding)
+        }
     }
 }

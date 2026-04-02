@@ -260,6 +260,8 @@ struct LedgerFlowView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(SWTheme.textSecondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .fitnessCard()

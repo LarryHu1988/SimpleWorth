@@ -41,6 +41,17 @@ enum ThemeMode: String, CaseIterable, Identifiable {
         }
     }
 
+    var interfaceStyle: UIUserInterfaceStyle {
+        switch self {
+        case .system:
+            .unspecified
+        case .daylight:
+            .light
+        case .moonlight:
+            .dark
+        }
+    }
+
     static func resolved(from defaults: UserDefaults = .standard) -> ThemeMode {
         if
             let rawValue = defaults.string(forKey: SettingsKeys.themeMode),
@@ -54,6 +65,19 @@ enum ThemeMode: String, CaseIterable, Identifiable {
         }
 
         return .system
+    }
+}
+
+enum AppAppearanceController {
+    @MainActor
+    static func apply(themeMode: ThemeMode) {
+        let interfaceStyle = themeMode.interfaceStyle
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .forEach { window in
+                window.overrideUserInterfaceStyle = interfaceStyle
+            }
     }
 }
 

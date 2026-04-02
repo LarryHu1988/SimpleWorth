@@ -5,8 +5,7 @@ import SwiftUI
 struct SimpleWorthApp: App {
     @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.system.rawValue
     @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw = AppLanguage.simplifiedChinese.rawValue
-
-    private let sharedModelContainer: ModelContainer
+    @StateObject private var appRuntimeController: AppRuntimeController
 
     init() {
         let defaults = UserDefaults.standard
@@ -16,9 +15,7 @@ struct SimpleWorthApp: App {
         if defaults.string(forKey: SettingsKeys.appLanguage) == nil {
             defaults.set(AppLanguage.simplifiedChinese.rawValue, forKey: SettingsKeys.appLanguage)
         }
-
-        let iCloudSyncEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.iCloudSyncEnabled)
-        sharedModelContainer = Self.makeModelContainer(iCloudSyncEnabled: iCloudSyncEnabled)
+        _appRuntimeController = StateObject(wrappedValue: AppRuntimeController(defaults: defaults))
     }
 
     private var themeMode: ThemeMode {
@@ -31,14 +28,60 @@ struct SimpleWorthApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SeededRootView()
-                .environment(\.locale, appLanguage.locale)
-                .preferredColorScheme(themeMode.preferredColorScheme)
+            AppRootView(
+                appRuntimeController: appRuntimeController,
+                appLanguage: appLanguage,
+                themeMode: themeMode
+            )
         }
-        .modelContainer(sharedModelContainer)
+    }
+}
+
+private struct AppRootView: View {
+    @ObservedObject var appRuntimeController: AppRuntimeController
+    let appLanguage: AppLanguage
+    let themeMode: ThemeMode
+
+    var body: some View {
+        SeededRootView()
+            .environmentObject(appRuntimeController)
+            .environment(\.locale, appLanguage.locale)
+            .modelContainer(appRuntimeController.modelContainer)
+            .task(id: themeMode.rawValue) {
+                await MainActor.run {
+                    AppAppearanceController.apply(themeMode: themeMode)
+                }
+            }
+    }
+}
+
+@MainActor
+final class AppRuntimeController: ObservableObject {
+    @Published private(set) var modelContainer: ModelContainer
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.modelContainer = AppModelContainerFactory.make(
+            iCloudSyncEnabled: defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled),
+            defaults: defaults
+        ).container
     }
 
-    private static func makeModelContainer(iCloudSyncEnabled: Bool) -> ModelContainer {
+    @discardableResult
+    func updateICloudSync(enabled: Bool) -> Bool {
+        let result = AppModelContainerFactory.make(iCloudSyncEnabled: enabled, defaults: defaults)
+        modelContainer = result.container
+        return result.isICloudSyncEnabled
+    }
+}
+
+private enum AppModelContainerFactory {
+    static func make(
+        iCloudSyncEnabled: Bool,
+        defaults: UserDefaults = .standard
+    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool) {
         let schema = Schema([
             TagRecord.self,
             LedgerEntry.self,
@@ -57,7 +100,8 @@ struct SimpleWorthApp: App {
         )
 
         if let container = try? ModelContainer(for: schema, configurations: [primaryConfiguration]) {
-            return container
+            defaults.set(iCloudSyncEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
+            return (container, iCloudSyncEnabled)
         }
 
         let localConfiguration = ModelConfiguration(
@@ -66,8 +110,8 @@ struct SimpleWorthApp: App {
             cloudKitDatabase: .none
         )
         if let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
-            UserDefaults.standard.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return localContainer
+            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
+            return (localContainer, false)
         }
 
         let inMemoryConfiguration = ModelConfiguration(
@@ -76,8 +120,8 @@ struct SimpleWorthApp: App {
             cloudKitDatabase: .none
         )
         if let inMemoryContainer = try? ModelContainer(for: schema, configurations: [inMemoryConfiguration]) {
-            UserDefaults.standard.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return inMemoryContainer
+            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
+            return (inMemoryContainer, false)
         }
 
         fatalError("Could not create ModelContainer in any mode")
@@ -86,7 +130,12 @@ struct SimpleWorthApp: App {
 
 private struct SeededRootView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.system.rawValue
     @State private var hasSeeded = false
+
+    private var themeMode: ThemeMode {
+        ThemeMode(rawValue: themeModeRaw) ?? .system
+    }
 
     var body: some View {
         MainTabView()
@@ -94,6 +143,11 @@ private struct SeededRootView: View {
                 guard !hasSeeded else { return }
                 hasSeeded = true
                 SeedService.seedIfNeeded(context: modelContext)
+            }
+            .task(id: themeModeRaw) {
+                await MainActor.run {
+                    AppAppearanceController.apply(themeMode: themeMode)
+                }
             }
     }
 }
