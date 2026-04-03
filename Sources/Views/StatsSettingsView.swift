@@ -5,6 +5,7 @@ import SwiftUI
 import UIKit
 
 private enum SettingsRoute: Hashable {
+    case appleAccount
     case currency
     case tags
     case importBills
@@ -43,8 +44,6 @@ struct StatsSettingsView: View {
     @State private var showNotice = false
     @State private var suppressNextICloudSyncHandling = false
     @StateObject private var appleAccountStore = AppleAccountStore.shared
-    @StateObject private var appleSignInController = AppleSignInController()
-
     private let repoURL = URL(string: "https://github.com/LarryHu1988/SimpleWorth")
     private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
@@ -62,7 +61,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.2"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.3"
         return "V\(version)"
     }
 
@@ -84,7 +83,6 @@ struct StatsSettingsView: View {
         NavigationStack(path: $navigationPath) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: SettingsLayout.pageSectionSpacing) {
-                    appleAccountCard
                     statsHeaderCard
 
                     SettingsSectionCard(title: "个人偏好") {
@@ -146,14 +144,12 @@ struct StatsSettingsView: View {
                     }
 
                     SettingsSectionCard(title: "数据安全") {
-                        settingToggleRow(
-                            title: "iCloud 同步",
-                            symbol: "icloud.fill",
-                            iconColor: SWTheme.accentBlue,
-                            isOn: $iCloudSyncEnabled
-                        )
-                        .onChange(of: iCloudSyncEnabled) { _, newValue in
-                            handleICloudSyncToggleChange(newValue)
+                        settingsActionRow(
+                            title: "苹果账号",
+                            symbol: "apple.logo",
+                            iconColor: SWTheme.accentBlue
+                        ) {
+                            push(.appleAccount)
                         }
 
                         SettingsRowDivider()
@@ -271,6 +267,8 @@ struct StatsSettingsView: View {
             }
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
+                case .appleAccount:
+                    appleAccountSettingsPage
                 case .currency:
                     CurrencySettingsView()
                 case .tags:
@@ -289,14 +287,13 @@ struct StatsSettingsView: View {
                 case .privacy:
                     PrivacyAgreementView(supportEmail: supportEmail)
                 case .about:
-                    AboutSimpleWorthView(
-                        email: supportEmail,
-                        appVersionText: appVersionText,
+                    AboutSimpleWorthView(appVersionText: appVersionText)
+                case .otherApps:
+                    OtherAppsView(
+                        supportEmail: supportEmail,
                         authorWebsiteURL: authorWebsiteURL,
                         repoURL: repoURL
                     )
-                case .otherApps:
-                    OtherAppsView(authorWebsiteURL: authorWebsiteURL, repoURL: repoURL)
                 }
             }
             .fileExporter(
@@ -307,7 +304,7 @@ struct StatsSettingsView: View {
             ) { result in
                 switch result {
                 case .success:
-                    HapticService.impact()
+                    HapticService.success()
                     presentNotice(message: "账单已成功导出。".appLocalized(in: uiLocale))
                 case .failure(let error):
                     presentNotice(message: L10n.string("settings.exportFailed", locale: uiLocale, error.localizedDescription))
@@ -325,129 +322,164 @@ struct StatsSettingsView: View {
     }
 
     private var appleAccountCard: some View {
-        ViewThatFits(in: .horizontal) {
-            appleAccountBalancedRow
-            appleAccountCompactRow
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fitnessCard()
-    }
-
-    private var appleAccountBalancedRow: some View {
-        HStack(alignment: .center, spacing: 12) {
-            appleAccountAvatar
-            Text("Apple 账号".appLocalized(in: uiLocale))
-                .font(SettingsLayout.cardTitleFont)
-                .tracking(SettingsLayout.cardTitleTracking)
-                .foregroundStyle(SettingsLayout.cardTitleColor)
-                .lineLimit(1)
-
-            Text(appleAccountPrimaryStatusText)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(SWTheme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .layoutPriority(1)
-
-            Spacer(minLength: 8)
-
-            appleAccountActionArea
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var appleAccountCompactRow: some View {
-        HStack(alignment: .center, spacing: 12) {
-            appleAccountAvatar
-
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                appleAccountAvatar
                 appleAccountIdentityBlock
+
+                if hasLinkedAppleAccount {
+                    Spacer(minLength: 8)
+                    appleAccountStatusBadge
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(appleAccountSupportingText)
+                .font(.footnote)
+                .foregroundStyle(appleAccountSupportingTint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if hasLinkedAppleAccount {
+                HStack {
+                    Spacer(minLength: 0)
+                    appleAccountRefreshButton
+                }
+            } else {
+                appleOfficialSignInButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var appleAccountSettingsPage: some View {
+        SettingsDetailContainer {
+            SettingsSectionCard(title: "苹果账号") {
+                VStack(alignment: .leading, spacing: 12) {
+                    appleAccountCard
+
+                    SettingsRowDivider()
+
+                    Text("登录后可在这里查看当前 Apple 授权状态，并管理本机使用的同步身份。")
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.textSecondary)
+
+                    Text("如果设备上的 iCloud 状态有变化，也可以点右侧按钮重新检测。")
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.textSecondary)
+                }
             }
 
-            Spacer(minLength: 8)
+            SettingsSectionCard(title: "iCloud 同步") {
+                settingToggleRow(
+                    title: "iCloud 同步",
+                    symbol: "icloud.fill",
+                    iconColor: SWTheme.accentBlue,
+                    isOn: $iCloudSyncEnabled
+                )
+                .onChange(of: iCloudSyncEnabled) { _, newValue in
+                    handleICloudSyncToggleChange(newValue)
+                }
 
-            appleAccountActionArea
+                SettingsRowDivider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("开启后，账单、标签、金库目标与存入记录会同步到你当前 Apple 账号的 iCloud 私有数据库。")
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.textSecondary)
+
+                    Text("关闭后，当前会话会立即切回本地存储，后续新增内容仅保存在本机。")
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.textSecondary)
+                }
+                .padding(.vertical, 4)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .navigationTitle("苹果账号")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var appleAccountIdentityBlock: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 5) {
             Text("Apple 账号".appLocalized(in: uiLocale))
                 .font(SettingsLayout.cardTitleFont)
                 .tracking(SettingsLayout.cardTitleTracking)
                 .foregroundStyle(SettingsLayout.cardTitleColor)
+                .lineLimit(1)
 
             Text(appleAccountHeadline)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SWTheme.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-        }
-    }
 
-    private var appleAccountPrimaryStatusText: String {
-        appleAccountHeadline
-    }
-
-    @ViewBuilder
-    private var appleAccountActionArea: some View {
-        if hasLinkedAppleAccount {
-            HStack(spacing: 8) {
-                Text(appleAccountBadgeText)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(appleAccountBadgeTint)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(appleAccountBadgeTint.opacity(0.14))
-                    )
-
-                Button {
-                    Task {
-                        await appleAccountStore.refreshStatus()
-                        HapticService.selection()
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption.weight(.semibold))
+            if hasLinkedAppleAccount,
+               appleAccountResolvedDisplayName != nil,
+               let email = appleAccountStore.email,
+               !email.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "envelope.fill")
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(SWTheme.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            Circle()
-                                .fill(Color.white.opacity(0.08))
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("重新检测".appLocalized(in: uiLocale))
-            }
-            .fixedSize(horizontal: true, vertical: false)
-        } else {
-            Button {
-                Task {
-                    await startAppleSignIn()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "apple.logo")
-                        .font(.subheadline.weight(.bold))
-                    Text("Apple 登录".appLocalized(in: uiLocale))
-                        .font(.subheadline.weight(.semibold))
+
+                    Text(email)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(SWTheme.textSecondary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 42)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(colorScheme == .dark ? Color.white.opacity(0.96) : Color.black.opacity(0.9))
-                )
             }
-            .buttonStyle(.plain)
-            .fixedSize(horizontal: true, vertical: false)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var appleAccountStatusBadge: some View {
+        Text(appleAccountBadgeText)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(appleAccountBadgeTint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(appleAccountBadgeTint.opacity(0.14))
+            )
+    }
+
+    private var appleAccountRefreshButton: some View {
+        Button {
+            Task {
+                await appleAccountStore.refreshStatus()
+                HapticService.selection()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption.weight(.semibold))
+                Text("重新检测".appLocalized(in: uiLocale))
+                    .font(.footnote.weight(.semibold))
+            }
+            .foregroundStyle(SWTheme.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 34)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("重新检测".appLocalized(in: uiLocale))
+    }
+
+    private var appleOfficialSignInButton: some View {
+        SignInWithAppleButton(.signIn) { request in
+            appleAccountStore.configure(request)
+        } onCompletion: { result in
+            Task {
+                await handleAppleAuthorizationResult(result)
+            }
+        }
+        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+        .frame(maxWidth: .infinity)
+        .frame(height: 44)
     }
 
     private var statsHeaderCard: some View {
@@ -516,12 +548,12 @@ struct StatsSettingsView: View {
 
     private var appleAccountBadgeText: String {
         switch appleAccountStore.credentialStatus {
-        case .authorized, .unavailable:
+        case .authorized:
             return "已登录".appLocalized(in: uiLocale)
         case .checking:
             return "检测中".appLocalized(in: uiLocale)
-        case .revoked, .signedOut:
-            return "检测中".appLocalized(in: uiLocale)
+        case .revoked, .signedOut, .unavailable:
+            return "未登录".appLocalized(in: uiLocale)
         }
     }
 
@@ -531,8 +563,10 @@ struct StatsSettingsView: View {
             return SWTheme.accentGreen
         case .checking:
             return SWTheme.accentBlue
-        case .revoked, .unavailable, .signedOut:
+        case .revoked, .unavailable:
             return SWTheme.accentOrange
+        case .signedOut:
+            return SWTheme.textSecondary
         }
     }
 
@@ -542,29 +576,54 @@ struct StatsSettingsView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            SWTheme.accentBlue.opacity(hasLinkedAppleAccount ? 0.32 : 0.18),
-                            SWTheme.accentGreen.opacity(hasLinkedAppleAccount ? 0.24 : 0.12)
+                            SWTheme.accentBlue.opacity(hasLinkedAppleAccount ? 0.48 : 0.18),
+                            SWTheme.accentGreen.opacity(hasLinkedAppleAccount ? 0.3 : 0.12)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
+                .overlay(
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(hasLinkedAppleAccount ? 0.32 : 0.16),
+                                    Color.white.opacity(0.02)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .padding(3)
+                )
 
             if hasLinkedAppleAccount {
                 Text(appleAccountAvatarLabel)
-                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(SWTheme.primaryText)
+                    .shadow(color: Color.black.opacity(0.08), radius: 6, y: 2)
             } else {
                 Image(systemName: "apple.logo")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(SWTheme.primaryText)
             }
         }
-        .frame(width: 44, height: 44)
+        .frame(width: 52, height: 52)
         .overlay(
             Circle()
-                .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
         )
+        .overlay(alignment: .bottomTrailing) {
+            Circle()
+                .fill(appleAccountBadgeTint)
+                .frame(width: 13, height: 13)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.92), lineWidth: 2)
+                )
+        }
+        .shadow(color: SWTheme.accentBlue.opacity(hasLinkedAppleAccount ? 0.16 : 0.08), radius: 14, y: 8)
     }
 
     private var appleAccountAvatarLabel: String {
@@ -891,13 +950,12 @@ struct StatsSettingsView: View {
 
     private func copyFeedbackAddress() {
         UIPasteboard.general.string = supportEmail
-        HapticService.selection()
-        presentNotice(message: "已复制反馈邮箱地址。".appLocalized(in: uiLocale))
+        HapticService.success()
     }
 
     private func fallbackToCopiedFeedbackAddress() {
         UIPasteboard.general.string = supportEmail
-        HapticService.impact()
+        HapticService.warning()
         presentNotice(message: L10n.string("settings.feedbackUnavailable", locale: uiLocale, supportEmail))
     }
 
@@ -970,7 +1028,7 @@ struct StatsSettingsView: View {
             let data = try Data(contentsOf: url)
             let importedEntries = try LedgerSpreadsheetImporter.parseEntries(from: data)
             let summary = try appendImportedBills(importedEntries)
-            HapticService.impact()
+            HapticService.success()
             presentNotice(message: summary)
         } catch {
             presentNotice(message: L10n.string("settings.importFailed", locale: uiLocale, error.localizedDescription))
@@ -1239,16 +1297,17 @@ struct StatsSettingsView: View {
             iCloudSyncEnabled = effectiveEnabled
         }
 
-        HapticService.impact()
         Task {
             await appleAccountStore.refreshStatus()
         }
 
         if isEnabled && !effectiveEnabled {
+            HapticService.warning()
             presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: uiLocale))
             return
         }
 
+        HapticService.success()
         presentNotice(
             message: effectiveEnabled
                 ? "iCloud 同步已开启，当前会话已立即生效。".appLocalized(in: uiLocale)
@@ -1256,19 +1315,16 @@ struct StatsSettingsView: View {
         )
     }
 
-    private func startAppleSignIn() async {
-        let result = await appleSignInController.signIn { request in
-            appleAccountStore.configure(request)
-        }
-
+    private func handleAppleAuthorizationResult(_ result: Result<ASAuthorization, Error>) async {
         let outcome = await appleAccountStore.handleAuthorizationResult(result)
         switch outcome {
         case .signedIn:
-            HapticService.impact()
+            HapticService.success()
             presentNotice(message: "Apple 账号已连接，可在下方开启 iCloud 同步。".appLocalized(in: uiLocale))
         case .cancelled:
             break
         case .failed(let message):
+            HapticService.warning()
             presentNotice(message: message)
         }
     }
@@ -1278,54 +1334,6 @@ struct StatsSettingsView: View {
         HapticService.selection()
     }
 
-}
-
-@MainActor
-private final class AppleSignInController: NSObject, ObservableObject {
-    private var continuation: CheckedContinuation<Result<ASAuthorization, Error>, Never>?
-    private var authorizationController: ASAuthorizationController?
-
-    func signIn(configure: (ASAuthorizationAppleIDRequest) -> Void) async -> Result<ASAuthorization, Error> {
-        let provider = ASAuthorizationAppleIDProvider()
-        let request = provider.createRequest()
-        configure(request)
-
-        return await withCheckedContinuation { continuation in
-            self.continuation = continuation
-
-            let controller = ASAuthorizationController(authorizationRequests: [request])
-            controller.delegate = self
-            controller.presentationContextProvider = self
-            self.authorizationController = controller
-            controller.performRequests()
-        }
-    }
-}
-
-extension AppleSignInController: ASAuthorizationControllerDelegate {
-    func authorizationController(
-        controller: ASAuthorizationController,
-        didCompleteWithAuthorization authorization: ASAuthorization
-    ) {
-        continuation?.resume(returning: .success(authorization))
-        continuation = nil
-        authorizationController = nil
-    }
-
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        continuation?.resume(returning: .failure(error))
-        continuation = nil
-        authorizationController = nil
-    }
-}
-
-extension AppleSignInController: ASAuthorizationControllerPresentationContextProviding {
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow) ?? ASPresentationAnchor()
-    }
 }
 
 private struct SettingsMetricCard: View {
@@ -1360,12 +1368,8 @@ private struct SettingsMetricCard: View {
 
 private struct AboutSimpleWorthView: View {
     @Environment(\.locale) private var locale
-    @Environment(\.openURL) private var openURL
 
-    let email: String
     let appVersionText: String
-    let authorWebsiteURL: URL?
-    let repoURL: URL?
 
     var body: some View {
         SettingsDetailContainer {
@@ -1389,39 +1393,6 @@ private struct AboutSimpleWorthView: View {
                 SettingsKeyValueRow(title: "开发者", value: "Larry Hu")
                 SettingsRowDivider()
                 SettingsKeyValueRow(title: "定位", value: "轻量记账与目标管理".appLocalized(in: locale))
-            }
-
-            SettingsSectionCard(title: "联系与项目") {
-                SettingsDetailActionRow(
-                    title: "联系邮箱",
-                    symbol: "envelope.fill",
-                    iconColor: SWTheme.accentBlue
-                ) {
-                    guard let mailURL = URL(string: "mailto:\(email)") else { return }
-                    openURL(mailURL)
-                }
-
-                SettingsRowDivider()
-
-                SettingsDetailActionRow(
-                    title: "作者主页",
-                    symbol: "safari.fill",
-                    iconColor: SWTheme.accentGreen
-                ) {
-                    guard let authorWebsiteURL else { return }
-                    openURL(authorWebsiteURL)
-                }
-
-                SettingsRowDivider()
-
-                SettingsDetailActionRow(
-                    title: "GitHub 仓库",
-                    symbol: "link",
-                    iconColor: SWTheme.accentOrange
-                ) {
-                    guard let repoURL else { return }
-                    openURL(repoURL)
-                }
             }
         }
         .navigationTitle("关于简值")
@@ -1477,6 +1448,7 @@ private struct PrivacyAgreementView: View {
 private struct OtherAppsView: View {
     @Environment(\.openURL) private var openURL
 
+    let supportEmail: String
     let authorWebsiteURL: URL?
     let repoURL: URL?
 
@@ -1487,6 +1459,17 @@ private struct OtherAppsView: View {
                     Text("当前公开作品以 SimpleWorth 为主，后续应用会优先发布在作者主页。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
+                }
+            }
+
+            SettingsSectionCard(title: "联系与项目") {
+                SettingsDetailActionRow(
+                    title: "联系邮箱",
+                    symbol: "envelope.fill",
+                    iconColor: SWTheme.accentBlue
+                ) {
+                    guard let mailURL = URL(string: "mailto:\(supportEmail)") else { return }
+                    openURL(mailURL)
                 }
 
                 SettingsRowDivider()
@@ -1505,7 +1488,7 @@ private struct OtherAppsView: View {
                 SettingsDetailActionRow(
                     title: "GitHub 仓库",
                     symbol: "link",
-                    iconColor: SWTheme.accentBlue
+                    iconColor: SWTheme.accentOrange
                 ) {
                     guard let repoURL else { return }
                     openURL(repoURL)
@@ -1548,6 +1531,9 @@ private struct FeedbackContactView: View {
     let onCopyEmail: () -> Void
     let onSendMail: () -> Void
 
+    @State private var showCopyNotice = false
+    @State private var copyNoticeTask: Task<Void, Never>?
+
     var body: some View {
         SettingsDetailContainer {
             SettingsSectionCard(title: "反馈邮箱") {
@@ -1574,7 +1560,7 @@ private struct FeedbackContactView: View {
                     subtitle: "先复制邮箱，再决定是否立刻发送邮件。",
                     symbol: "doc.on.doc.fill",
                     iconColor: SWTheme.accentBlue,
-                    action: onCopyEmail
+                    action: handleCopyEmail
                 )
 
                 SettingsRowDivider()
@@ -1587,6 +1573,29 @@ private struct FeedbackContactView: View {
                     action: onSendMail
                 )
             }
+        }
+        .overlay(alignment: .bottom) {
+            if showCopyNotice {
+                Text("已复制反馈邮箱地址。".appLocalized(in: locale))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.black.opacity(0.72))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            )
+                    )
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onDisappear {
+            copyNoticeTask?.cancel()
+            copyNoticeTask = nil
         }
         .navigationTitle("意见反馈")
         .navigationBarTitleDisplayMode(.inline)
@@ -1621,6 +1630,26 @@ private struct FeedbackContactView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .padding(.vertical, SettingsLayout.rowVerticalPadding)
+        }
+    }
+
+    private func handleCopyEmail() {
+        onCopyEmail()
+        copyNoticeTask?.cancel()
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            showCopyNotice = true
+        }
+
+        copyNoticeTask = Task {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    showCopyNotice = false
+                }
+            }
         }
     }
 }
@@ -1666,7 +1695,6 @@ private struct BillImportGuideView: View {
                     SettingsWideActionButton {
                         templateDocument = PlainTextDocument(text: templateText)
                         showTemplateExporter = true
-                        HapticService.selection()
                     } label: {
                         Label("下载 Excel 模板", systemImage: "tablecells.badge.ellipsis")
                             .font(.subheadline.weight(.semibold))
@@ -1725,7 +1753,6 @@ private struct BillImportGuideView: View {
 
                     SettingsWideActionButton {
                         showFileImporter = true
-                        HapticService.selection()
                     } label: {
                         Label("选择 Excel 导入文件", systemImage: "square.and.arrow.down.on.square")
                             .font(.subheadline.weight(.semibold))

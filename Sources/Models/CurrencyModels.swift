@@ -118,20 +118,43 @@ private struct ExchangeRateAPIResponse: Decodable {
 }
 
 private actor ExchangeRateClient {
-    func fetchLatestRatesFromCNY() async throws -> (rates: [String: Double], updatedAt: Date) {
-        let url = URL(string: "https://open.er-api.com/v6/latest/CNY")!
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForRequest = 12
+        configuration.timeoutIntervalForResource = 18
+        return URLSession(configuration: configuration)
+    }()
+
+    func fetchLatestRatesFromCNY(forceRefresh: Bool) async throws -> (rates: [String: Double], updatedAt: Date) {
+        var components = URLComponents(string: "https://open.er-api.com/v6/latest/CNY")!
+        if forceRefresh {
+            components.queryItems = [
+                URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))
+            ]
+        }
+
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache, no-store, max-age=0", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
             throw URLError(.badServerResponse)
         }
 
         let decoder = JSONDecoder()
         let payload = try decoder.decode(ExchangeRateAPIResponse.self, from: data)
-        guard payload.result == "success" else {
+        guard payload.result == "success",
+              CurrencyCatalog.normalize(code: payload.baseCode) == CurrencyCatalog.defaultBaseCode else {
             throw URLError(.cannotParseResponse)
         }
 
@@ -231,7 +254,7 @@ final class CurrencyStore: ObservableObject {
         errorMessage = nil
 
         do {
-            let payload = try await client.fetchLatestRatesFromCNY()
+            let payload = try await client.fetchLatestRatesFromCNY(forceRefresh: force)
             ratesFromCNY = payload.rates
             lastUpdated = payload.updatedAt
             persistCache()

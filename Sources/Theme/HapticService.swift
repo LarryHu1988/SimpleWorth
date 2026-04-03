@@ -20,4 +20,18 @@ enum HapticService {
         generator.prepare()
         generator.impactOccurred()
     }
+
+    static func success() {
+        guard isEnabled else { return }
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.success)
+    }
+
+    static func warning() {
+        guard isEnabled else { return }
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(.warning)
+    }
 }

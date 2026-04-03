@@ -318,6 +318,7 @@
 "收入终点" = "Income End";
 "收入起点" = "Income Start";
 "输入本次退款金额" = "Enter refund amount";
+"苹果账号" = "Apple Account";
 "Apple 账号" = "Apple Account";
 "Apple 用户" = "Apple User";
 "Apple 登录" = "Sign In";
@@ -337,6 +338,9 @@
 "当前无法读取 Apple 账号状态。" = "Unable to read Apple account status right now.";
 "登录后将账单同步到当前 Apple 账号" = "Sign in to sync your data to the current Apple account";
 "登录后会自动开启 iCloud 同步，请完全退出并重新打开 App 后生效。" = "After signing in, iCloud Sync will be enabled automatically. Please fully relaunch the app for it to take effect.";
+"登录后可在这里查看当前 Apple 授权状态，并管理本机使用的同步身份。" = "After signing in, you can view the current Apple authorization status here and manage the sync identity used on this device.";
+"如果设备上的 iCloud 状态有变化，也可以点右侧按钮重新检测。" = "If the device's iCloud status changes, you can tap the button on the right to refresh it here.";
+"关闭后，当前会话会立即切回本地存储，后续新增内容仅保存在本机。" = "When turned off, the current session switches back to local storage immediately, and new data stays only on this device.";
 "未获取到 Apple 登录凭证。" = "Apple sign-in credential was not received.";
 "apple.signInFailed" = "Apple sign-in failed: %@";
 "编辑标签" = "Edit Tag";

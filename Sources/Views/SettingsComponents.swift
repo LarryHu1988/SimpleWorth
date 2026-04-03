@@ -158,7 +158,10 @@ struct SettingsWideActionButton<Label: View>: View {
     }
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            HapticService.selection()
+            action()
+        } label: {
             label
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
@@ -180,11 +183,14 @@ struct SettingsDetailActionRow: View {
     let title: String
     let symbol: String
     let iconColor: Color
-    var trailingSymbol: String = "arrow.up.right"
+    var trailingSymbol: String? = "arrow.up.right"
     let action: () -> Void
 
     var body: some View {
-        SettingsPressableButton(action: action) {
+        SettingsPressableButton {
+            HapticService.selection()
+            action()
+        } label: {
             HStack(spacing: SettingsLayout.rowSpacing) {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .semibold))
@@ -197,9 +203,11 @@ struct SettingsDetailActionRow: View {
 
                 Spacer()
 
-                Image(systemName: trailingSymbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(SWTheme.textSecondary)
+                if let trailingSymbol, !trailingSymbol.isEmpty {
+                    Image(systemName: trailingSymbol)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SWTheme.textSecondary)
+                }
             }
             .frame(
                 maxWidth: .infinity,
