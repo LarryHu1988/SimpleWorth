@@ -1,11 +1,10 @@
-import AuthenticationServices
 import StoreKit
 import SwiftData
 import SwiftUI
 import UIKit
 
 private enum SettingsRoute: Hashable {
-    case appleAccount
+    case iCloud
     case currency
     case tags
     case importBills
@@ -15,13 +14,21 @@ private enum SettingsRoute: Hashable {
     case otherApps
 }
 
+private enum ImportNoticeError: Error {
+    case message(String)
+
+    var message: String {
+        switch self {
+        case .message(let text):
+            return text
+        }
+    }
+}
+
 struct StatsSettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var appRuntimeController: AppRuntimeController
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
@@ -29,7 +36,6 @@ struct StatsSettingsView: View {
     @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
 
     @AppStorage("settings.hapticsEnabled") private var hapticsEnabled = true
-    @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
     @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.system.rawValue
     @AppStorage(SettingsKeys.appLanguage) private var appLanguageRaw = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
@@ -40,10 +46,7 @@ struct StatsSettingsView: View {
     @State private var exportDocument: LedgerBackupDocument?
     @State private var showFileExporter = false
 
-    @State private var noticeMessage = ""
-    @State private var showNotice = false
-    @State private var suppressNextICloudSyncHandling = false
-    @StateObject private var appleAccountStore = AppleAccountStore.shared
+    @State private var noticeSheet: SettingsNoticePayload?
     private let repoURL = URL(string: "https://github.com/LarryHu1988/SimpleWorth")
     private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
@@ -61,7 +64,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.3"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.4"
         return "V\(version)"
     }
 
@@ -145,11 +148,11 @@ struct StatsSettingsView: View {
 
                     SettingsSectionCard(title: "数据安全") {
                         settingsActionRow(
-                            title: "苹果账号",
-                            symbol: "apple.logo",
+                            title: "iCloud 同步",
+                            symbol: "icloud.fill",
                             iconColor: SWTheme.accentBlue
                         ) {
-                            push(.appleAccount)
+                            push(.iCloud)
                         }
 
                         SettingsRowDivider()
@@ -249,10 +252,10 @@ struct StatsSettingsView: View {
                     .fontWeight(.semibold)
                 }
             }
-            .alert("操作结果", isPresented: $showNotice) {
-                Button("确定", role: .cancel) {}
-            } message: {
-                Text(noticeMessage)
+            .sheet(item: $noticeSheet) { notice in
+                SettingsNoticeSheet(payload: notice) {
+                    noticeSheet = nil
+                }
             }
             .sheet(isPresented: $showShareSheet) {
                 if let repoURL {
@@ -267,23 +270,16 @@ struct StatsSettingsView: View {
             }
             .navigationDestination(for: SettingsRoute.self) { route in
                 switch route {
-                case .appleAccount:
-                    appleAccountSettingsPage
+                case .iCloud:
+                    ICloudSettingsView()
                 case .currency:
                     CurrencySettingsView()
                 case .tags:
                     TagManagementView()
                 case .importBills:
-                    BillImportGuideView(
-                        onImportSelected: importBills(from:),
-                        onNotice: presentNotice(message:)
-                    )
+                    BillImportGuideView(onImportSelected: importBills(from:))
                 case .feedback:
-                    FeedbackContactView(
-                        supportEmail: supportEmail,
-                        onCopyEmail: copyFeedbackAddress,
-                        onSendMail: sendFeedback
-                    )
+                    FeedbackContactView(supportEmail: supportEmail)
                 case .privacy:
                     PrivacyAgreementView(supportEmail: supportEmail)
                 case .about:
@@ -311,9 +307,6 @@ struct StatsSettingsView: View {
                 }
             }
             .appBackground()
-            .task {
-                await appleAccountStore.refreshStatus()
-            }
             .onChange(of: themeModeRaw) { _, newValue in
                 let mode = ThemeMode(rawValue: newValue) ?? .system
                 AppAppearanceController.apply(themeMode: mode)
@@ -321,369 +314,10 @@ struct StatsSettingsView: View {
         }
     }
 
-    private var appleAccountCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                appleAccountAvatar
-                appleAccountIdentityBlock
-
-                if hasLinkedAppleAccount {
-                    Spacer(minLength: 8)
-                    appleAccountStatusBadge
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(appleAccountSupportingText)
-                .font(.footnote)
-                .foregroundStyle(appleAccountSupportingTint)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if hasLinkedAppleAccount {
-                HStack {
-                    Spacer(minLength: 0)
-                    appleAccountRefreshButton
-                }
-            } else {
-                appleOfficialSignInButton
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var appleAccountSettingsPage: some View {
-        SettingsDetailContainer {
-            SettingsSectionCard(title: "苹果账号") {
-                VStack(alignment: .leading, spacing: 12) {
-                    appleAccountCard
-
-                    SettingsRowDivider()
-
-                    Text("登录后可在这里查看当前 Apple 授权状态，并管理本机使用的同步身份。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-
-                    Text("如果设备上的 iCloud 状态有变化，也可以点右侧按钮重新检测。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                }
-            }
-
-            SettingsSectionCard(title: "iCloud 同步") {
-                settingToggleRow(
-                    title: "iCloud 同步",
-                    symbol: "icloud.fill",
-                    iconColor: SWTheme.accentBlue,
-                    isOn: $iCloudSyncEnabled
-                )
-                .onChange(of: iCloudSyncEnabled) { _, newValue in
-                    handleICloudSyncToggleChange(newValue)
-                }
-
-                SettingsRowDivider()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("开启后，账单、标签、金库目标与存入记录会同步到你当前 Apple 账号的 iCloud 私有数据库。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-
-                    Text("关闭后，当前会话会立即切回本地存储，后续新增内容仅保存在本机。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                }
-                .padding(.vertical, 4)
-            }
-        }
-        .navigationTitle("苹果账号")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var appleAccountIdentityBlock: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Apple 账号".appLocalized(in: uiLocale))
-                .font(SettingsLayout.cardTitleFont)
-                .tracking(SettingsLayout.cardTitleTracking)
-                .foregroundStyle(SettingsLayout.cardTitleColor)
-                .lineLimit(1)
-
-            Text(appleAccountHeadline)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(SWTheme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            if hasLinkedAppleAccount,
-               appleAccountResolvedDisplayName != nil,
-               let email = appleAccountStore.email,
-               !email.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "envelope.fill")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(SWTheme.textSecondary)
-
-                    Text(email)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(SWTheme.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var appleAccountStatusBadge: some View {
-        Text(appleAccountBadgeText)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(appleAccountBadgeTint)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(appleAccountBadgeTint.opacity(0.14))
-            )
-    }
-
-    private var appleAccountRefreshButton: some View {
-        Button {
-            Task {
-                await appleAccountStore.refreshStatus()
-                HapticService.selection()
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.caption.weight(.semibold))
-                Text("重新检测".appLocalized(in: uiLocale))
-                    .font(.footnote.weight(.semibold))
-            }
-            .foregroundStyle(SWTheme.textSecondary)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 34)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("重新检测".appLocalized(in: uiLocale))
-    }
-
-    private var appleOfficialSignInButton: some View {
-        SignInWithAppleButton(.signIn) { request in
-            appleAccountStore.configure(request)
-        } onCompletion: { result in
-            Task {
-                await handleAppleAuthorizationResult(result)
-            }
-        }
-        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-        .frame(maxWidth: .infinity)
-        .frame(height: 44)
-    }
-
     private var statsHeaderCard: some View {
         HStack(spacing: 12) {
             SettingsMetricCard(title: "记账总天数", value: "\(totalLedgerDays)", tint: SWTheme.accentBlue)
             SettingsMetricCard(title: "记账总笔数", value: "\(totalEntryCount)", tint: SWTheme.accentGreen)
-        }
-    }
-
-    private var appleAccountDisplayTitle: String {
-        if let displayName = appleAccountResolvedDisplayName {
-            return displayName
-        }
-        return "Apple 用户".appLocalized(in: uiLocale)
-    }
-
-    private var appleAccountResolvedDisplayName: String? {
-        guard let displayName = appleAccountStore.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !displayName.isEmpty else {
-            return nil
-        }
-        return displayName
-    }
-
-    private var hasLinkedAppleAccount: Bool {
-        appleAccountStore.userID != nil
-    }
-
-    private var appleAccountHeadline: String {
-        guard hasLinkedAppleAccount else {
-            return "未登录".appLocalized(in: uiLocale)
-        }
-
-        if let displayName = appleAccountResolvedDisplayName {
-            return displayName
-        }
-
-        if let email = appleAccountStore.email, !email.isEmpty {
-            return email
-        }
-
-        return "Apple 用户".appLocalized(in: uiLocale)
-    }
-
-    private var appleAccountSupportingText: String {
-        if hasLinkedAppleAccount,
-           appleAccountResolvedDisplayName != nil,
-           let email = appleAccountStore.email,
-           !email.isEmpty {
-            return email
-        }
-
-        return appleAccountSubtitle
-    }
-
-    private var appleAccountSupportingTint: Color {
-        if hasLinkedAppleAccount,
-           appleAccountResolvedDisplayName != nil,
-           let email = appleAccountStore.email,
-           !email.isEmpty {
-            return SWTheme.textSecondary
-        }
-
-        return appleAccountSubtitleTint
-    }
-
-    private var appleAccountBadgeText: String {
-        switch appleAccountStore.credentialStatus {
-        case .authorized:
-            return "已登录".appLocalized(in: uiLocale)
-        case .checking:
-            return "检测中".appLocalized(in: uiLocale)
-        case .revoked, .signedOut, .unavailable:
-            return "未登录".appLocalized(in: uiLocale)
-        }
-    }
-
-    private var appleAccountBadgeTint: Color {
-        switch appleAccountStore.credentialStatus {
-        case .authorized:
-            return SWTheme.accentGreen
-        case .checking:
-            return SWTheme.accentBlue
-        case .revoked, .unavailable:
-            return SWTheme.accentOrange
-        case .signedOut:
-            return SWTheme.textSecondary
-        }
-    }
-
-    private var appleAccountAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            SWTheme.accentBlue.opacity(hasLinkedAppleAccount ? 0.48 : 0.18),
-                            SWTheme.accentGreen.opacity(hasLinkedAppleAccount ? 0.3 : 0.12)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(hasLinkedAppleAccount ? 0.32 : 0.16),
-                                    Color.white.opacity(0.02)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .padding(3)
-                )
-
-            if hasLinkedAppleAccount {
-                Text(appleAccountAvatarLabel)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .shadow(color: Color.black.opacity(0.08), radius: 6, y: 2)
-            } else {
-                Image(systemName: "apple.logo")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(SWTheme.primaryText)
-            }
-        }
-        .frame(width: 52, height: 52)
-        .overlay(
-            Circle()
-                .stroke(Color.white.opacity(0.24), lineWidth: 1)
-        )
-        .overlay(alignment: .bottomTrailing) {
-            Circle()
-                .fill(appleAccountBadgeTint)
-                .frame(width: 13, height: 13)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.92), lineWidth: 2)
-                )
-        }
-        .shadow(color: SWTheme.accentBlue.opacity(hasLinkedAppleAccount ? 0.16 : 0.08), radius: 14, y: 8)
-    }
-
-    private var appleAccountAvatarLabel: String {
-        let source = (
-            appleAccountResolvedDisplayName
-            ?? appleAccountStore.email?.split(separator: "@").first.map(String.init)
-            ?? appleAccountDisplayTitle
-        )
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !source.isEmpty else { return "A" }
-
-        let words = source.split { character in
-            character == " " || character == "-" || character == "_"
-        }
-
-        if words.count >= 2 {
-            return String(words.prefix(2).compactMap(\.first)).uppercased()
-        }
-
-        return String(source.prefix(2)).uppercased()
-    }
-
-    private var appleAccountSubtitle: String {
-        switch appleAccountStore.credentialStatus {
-        case .authorized:
-            switch appleAccountStore.iCloudStatus {
-            case .available:
-                return "同步已准备就绪".appLocalized(in: uiLocale)
-            case .noAccount:
-                return "Apple 已登录，但当前设备未登录 iCloud。".appLocalized(in: uiLocale)
-            case .restricted:
-                return "Apple 已登录，但当前 iCloud 账号受限。".appLocalized(in: uiLocale)
-            case .couldNotDetermine:
-                return "Apple 已登录，iCloud 状态待检测。".appLocalized(in: uiLocale)
-            case .temporarilyUnavailable:
-                return "Apple 已登录，iCloud 当前暂时不可用。".appLocalized(in: uiLocale)
-            @unknown default:
-                return "Apple 已登录，iCloud 状态待检测。".appLocalized(in: uiLocale)
-            }
-        case .checking:
-            return "正在检测 Apple 账号状态...".appLocalized(in: uiLocale)
-        case .revoked:
-            return "Apple 授权已失效，请重新登录。".appLocalized(in: uiLocale)
-        case .unavailable:
-            return "当前无法读取 Apple 账号状态。".appLocalized(in: uiLocale)
-        case .signedOut:
-            return "登录后将账单同步到当前 Apple 账号".appLocalized(in: uiLocale)
-        }
-    }
-
-    private var appleAccountSubtitleTint: Color {
-        switch appleAccountStore.credentialStatus {
-        case .authorized:
-            return appleAccountStore.iCloudStatus == .available ? SWTheme.accentGreen : SWTheme.accentOrange
-        case .checking:
-            return SWTheme.accentBlue
-        case .revoked, .unavailable:
-            return SWTheme.accentOrange
-        case .signedOut:
-            return SWTheme.textSecondary
         }
     }
 
@@ -925,90 +559,13 @@ struct StatsSettingsView: View {
         .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
-    private func sendFeedback() {
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = supportEmail
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "SimpleWorth 意见反馈".appLocalized(in: uiLocale)),
-            URLQueryItem(name: "body", value: "请描述你的建议或问题：".appLocalized(in: uiLocale))
-        ]
-
-        guard let url = components.url else {
-            fallbackToCopiedFeedbackAddress()
-            return
-        }
-
-        openURL(url) { accepted in
-            if accepted {
-                HapticService.impact()
-            } else {
-                fallbackToCopiedFeedbackAddress()
-            }
-        }
-    }
-
-    private func copyFeedbackAddress() {
-        UIPasteboard.general.string = supportEmail
-        HapticService.success()
-    }
-
-    private func fallbackToCopiedFeedbackAddress() {
-        UIPasteboard.general.string = supportEmail
-        HapticService.warning()
-        presentNotice(message: L10n.string("settings.feedbackUnavailable", locale: uiLocale, supportEmail))
-    }
-
     private func exportBackup() {
-        let payload = LedgerBackupPayload(
-            exportedAt: .now,
+        let payload = LedgerBackupCoordinator.makePayload(
             appVersion: appVersionText,
-            entries: entries.map {
-                LedgerEntrySnapshot(
-                    id: $0.id,
-                    createdAt: $0.createdAt,
-                    amount: $0.amount,
-                    originalAmount: $0.originalAmount,
-                    currencyCode: $0.currencyCode,
-                    exchangeRateToCNY: $0.exchangeRateToCNY,
-                    note: $0.note,
-                    tagNames: $0.tagNames,
-                    flow: $0.flow,
-                    categoryName: $0.categoryName,
-                    categorySymbol: $0.categorySymbol,
-                    categoryColorHex: $0.categoryColorHex
-                )
-            },
-            tags: tags.map {
-                TagSnapshot(
-                    id: $0.id,
-                    name: $0.name,
-                    emoji: $0.emojiValue,
-                    tintHex: $0.resolvedTintHex,
-                    createdAt: $0.createdAt
-                )
-            },
-            goals: goals.map {
-                SavingsGoalSnapshot(
-                    id: $0.id,
-                    createdAt: $0.createdAt,
-                    name: $0.name,
-                    symbol: $0.symbol,
-                    currentAmount: $0.currentAmount,
-                    targetAmount: $0.targetAmount,
-                    deadline: $0.deadline,
-                    tintHex: $0.tintHex
-                )
-            },
-            deposits: deposits.map {
-                VaultDepositSnapshot(
-                    id: $0.id,
-                    date: $0.date,
-                    amount: $0.amount,
-                    note: $0.note,
-                    goalID: $0.goal?.id
-                )
-            }
+            entries: entries,
+            tags: tags,
+            goals: goals,
+            deposits: deposits
         )
 
         exportDocument = LedgerBackupDocument(payload: payload)
@@ -1016,7 +573,7 @@ struct StatsSettingsView: View {
         HapticService.impact()
     }
 
-    private func importBills(from url: URL) {
+    private func importBills(from url: URL) -> Result<String, ImportNoticeError> {
         let needsSecurityScope = url.startAccessingSecurityScopedResource()
         defer {
             if needsSecurityScope {
@@ -1029,9 +586,9 @@ struct StatsSettingsView: View {
             let importedEntries = try LedgerSpreadsheetImporter.parseEntries(from: data)
             let summary = try appendImportedBills(importedEntries)
             HapticService.success()
-            presentNotice(message: summary)
+            return .success(summary)
         } catch {
-            presentNotice(message: L10n.string("settings.importFailed", locale: uiLocale, error.localizedDescription))
+            return .failure(.message(L10n.string("settings.importFailed", locale: uiLocale, error.localizedDescription)))
         }
     }
 
@@ -1210,123 +767,8 @@ struct StatsSettingsView: View {
             .lowercased()
     }
 
-    private func replaceLocalData(with payload: LedgerBackupPayload) throws {
-        deposits.forEach { modelContext.delete($0) }
-        goals.forEach { modelContext.delete($0) }
-        entries.forEach { modelContext.delete($0) }
-        tags.forEach { modelContext.delete($0) }
-
-        for snapshot in payload.tags ?? [] {
-            modelContext.insert(
-                TagRecord(
-                    id: snapshot.id,
-                    name: snapshot.name,
-                    emoji: snapshot.emoji ?? TagEmojiLibrary.defaultEmoji,
-                    tintHex: snapshot.tintHex ?? TagEmojiLibrary.colorHex(for: snapshot.name),
-                    createdAt: snapshot.createdAt
-                )
-            )
-        }
-
-        var goalMap: [UUID: SavingsGoalRecord] = [:]
-        for snapshot in payload.goals {
-            let goal = SavingsGoalRecord(
-                id: snapshot.id,
-                createdAt: snapshot.createdAt,
-                name: snapshot.name,
-                symbol: snapshot.symbol,
-                currentAmount: snapshot.currentAmount,
-                targetAmount: snapshot.targetAmount,
-                deadline: snapshot.deadline,
-                tintHex: snapshot.tintHex
-            )
-            modelContext.insert(goal)
-            goalMap[snapshot.id] = goal
-        }
-
-        for snapshot in payload.entries {
-            let category = CategoryItem(
-                flow: snapshot.flow,
-                name: snapshot.categoryName,
-                symbol: snapshot.categorySymbol,
-                colorHex: snapshot.categoryColorHex
-            )
-            let entry = LedgerEntry(
-                id: snapshot.id,
-                createdAt: snapshot.createdAt,
-                amount: snapshot.amount,
-                originalAmount: snapshot.originalAmount ?? snapshot.amount,
-                currencyCode: snapshot.currencyCode ?? "CNY",
-                exchangeRateToCNY: snapshot.exchangeRateToCNY ?? 1,
-                note: snapshot.note,
-                flow: snapshot.flow,
-                category: category,
-                tagNames: snapshot.tagNames ?? []
-            )
-            modelContext.insert(entry)
-        }
-
-        for snapshot in payload.deposits {
-            let deposit = VaultDepositRecord(
-                id: snapshot.id,
-                date: snapshot.date,
-                amount: snapshot.amount,
-                note: snapshot.note,
-                goal: snapshot.goalID.flatMap { goalMap[$0] }
-            )
-            modelContext.insert(deposit)
-        }
-
-        try modelContext.save()
-    }
-
     private func presentNotice(message: String) {
-        noticeMessage = message
-        showNotice = true
-    }
-
-    private func handleICloudSyncToggleChange(_ isEnabled: Bool) {
-        guard !suppressNextICloudSyncHandling else {
-            suppressNextICloudSyncHandling = false
-            return
-        }
-
-        let effectiveEnabled = appRuntimeController.updateICloudSync(enabled: isEnabled)
-        if effectiveEnabled != isEnabled {
-            suppressNextICloudSyncHandling = true
-            iCloudSyncEnabled = effectiveEnabled
-        }
-
-        Task {
-            await appleAccountStore.refreshStatus()
-        }
-
-        if isEnabled && !effectiveEnabled {
-            HapticService.warning()
-            presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: uiLocale))
-            return
-        }
-
-        HapticService.success()
-        presentNotice(
-            message: effectiveEnabled
-                ? "iCloud 同步已开启，当前会话已立即生效。".appLocalized(in: uiLocale)
-                : "iCloud 同步已关闭，当前会话已切换为本地存储。".appLocalized(in: uiLocale)
-        )
-    }
-
-    private func handleAppleAuthorizationResult(_ result: Result<ASAuthorization, Error>) async {
-        let outcome = await appleAccountStore.handleAuthorizationResult(result)
-        switch outcome {
-        case .signedIn:
-            HapticService.success()
-            presentNotice(message: "Apple 账号已连接，可在下方开启 iCloud 同步。".appLocalized(in: uiLocale))
-        case .cancelled:
-            break
-        case .failed(let message):
-            HapticService.warning()
-            presentNotice(message: message)
-        }
+        noticeSheet = SettingsNoticePayload(message: message, locale: uiLocale)
     }
 
     private func push(_ route: SettingsRoute) {
@@ -1526,13 +968,13 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
 private struct FeedbackContactView: View {
     @Environment(\.locale) private var locale
+    @Environment(\.openURL) private var openURL
 
     let supportEmail: String
-    let onCopyEmail: () -> Void
-    let onSendMail: () -> Void
 
     @State private var showCopyNotice = false
     @State private var copyNoticeTask: Task<Void, Never>?
+    @State private var noticeSheet: SettingsNoticePayload?
 
     var body: some View {
         SettingsDetailContainer {
@@ -1570,7 +1012,7 @@ private struct FeedbackContactView: View {
                     subtitle: "系统会先打开邮件草稿，再由你确认是否真的发送。",
                     symbol: "paperplane.fill",
                     iconColor: SWTheme.accentGreen,
-                    action: onSendMail
+                    action: handleSendMail
                 )
             }
         }
@@ -1596,6 +1038,11 @@ private struct FeedbackContactView: View {
         .onDisappear {
             copyNoticeTask?.cancel()
             copyNoticeTask = nil
+        }
+        .sheet(item: $noticeSheet) { notice in
+            SettingsNoticeSheet(payload: notice) {
+                noticeSheet = nil
+            }
         }
         .navigationTitle("意见反馈")
         .navigationBarTitleDisplayMode(.inline)
@@ -1634,7 +1081,8 @@ private struct FeedbackContactView: View {
     }
 
     private func handleCopyEmail() {
-        onCopyEmail()
+        UIPasteboard.general.string = supportEmail
+        HapticService.success()
         copyNoticeTask?.cancel()
 
         withAnimation(.easeOut(duration: 0.18)) {
@@ -1652,18 +1100,49 @@ private struct FeedbackContactView: View {
             }
         }
     }
+
+    private func handleSendMail() {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = supportEmail
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "SimpleWorth 意见反馈".appLocalized(in: locale)),
+            URLQueryItem(name: "body", value: "请描述你的建议或问题：".appLocalized(in: locale))
+        ]
+
+        guard let url = components.url else {
+            fallbackToCopiedFeedbackAddress()
+            return
+        }
+
+        openURL(url) { accepted in
+            if accepted {
+                HapticService.impact()
+            } else {
+                fallbackToCopiedFeedbackAddress()
+            }
+        }
+    }
+
+    private func fallbackToCopiedFeedbackAddress() {
+        UIPasteboard.general.string = supportEmail
+        HapticService.warning()
+        noticeSheet = SettingsNoticePayload(
+            message: L10n.string("settings.feedbackUnavailable", locale: locale, supportEmail),
+            locale: locale
+        )
+    }
 }
 
 private struct BillImportGuideView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
 
-    let onImportSelected: (URL) -> Void
-    let onNotice: (String) -> Void
+    let onImportSelected: (URL) -> Result<String, ImportNoticeError>
 
     @State private var templateDocument: PlainTextDocument?
     @State private var showTemplateExporter = false
     @State private var showFileImporter = false
+    @State private var noticeSheet: SettingsNoticePayload?
 
     private var templateFileName: String {
         "SimpleWorth-excel-template"
@@ -1763,6 +1242,11 @@ private struct BillImportGuideView: View {
         }
         .navigationTitle("账单导入")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $noticeSheet) { notice in
+            SettingsNoticeSheet(payload: notice) {
+                noticeSheet = nil
+            }
+        }
         .fileExporter(
             isPresented: $showTemplateExporter,
             document: templateDocument,
@@ -1772,19 +1256,28 @@ private struct BillImportGuideView: View {
             switch result {
             case .success:
                 HapticService.impact()
-                onNotice("导入模板已成功导出。".appLocalized(in: locale))
+                presentNotice("导入模板已成功导出。".appLocalized(in: locale))
             case .failure(let error):
-                onNotice(L10n.string("settings.exportFailed", locale: locale, error.localizedDescription))
+                presentNotice(L10n.string("settings.exportFailed", locale: locale, error.localizedDescription))
             }
         }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: LedgerSpreadsheetImporter.importContentTypes) { result in
             switch result {
             case .success(let url):
-                onImportSelected(url)
-                dismiss()
+                let importResult = onImportSelected(url)
+                switch importResult {
+                case .success(let message):
+                    presentNotice(message)
+                case .failure(let error):
+                    presentNotice(error.message)
+                }
             case .failure(let error):
-                onNotice(L10n.string("settings.importFailed", locale: locale, error.localizedDescription))
+                presentNotice(L10n.string("settings.importFailed", locale: locale, error.localizedDescription))
             }
         }
+    }
+
+    private func presentNotice(_ message: String) {
+        noticeSheet = SettingsNoticePayload(message: message, locale: locale)
     }
 }

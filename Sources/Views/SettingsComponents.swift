@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum SettingsLayout {
     static let pageSectionSpacing: CGFloat = 14
@@ -216,5 +217,129 @@ struct SettingsDetailActionRow: View {
             )
             .padding(.vertical, SettingsLayout.rowVerticalPadding)
         }
+    }
+}
+
+enum SettingsSheetLayout {
+    static let horizontalPadding: CGFloat = 16
+    static let topPadding: CGFloat = 6
+    static let bottomPadding: CGFloat = 18
+    static let sectionSpacing: CGFloat = 18
+    static let bodySpacing: CGFloat = 12
+    static let buttonSpacing: CGFloat = 10
+    static let handleTopPadding: CGFloat = 14
+    static let cornerRadius: CGFloat = 28
+    static let maxHeightRatio: CGFloat = 0.82
+}
+
+private struct SettingsSheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct AdaptiveSettingsSheetModifier: ViewModifier {
+    let minHeight: CGFloat
+    let maxHeightRatio: CGFloat
+
+    @State private var measuredHeight: CGFloat = 0
+
+    private var resolvedHeight: CGFloat {
+        let maxHeight = UIScreen.main.bounds.height * maxHeightRatio
+        return min(max(measuredHeight, minHeight), maxHeight)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(key: SettingsSheetHeightKey.self, value: proxy.size.height)
+                }
+            )
+            .onPreferenceChange(SettingsSheetHeightKey.self) { newValue in
+                guard abs(newValue - measuredHeight) > 1 else { return }
+                measuredHeight = newValue
+            }
+            .presentationDetents([.height(resolvedHeight)])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(SettingsSheetLayout.cornerRadius)
+    }
+}
+
+struct SettingsSheetHandle: View {
+    var body: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.16))
+            .frame(width: 40, height: 5)
+            .frame(maxWidth: .infinity)
+            .padding(.top, SettingsSheetLayout.handleTopPadding)
+    }
+}
+
+extension View {
+    func settingsAdaptiveSheet(minHeight: CGFloat, maxHeightRatio: CGFloat = SettingsSheetLayout.maxHeightRatio) -> some View {
+        modifier(AdaptiveSettingsSheetModifier(minHeight: minHeight, maxHeightRatio: maxHeightRatio))
+    }
+}
+
+struct SettingsNoticePayload: Identifiable {
+    let id = UUID()
+    let message: String
+    let locale: Locale
+}
+
+struct SettingsNoticeSheet: View {
+    let payload: SettingsNoticePayload
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
+            SettingsSheetHandle()
+
+            VStack(spacing: SettingsSheetLayout.bodySpacing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(SWTheme.accentBlue.opacity(0.14))
+                        .frame(width: 54, height: 54)
+
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(SWTheme.accentBlue)
+                }
+
+                Text("操作结果".appLocalized(in: payload.locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+
+                Text(payload.message)
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+
+            Button("确定".appLocalized(in: payload.locale)) {
+                onClose()
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(SWTheme.accentBlue.opacity(0.92))
+            )
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, SettingsSheetLayout.horizontalPadding)
+        .padding(.top, SettingsSheetLayout.topPadding)
+        .padding(.bottom, SettingsSheetLayout.bottomPadding)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .appBackground()
+        .settingsAdaptiveSheet(minHeight: 214)
     }
 }

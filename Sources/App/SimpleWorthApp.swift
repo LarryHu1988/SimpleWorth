@@ -72,6 +72,10 @@ final class AppRuntimeController: ObservableObject {
     @discardableResult
     func updateICloudSync(enabled: Bool) -> Bool {
         let result = AppModelContainerFactory.make(iCloudSyncEnabled: enabled, defaults: defaults)
+        if enabled && !result.isICloudSyncEnabled {
+            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
+            return false
+        }
         modelContainer = result.container
         return result.isICloudSyncEnabled
     }

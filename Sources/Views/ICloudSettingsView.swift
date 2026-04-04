@@ -1,223 +1,1260 @@
 import CloudKit
+import Network
+import SwiftData
 import SwiftUI
 
 struct ICloudSettingsView: View {
     @Environment(\.locale) private var locale
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appRuntimeController: AppRuntimeController
+
+    @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
+    @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .reverse)]) private var goals: [SavingsGoalRecord]
+    @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
+
     @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
-    @State private var iCloudAccountState: ICloudAccountState = .idle
-    @State private var noticeMessage = ""
-    @State private var showNotice = false
+    @AppStorage(SettingsKeys.backupRetentionDays) private var backupRetentionDays = BackupRetentionRule.keep15Days.rawValue
+
+    @StateObject private var syncMonitor = ICloudStatusMonitor()
+    @State private var noticeSheet: SettingsNoticePayload?
+    @State private var showRetentionSheet = false
+    @State private var showBackupHistory = false
+    @State private var suppressNextToggleChange = false
+    @State private var backupRecords: [LocalBackupRecord] = []
+
+    private var appVersionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.4"
+        return "V\(version)"
+    }
+
+    private var retentionRule: BackupRetentionRule {
+        BackupRetentionRule(rawValue: backupRetentionDays) ?? .keep15Days
+    }
+
+    private var hasAnyUserData: Bool {
+        !entries.isEmpty || !tags.isEmpty || !goals.isEmpty || !deposits.isEmpty
+    }
+
+    private var latestBackupRecord: LocalBackupRecord? {
+        backupRecords.first
+    }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 16) {
-                SettingsSectionCard(title: "同步设置") {
-                    settingToggleRow(
-                        title: "开启 iCloud 同步",
-                        symbol: "icloud.fill",
-                        iconColor: SWTheme.accentBlue,
-                        isOn: $iCloudSyncEnabled
-                    )
-                    .onChange(of: iCloudSyncEnabled) { _, newValue in
-                        HapticService.impact()
-                        refreshICloudAccountStatus()
-                        presentNotice(
-                            message: newValue
-                                ? "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。".appLocalized
-                                : "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。".appLocalized
-                        )
-                    }
+        SettingsDetailContainer {
+            SettingsSectionCard(title: "同步备份") {
+                autoSyncToggleRow
 
-                    SettingsRowDivider()
+                SettingsRowDivider()
 
-                    iCloudStatusRow
+                autoBackupRuleRow
 
-                    SettingsRowDivider()
+                SettingsRowDivider()
 
-                    settingsActionRow(
-                        title: "检测 iCloud 状态",
-                        symbol: "arrow.clockwise.icloud",
-                        iconColor: SWTheme.accentGreen
-                    ) {
-                        HapticService.impact()
-                        refreshICloudAccountStatus()
-                    }
-                }
+                backupOverviewRow
 
-                SettingsSectionCard(title: "说明") {
-                    Text("开启后会优先使用 iCloud 私有数据库同步数据；如果当前设备或账号不可用，App 会自动回退到本地存储。")
-                        .font(.subheadline)
+                SettingsRowDivider()
+
+                backupActionButtons
+
+                SettingsRowDivider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("开启后会把账单、标签、金库目标和存入记录同步到当前设备的 iCloud 私有数据库，并每天自动保留一份本地备份。")
+                        .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text("恢复备份会覆盖当前设备上的账单数据，建议先确认现在的内容已经保存。")
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.textSecondary)
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 28)
+
+            SettingsSectionCard(title: "同步状态") {
+                statusRow(
+                    title: "当前同步状态",
+                    value: currentSyncStatusText,
+                    valueColor: currentSyncStatusColor
+                )
+
+                SettingsRowDivider()
+
+                statusRow(
+                    title: "上次同步时间",
+                    value: latestSyncStatusText,
+                    valueColor: SWTheme.textSecondary
+                )
+
+                SettingsRowDivider()
+
+                statusRow(
+                    title: "网络连接状态",
+                    value: syncMonitor.networkStatusText(in: locale),
+                    valueColor: syncMonitor.networkStatusColor
+                )
+
+                SettingsRowDivider()
+
+                statusRow(
+                    title: "iCloud 状态",
+                    value: syncMonitor.iCloudStatusText(in: locale),
+                    valueColor: syncMonitor.iCloudStatusColor
+                )
+            }
         }
         .navigationTitle("iCloud 同步")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $noticeSheet) { notice in
+            SettingsNoticeSheet(payload: notice) {
+                noticeSheet = nil
+            }
+        }
+        .sheet(isPresented: $showRetentionSheet) {
+            BackupRetentionRuleSheet(
+                selectedRule: retentionRule,
+                locale: locale
+            ) { newRule in
+                updateRetentionRule(newRule)
+            }
+        }
+        .navigationDestination(isPresented: $showBackupHistory) {
+            ICloudBackupHistoryView(records: backupRecords) {
+                reloadBackupRecords()
+            }
+        }
         .task {
-            refreshICloudAccountStatus()
+            await refreshPageState()
         }
-        .alert("操作结果", isPresented: $showNotice) {
-            Button("确定", role: .cancel) {}
-        } message: {
-            Text(noticeMessage)
+        .onChange(of: iCloudSyncEnabled) { _, newValue in
+            handleICloudSyncToggleChange(newValue)
         }
-        .appBackground()
     }
 
-    private var iCloudStatusRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: iCloudAccountState.symbol)
+    private var autoSyncToggleRow: some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Image(systemName: "icloud.fill")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(iCloudAccountState.tint)
-                .frame(width: 22)
+                .foregroundStyle(SWTheme.accentBlue)
+                .frame(width: SettingsLayout.rowIconWidth)
 
-            Text("当前状态")
+            Text("iCloud 自动备份".appLocalized(in: locale))
+                .font(SettingsLayout.titleFont)
                 .foregroundStyle(SWTheme.primaryText)
 
             Spacer()
 
-            Text(iCloudAccountState.text)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(iCloudAccountState.tint)
+            Toggle("", isOn: $iCloudSyncEnabled)
+                .labelsHidden()
+                .scaleEffect(SettingsLayout.compactToggleScale)
+                .fixedSize()
         }
-        .padding(.vertical, 4)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayout.rowContentMinHeight,
+            alignment: .leading
+        )
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 
-    private func settingsActionRow(
-        title: String,
-        symbol: String,
-        iconColor: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
+    private var autoBackupRuleRow: some View {
+        SettingsPressableButton {
+            showRetentionSheet = true
+            HapticService.selection()
+        } label: {
+            HStack(spacing: SettingsLayout.rowSpacing) {
+                Image(systemName: "externaldrive.badge.icloud")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 22)
+                    .foregroundStyle(SWTheme.accentBlue)
+                    .frame(width: SettingsLayout.rowIconWidth)
 
-                Text(title.appLocalized)
+                Text("自动备份规则".appLocalized(in: locale))
+                    .font(SettingsLayout.titleFont)
                     .foregroundStyle(SWTheme.primaryText)
 
-                Spacer()
+                Spacer(minLength: 12)
+
+                Text(retentionRule.shortTitle(in: locale))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .lineLimit(1)
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(SWTheme.textSecondary)
             }
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: SettingsLayout.rowContentMinHeight,
+                alignment: .leading
+            )
+            .padding(.vertical, SettingsLayout.rowVerticalPadding)
         }
-        .buttonStyle(.plain)
     }
 
-    private func settingToggleRow(
-        title: String,
-        symbol: String,
-        iconColor: Color,
-        isOn: Binding<Bool>
-    ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(iconColor)
-                .frame(width: 22)
+    private var backupOverviewRow: some View {
+        SettingsPressableButton {
+            showBackupHistory = true
+            HapticService.selection()
+        } label: {
+            HStack(spacing: SettingsLayout.rowSpacing) {
+                Image(systemName: "externaldrive.fill.badge.checkmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(SWTheme.accentGreen)
+                    .frame(width: SettingsLayout.rowIconWidth)
 
-            Text(title.appLocalized)
-                .foregroundStyle(SWTheme.primaryText)
+                Text("数据备份文件".appLocalized(in: locale))
+                    .font(SettingsLayout.titleFont)
+                    .foregroundStyle(SWTheme.primaryText)
 
-            Spacer()
+                Spacer(minLength: 12)
 
-            Toggle("", isOn: isOn)
-                .labelsHidden()
+                Text(latestBackupSummaryText)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: SettingsLayout.rowContentMinHeight,
+                alignment: .leading
+            )
+            .padding(.vertical, SettingsLayout.rowVerticalPadding)
+        }
+    }
+
+    private var backupActionButtons: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                backupActionButton(
+                    title: "立即备份",
+                    symbol: "arrow.clockwise.circle.fill",
+                    tint: SWTheme.accentBlue
+                ) {
+                    createManualBackup()
+                }
+
+                backupActionButton(
+                    title: "恢复备份",
+                    symbol: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                    tint: SWTheme.accentGreen
+                ) {
+                    showBackupHistory = true
+                    HapticService.selection()
+                }
+            }
+
+            VStack(spacing: 10) {
+                backupActionButton(
+                    title: "立即备份",
+                    symbol: "arrow.clockwise.circle.fill",
+                    tint: SWTheme.accentBlue
+                ) {
+                    createManualBackup()
+                }
+
+                backupActionButton(
+                    title: "恢复备份",
+                    symbol: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                    tint: SWTheme.accentGreen
+                ) {
+                    showBackupHistory = true
+                    HapticService.selection()
+                }
+            }
         }
         .padding(.vertical, 4)
     }
 
-    private func presentNotice(message: String) {
-        noticeMessage = message
-        showNotice = true
+    private func backupActionButton(
+        title: String,
+        symbol: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(title.appLocalized(in: locale))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(SWTheme.primaryText)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 42)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(tint.opacity(0.28), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
-    private func refreshICloudAccountStatus() {
-        iCloudAccountState = .checking
+    private func statusRow(title: String, value: String, valueColor: Color) -> some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Text(title.appLocalized(in: locale))
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(valueColor)
+                .multilineTextAlignment(.trailing)
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayout.rowContentMinHeight,
+            alignment: .leading
+        )
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+
+    private var currentSyncStatusText: String {
+        if !iCloudSyncEnabled {
+            return "未开启同步".appLocalized(in: locale)
+        }
+
+        return syncMonitor.iCloudStatus == .available
+            ? "同步已开启".appLocalized(in: locale)
+            : "等待 iCloud 可用".appLocalized(in: locale)
+    }
+
+    private var currentSyncStatusColor: Color {
+        if !iCloudSyncEnabled {
+            return SWTheme.textSecondary
+        }
+        return syncMonitor.iCloudStatus == .available ? SWTheme.accentGreen : SWTheme.accentOrange
+    }
+
+    private var latestSyncStatusText: String {
+        guard let latestBackupRecord else {
+            return "暂无记录".appLocalized(in: locale)
+        }
+        return backupTimelineText(for: latestBackupRecord.createdAt)
+    }
+
+    private var latestBackupSummaryText: String {
+        guard let latestBackupRecord else {
+            return "暂无备份".appLocalized(in: locale)
+        }
+
+        let timeText = shortTimeText(for: latestBackupRecord.createdAt)
+        let title: String
+        if Calendar.current.isDateInToday(latestBackupRecord.createdAt) {
+            title = L10n.string("settings.backupSummaryToday", locale: locale, timeText)
+        } else if Calendar.current.isDateInYesterday(latestBackupRecord.createdAt) {
+            title = L10n.string("settings.backupSummaryYesterday", locale: locale, timeText)
+        } else {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.dateFormat = "MM-dd HH:mm"
+            title = L10n.string("settings.backupSummaryGeneric", locale: locale, formatter.string(from: latestBackupRecord.createdAt))
+        }
+
+        return title
+    }
+
+    private func shortTimeText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func backupTimelineText(for date: Date) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return L10n.string("settings.backupSummaryToday", locale: locale, shortTimeText(for: date))
+        }
+
+        if Calendar.current.isDateInYesterday(date) {
+            return L10n.string("settings.backupSummaryYesterday", locale: locale, shortTimeText(for: date))
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: .now)
+    }
+
+    private func refreshPageState() async {
+        reloadBackupRecords()
+        applyRetentionRule(retentionRule)
+        if hasAnyUserData {
+            ensureAutomaticBackupIfNeeded()
+        }
+        await syncMonitor.refreshICloudStatus()
+    }
+
+    private func reloadBackupRecords() {
+        backupRecords = LocalBackupStore.loadRecords()
+    }
+
+    private func createManualBackup() {
+        guard hasAnyUserData else {
+            HapticService.warning()
+            presentNotice(message: "当前还没有可备份的数据。".appLocalized(in: locale))
+            return
+        }
+
+        do {
+            let payload = currentBackupPayload()
+            _ = try LocalBackupStore.createBackup(payload: payload, source: .manual)
+            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
+            reloadBackupRecords()
+            HapticService.success()
+        } catch {
+            HapticService.warning()
+            presentNotice(message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription))
+        }
+    }
+
+    private func ensureAutomaticBackupIfNeeded() {
+        do {
+            try LocalBackupStore.ensureAutomaticBackupIfNeeded(
+                payload: currentBackupPayload(),
+                shouldCreate: hasAnyUserData
+            )
+            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
+            reloadBackupRecords()
+        } catch {
+            // Keep the page usable even if local backup maintenance fails.
+        }
+    }
+
+    private func currentBackupPayload() -> LedgerBackupPayload {
+        LedgerBackupCoordinator.makePayload(
+            appVersion: appVersionText,
+            entries: entries,
+            tags: tags,
+            goals: goals,
+            deposits: deposits
+        )
+    }
+
+    private func handleICloudSyncToggleChange(_ isEnabled: Bool) {
+        guard !suppressNextToggleChange else {
+            suppressNextToggleChange = false
+            return
+        }
 
         Task {
-            let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
-            do {
-                let status = try await container.accountStatus()
-                await MainActor.run {
-                    iCloudAccountState = mapICloudStatus(status)
+            await applyICloudToggleChange(isEnabled)
+        }
+    }
+
+    @MainActor
+    private func applyICloudToggleChange(_ isEnabled: Bool) async {
+        if isEnabled {
+            await syncMonitor.refreshICloudStatus()
+            guard syncMonitor.iCloudStatus == .available else {
+                suppressNextToggleChange = true
+                iCloudSyncEnabled = false
+                HapticService.warning()
+                presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale))
+                return
+            }
+        }
+
+        let effectiveEnabled = appRuntimeController.updateICloudSync(enabled: isEnabled)
+        if effectiveEnabled != isEnabled {
+            suppressNextToggleChange = true
+            iCloudSyncEnabled = effectiveEnabled
+        }
+
+        await syncMonitor.refreshICloudStatus()
+
+        if isEnabled && !effectiveEnabled {
+            HapticService.warning()
+            presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale))
+            return
+        }
+
+        HapticService.success()
+        presentNotice(
+            message: effectiveEnabled
+                ? "iCloud 同步已开启，当前会话已立即生效。".appLocalized(in: locale)
+                : "iCloud 同步已关闭，当前会话已切换为本地存储。".appLocalized(in: locale)
+        )
+    }
+
+    private func updateRetentionRule(_ newRule: BackupRetentionRule) {
+        guard newRule != retentionRule else { return }
+        backupRetentionDays = newRule.rawValue
+        applyRetentionRule(newRule)
+        HapticService.selection()
+    }
+
+    private func applyRetentionRule(_ rule: BackupRetentionRule) {
+        LocalBackupStore.removeExpiredBackups(keepingLast: rule.days)
+        reloadBackupRecords()
+    }
+
+    private func presentNotice(message: String) {
+        noticeSheet = SettingsNoticePayload(message: message, locale: locale)
+    }
+}
+
+private struct ICloudBackupHistoryView: View {
+    @Environment(\.locale) private var locale
+    @Environment(\.modelContext) private var modelContext
+
+    @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
+    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
+    @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .reverse)]) private var goals: [SavingsGoalRecord]
+    @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
+
+    @State private var records: [LocalBackupRecord]
+    @State private var actionPrompt: BackupRecordActionPrompt?
+    @State private var noticeSheet: SettingsNoticePayload?
+    let onRecordsChanged: () -> Void
+
+    init(records: [LocalBackupRecord], onRecordsChanged: @escaping () -> Void = {}) {
+        _records = State(initialValue: records)
+        self.onRecordsChanged = onRecordsChanged
+    }
+
+    var body: some View {
+        SettingsDetailContainer {
+            SettingsSectionCard(title: "恢复说明") {
+                Text("使用右侧的恢复按钮可回到对应时刻的数据；删除按钮会移除这份备份文件。恢复后，当前设备上的账单、标签、目标和存入记录会被替换。")
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .padding(.vertical, 4)
+            }
+
+            if records.isEmpty {
+                SettingsSectionCard(title: "备份记录") {
+                    VStack(alignment: .center, spacing: 10) {
+                        Image(systemName: "externaldrive.badge.xmark")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(SWTheme.textSecondary)
+
+                        Text("当前还没有备份记录。".appLocalized(in: locale))
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(SWTheme.primaryText)
+
+                        Text("先回到上一页点一次“立即备份”，这里就会出现可恢复的记录。".appLocalized(in: locale))
+                            .font(.footnote)
+                            .foregroundStyle(SWTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
                 }
-            } catch {
-                await MainActor.run {
-                    iCloudAccountState = .unavailable("检测失败")
+            } else {
+                SettingsSectionCard(title: "备份记录") {
+                    ForEach(Array(records.enumerated()), id: \.element.id) { index, record in
+                        backupRecordRow(record)
+
+                        if index != records.count - 1 {
+                            SettingsRowDivider()
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("数据备份")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $noticeSheet) { notice in
+            SettingsNoticeSheet(payload: notice) {
+                noticeSheet = nil
+            }
+        }
+        .sheet(item: $actionPrompt) { prompt in
+            BackupRecordActionSheet(prompt: prompt, locale: locale) {
+                switch prompt.kind {
+                case .restore:
+                    restore(prompt.record)
+                case .delete:
+                    delete(prompt.record)
                 }
             }
         }
     }
 
-    private func mapICloudStatus(_ status: CKAccountStatus) -> ICloudAccountState {
-        switch status {
-        case .available:
-            .available
-        case .noAccount:
-            .unavailable("未登录账号")
-        case .restricted:
-            .unavailable("账号受限")
-        case .couldNotDetermine:
-            .unavailable("无法确定")
-        case .temporarilyUnavailable:
-            .unavailable("暂时不可用")
-        @unknown default:
-            .unavailable("未知状态")
+    private func backupRecordRow(_ record: LocalBackupRecord) -> some View {
+        HStack(alignment: .top, spacing: SettingsLayout.rowSpacing) {
+            ZStack {
+                Circle()
+                    .fill(record.tintColor.opacity(0.16))
+                    .frame(width: 32, height: 32)
+
+                Image(systemName: record.symbolName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(record.tintColor)
+            }
+            .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(record.displayTitle(in: locale))
+                    .font(SettingsLayout.titleFont)
+                    .foregroundStyle(SWTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(record.detailText(in: locale))
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(record.metaText(in: locale))
+                    .font(.caption)
+                    .foregroundStyle(SWTheme.textSecondary.opacity(0.88))
+            }
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                miniActionButton(
+                    symbol: "arrow.counterclockwise",
+                    tint: SWTheme.accentBlue
+                ) {
+                    actionPrompt = BackupRecordActionPrompt(kind: .restore, record: record)
+                    HapticService.selection()
+                }
+
+                miniActionButton(
+                    symbol: "trash",
+                    tint: SWTheme.accentOrange
+                ) {
+                    actionPrompt = BackupRecordActionPrompt(kind: .delete, record: record)
+                    HapticService.selection()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+
+    private func miniActionButton(symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(tint.opacity(0.12))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func restore(_ record: LocalBackupRecord) {
+        do {
+            let data = try Data(contentsOf: record.fileURL)
+            let payload = try LedgerBackupCodec.decodePayload(from: data)
+            try LedgerBackupCoordinator.replaceLocalData(
+                with: payload,
+                context: modelContext,
+                entries: entries,
+                tags: tags,
+                goals: goals,
+                deposits: deposits
+            )
+            HapticService.success()
+            noticeSheet = SettingsNoticePayload(
+                message: "备份恢复完成，当前数据已更新。".appLocalized(in: locale),
+                locale: locale
+            )
+        } catch {
+            HapticService.warning()
+            noticeSheet = SettingsNoticePayload(
+                message: L10n.string("settings.importFailed", locale: locale, error.localizedDescription),
+                locale: locale
+            )
+        }
+    }
+
+    private func delete(_ record: LocalBackupRecord) {
+        do {
+            try LocalBackupStore.deleteBackup(record)
+            records.removeAll { $0.id == record.id }
+            onRecordsChanged()
+            HapticService.success()
+        } catch {
+            HapticService.warning()
+            noticeSheet = SettingsNoticePayload(
+                message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription),
+                locale: locale
+            )
         }
     }
 }
 
-private enum ICloudAccountState {
-    case idle
-    case checking
-    case available
-    case unavailable(String)
+private struct BackupRetentionRuleSheet: View {
+    @Environment(\.dismiss) private var dismiss
 
-    var text: String {
+    let selectedRule: BackupRetentionRule
+    let locale: Locale
+    let onSelect: (BackupRetentionRule) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
+            SettingsSheetHandle()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("自动备份规则".appLocalized(in: locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("系统每天会自动备份一次，超过保留天数的旧文件会自动删除。".appLocalized(in: locale))
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 4)
+
+            VStack(spacing: 0) {
+                ForEach(BackupRetentionRule.allCases) { rule in
+                    Button {
+                        onSelect(rule)
+                        dismiss()
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(SWTheme.textSecondary)
+                                .padding(.top, 2)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(rule.title(in: locale))
+                                    .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SWTheme.primaryText)
+
+                                Text(rule.subtitle(in: locale))
+                                    .font(.footnote)
+                                    .foregroundStyle(SWTheme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            if rule == selectedRule {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(SWTheme.accentBlue)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.plain)
+
+                    if rule != BackupRetentionRule.allCases.last {
+                        SettingsRowDivider()
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .fitnessCard()
+
+            Button("取消".appLocalized(in: locale)) {
+                dismiss()
+            }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SWTheme.primaryText)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, SettingsSheetLayout.horizontalPadding)
+        .padding(.top, SettingsSheetLayout.topPadding)
+        .padding(.bottom, SettingsSheetLayout.bottomPadding)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .appBackground()
+        .settingsAdaptiveSheet(minHeight: 346)
+    }
+}
+
+private enum BackupRetentionRule: Int, CaseIterable, Identifiable {
+    case keep7Days = 7
+    case keep15Days = 15
+    case keep30Days = 30
+
+    var id: Int { rawValue }
+
+    var days: Int { rawValue }
+
+    func shortTitle(in locale: Locale) -> String {
+        L10n.string("settings.backupRetentionShortTitle", locale: locale, Int64(days))
+    }
+
+    func title(in locale: Locale) -> String {
+        L10n.string("settings.backupRetentionTitle", locale: locale, Int64(days))
+    }
+
+    func subtitle(in locale: Locale) -> String {
         switch self {
-        case .idle:
-            "未检测".appLocalized
-        case .checking:
-            "检测中".appLocalized
-        case .available:
-            "可用".appLocalized
-        case .unavailable(let message):
-            message.appLocalized
+        case .keep7Days:
+            return "更省空间".appLocalized(in: locale)
+        case .keep15Days:
+            return "默认推荐".appLocalized(in: locale)
+        case .keep30Days:
+            return "保留更久".appLocalized(in: locale)
+        }
+    }
+}
+
+private enum BackupSource: String {
+    case automatic
+    case manual
+
+    var filePrefix: String {
+        switch self {
+        case .automatic:
+            "auto"
+        case .manual:
+            "manual"
         }
     }
 
-    var symbol: String {
+    init(fileName: String) {
+        if fileName.hasPrefix("auto-") {
+            self = .automatic
+        } else {
+            self = .manual
+        }
+    }
+
+    func title(in locale: Locale) -> String {
         switch self {
-        case .idle:
-            "icloud"
-        case .checking:
-            "icloud.and.arrow.down"
+        case .automatic:
+            return "自动备份".appLocalized(in: locale)
+        case .manual:
+            return "手动备份".appLocalized(in: locale)
+        }
+    }
+}
+
+private struct LocalBackupRecord: Identifiable {
+    let id: String
+    let source: BackupSource
+    let fileURL: URL
+    let createdAt: Date
+    let payload: LedgerBackupPayload
+    let fileSize: Int64
+
+    var symbolName: String {
+        switch source {
+        case .automatic:
+            "clock.arrow.circlepath"
+        case .manual:
+            "internaldrive.fill"
+        }
+    }
+
+    var tintColor: Color {
+        switch source {
+        case .automatic:
+            SWTheme.accentBlue
+        case .manual:
+            SWTheme.accentGreen
+        }
+    }
+
+    func displayTitle(in locale: Locale) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        if Calendar.current.isDateInToday(createdAt) {
+            formatter.dateFormat = "HH:mm"
+            return L10n.string(
+                "settings.backupRecordTitleToday",
+                locale: locale,
+                formatter.string(from: createdAt),
+                source.title(in: locale)
+            )
+        }
+
+        formatter.dateFormat = "MM-dd HH:mm"
+        return L10n.string(
+            "settings.backupRecordTitleDate",
+            locale: locale,
+            formatter.string(from: createdAt),
+            source.title(in: locale)
+        )
+    }
+
+    func detailText(in locale: Locale) -> String {
+        L10n.string(
+            "settings.backupRecordDetail",
+            locale: locale,
+            Int64(payload.entries.count),
+            Int64(payload.tags?.count ?? 0),
+            Int64(payload.goals.count),
+            Int64(payload.deposits.count)
+        )
+    }
+
+    func metaText(in locale: Locale) -> String {
+        let sizeText = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+        return L10n.string("settings.backupRecordMeta", locale: locale, payload.appVersion, sizeText)
+    }
+}
+
+private enum LocalBackupStore {
+    private static let folderName = "ICloudLocalBackups"
+
+    static func loadRecords() -> [LocalBackupRecord] {
+        guard let directoryURL = try? backupDirectoryURL() else {
+            return []
+        }
+
+        let fileManager = FileManager.default
+        let urls = (try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        let records = urls.compactMap { fileURL -> LocalBackupRecord? in
+            guard fileURL.pathExtension.lowercased() == "json",
+                  let data = try? Data(contentsOf: fileURL),
+                  let payload = try? LedgerBackupCodec.decodePayload(from: data) else {
+                return nil
+            }
+
+            let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+            let fileSize = Int64(values?.fileSize ?? data.count)
+            let source = BackupSource(fileName: fileURL.lastPathComponent)
+
+            return LocalBackupRecord(
+                id: fileURL.deletingPathExtension().lastPathComponent,
+                source: source,
+                fileURL: fileURL,
+                createdAt: payload.exportedAt,
+                payload: payload,
+                fileSize: fileSize
+            )
+        }
+
+        return records.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    static func createBackup(payload: LedgerBackupPayload, source: BackupSource) throws -> LocalBackupRecord {
+        let directoryURL = try backupDirectoryURL()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let timestamp = formatter.string(from: payload.exportedAt)
+        let fileName = "\(source.filePrefix)-backup-\(timestamp)-\(UUID().uuidString.prefix(6)).json"
+        let fileURL = directoryURL.appendingPathComponent(fileName)
+        let data = try LedgerBackupCodec.encodePayload(payload)
+        try data.write(to: fileURL, options: .atomic)
+
+        return LocalBackupRecord(
+            id: fileURL.deletingPathExtension().lastPathComponent,
+            source: source,
+            fileURL: fileURL,
+            createdAt: payload.exportedAt,
+            payload: payload,
+            fileSize: Int64(data.count)
+        )
+    }
+
+    static func ensureAutomaticBackupIfNeeded(payload: LedgerBackupPayload, shouldCreate: Bool) throws {
+        guard shouldCreate else { return }
+        let records = loadRecords()
+        if records.contains(where: { $0.source == .automatic && Calendar.current.isDate($0.createdAt, inSameDayAs: payload.exportedAt) }) {
+            return
+        }
+        _ = try createBackup(payload: payload, source: .automatic)
+    }
+
+    static func deleteBackup(_ record: LocalBackupRecord) throws {
+        try FileManager.default.removeItem(at: record.fileURL)
+    }
+
+    static func removeExpiredBackups(keepingLast days: Int) {
+        guard let directoryURL = try? backupDirectoryURL() else { return }
+        let expirationDate = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
+        let records = loadRecords()
+        let expired = records.filter { $0.createdAt < expirationDate }
+        for record in expired {
+            try? FileManager.default.removeItem(at: record.fileURL)
+        }
+
+        if expired.isEmpty {
+            let staleFiles = (try? FileManager.default.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)) ?? []
+            staleFiles
+                .filter { $0.pathExtension.lowercased() != "json" }
+                .forEach { try? FileManager.default.removeItem(at: $0) }
+        }
+    }
+
+    private static func backupDirectoryURL() throws -> URL {
+        let baseURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directoryURL = baseURL.appendingPathComponent(folderName, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        return directoryURL
+    }
+}
+
+private struct BackupRecordActionPrompt: Identifiable {
+    enum Kind {
+        case restore
+        case delete
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let record: LocalBackupRecord
+}
+
+private struct BackupRecordActionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let prompt: BackupRecordActionPrompt
+    let locale: Locale
+    let onConfirm: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
+            SettingsSheetHandle()
+
+            VStack(spacing: SettingsSheetLayout.bodySpacing) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(promptTint.opacity(0.14))
+                        .frame(width: 54, height: 54)
+
+                    Image(systemName: promptSymbol)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(promptTint)
+                }
+
+                Text(promptTitle.appLocalized(in: locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .multilineTextAlignment(.center)
+
+                Text(promptMessage)
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack(spacing: SettingsSheetLayout.buttonSpacing) {
+                Button(confirmTitle.appLocalized(in: locale)) {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                        onConfirm()
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(promptTint.opacity(0.92))
+                )
+                .buttonStyle(.plain)
+
+                Button("取消".appLocalized(in: locale)) {
+                    dismiss()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SWTheme.textSecondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, SettingsSheetLayout.horizontalPadding)
+        .padding(.top, SettingsSheetLayout.topPadding)
+        .padding(.bottom, SettingsSheetLayout.bottomPadding)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .appBackground()
+        .settingsAdaptiveSheet(minHeight: 256)
+    }
+
+    private var promptTitle: String {
+        switch prompt.kind {
+        case .restore:
+            return "恢复这个备份"
+        case .delete:
+            return "删除这个备份"
+        }
+    }
+
+    private var confirmTitle: String {
+        switch prompt.kind {
+        case .restore:
+            return "确定恢复"
+        case .delete:
+            return "确定删除"
+        }
+    }
+
+    private var promptMessage: String {
+        switch prompt.kind {
+        case .restore:
+            return L10n.string("settings.restoreBackupPrompt", locale: locale, prompt.record.displayTitle(in: locale))
+        case .delete:
+            return L10n.string("settings.deleteBackupPrompt", locale: locale, prompt.record.displayTitle(in: locale))
+        }
+    }
+
+    private var promptSymbol: String {
+        switch prompt.kind {
+        case .restore:
+            return "arrow.counterclockwise"
+        case .delete:
+            return "trash"
+        }
+    }
+
+    private var promptTint: Color {
+        switch prompt.kind {
+        case .restore:
+            return SWTheme.accentBlue
+        case .delete:
+            return SWTheme.accentOrange
+        }
+    }
+}
+
+@MainActor
+private final class ICloudStatusMonitor: ObservableObject {
+    @Published private(set) var iCloudStatus: CKAccountStatus = .couldNotDetermine
+    @Published private(set) var networkStatus: ICloudNetworkStatus = .checking
+
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "SimpleWorth.ICloudStatusMonitor")
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                self?.networkStatus = ICloudNetworkStatus(path: path)
+            }
+        }
+        monitor.start(queue: queue)
+    }
+
+    deinit {
+        monitor.cancel()
+    }
+
+    func refreshICloudStatus() async {
+        let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
+        do {
+            iCloudStatus = try await container.accountStatus()
+        } catch {
+            iCloudStatus = .couldNotDetermine
+        }
+    }
+
+    func iCloudStatusText(in locale: Locale) -> String {
+        switch iCloudStatus {
         case .available:
-            "checkmark.icloud.fill"
-        case .unavailable:
-            "xmark.icloud.fill"
+            return "可用".appLocalized(in: locale)
+        case .noAccount:
+            return "未登录 iCloud".appLocalized(in: locale)
+        case .restricted:
+            return "账号受限".appLocalized(in: locale)
+        case .couldNotDetermine:
+            return "无法确定".appLocalized(in: locale)
+        case .temporarilyUnavailable:
+            return "暂时不可用".appLocalized(in: locale)
+        @unknown default:
+            return "无法确定".appLocalized(in: locale)
+        }
+    }
+
+    var iCloudStatusColor: Color {
+        switch iCloudStatus {
+        case .available:
+            return SWTheme.accentGreen
+        case .noAccount, .restricted, .temporarilyUnavailable:
+            return SWTheme.accentOrange
+        case .couldNotDetermine:
+            return SWTheme.textSecondary
+        @unknown default:
+            return SWTheme.textSecondary
+        }
+    }
+
+    func networkStatusText(in locale: Locale) -> String {
+        networkStatus.title.appLocalized(in: locale)
+    }
+
+    var networkStatusColor: Color {
+        networkStatus.tint
+    }
+}
+
+private enum ICloudNetworkStatus {
+    case checking
+    case connected
+    case offline
+    case limited
+
+    init(path: NWPath) {
+        switch path.status {
+        case .satisfied:
+            if path.isConstrained || path.isExpensive {
+                self = .limited
+            } else {
+                self = .connected
+            }
+        case .unsatisfied, .requiresConnection:
+            self = .offline
+        @unknown default:
+            self = .checking
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .checking:
+            "检测中"
+        case .connected:
+            "正常"
+        case .offline:
+            "离线"
+        case .limited:
+            "受限"
         }
     }
 
     var tint: Color {
         switch self {
-        case .idle, .checking:
+        case .checking:
             SWTheme.textSecondary
-        case .available:
+        case .connected:
             SWTheme.accentGreen
-        case .unavailable:
+        case .offline, .limited:
             SWTheme.accentOrange
         }
     }

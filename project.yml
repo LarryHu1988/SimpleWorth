@@ -21,8 +21,6 @@ targets:
           - iCloud.com.larry.SimpleWorth
         com.apple.developer.icloud-services:
           - CloudKit
-        com.apple.developer.applesignin:
-          - Default
         com.apple.developer.ubiquity-container-identifiers:
           - iCloud.com.larry.SimpleWorth
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.larry.SimpleWorth"
@@ -32,7 +30,7 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.6.3
+        CFBundleShortVersionString: 0.6.4
         CFBundleVersion: "6"
         UILaunchScreen: {}
         UIRequiresFullScreen: false

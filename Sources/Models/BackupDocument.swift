@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -66,18 +67,165 @@ struct LedgerBackupDocument: FileDocument {
         guard let data = configuration.file.regularFileContents else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        payload = try decoder.decode(LedgerBackupPayload.self, from: data)
+        payload = try LedgerBackupCodec.decodePayload(from: data)
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let encoded = try LedgerBackupCodec.encodePayload(payload)
+        return FileWrapper(regularFileWithContents: encoded)
+    }
+}
+
+enum LedgerBackupCodec {
+    static func decodePayload(from data: Data) throws -> LedgerBackupPayload {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(LedgerBackupPayload.self, from: data)
+    }
+
+    static func encodePayload(_ payload: LedgerBackupPayload) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(payload)
+    }
+}
 
-        let encoded = try encoder.encode(payload)
-        return FileWrapper(regularFileWithContents: encoded)
+enum LedgerBackupCoordinator {
+    static func makePayload(
+        appVersion: String,
+        entries: [LedgerEntry],
+        tags: [TagRecord],
+        goals: [SavingsGoalRecord],
+        deposits: [VaultDepositRecord]
+    ) -> LedgerBackupPayload {
+        LedgerBackupPayload(
+            exportedAt: .now,
+            appVersion: appVersion,
+            entries: entries.map {
+                LedgerEntrySnapshot(
+                    id: $0.id,
+                    createdAt: $0.createdAt,
+                    amount: $0.amount,
+                    originalAmount: $0.originalAmount,
+                    currencyCode: $0.currencyCode,
+                    exchangeRateToCNY: $0.exchangeRateToCNY,
+                    note: $0.note,
+                    tagNames: $0.tagNames,
+                    flow: $0.flow,
+                    categoryName: $0.categoryName,
+                    categorySymbol: $0.categorySymbol,
+                    categoryColorHex: $0.categoryColorHex
+                )
+            },
+            tags: tags.map {
+                TagSnapshot(
+                    id: $0.id,
+                    name: $0.name,
+                    emoji: $0.emojiValue,
+                    tintHex: $0.resolvedTintHex,
+                    createdAt: $0.createdAt
+                )
+            },
+            goals: goals.map {
+                SavingsGoalSnapshot(
+                    id: $0.id,
+                    createdAt: $0.createdAt,
+                    name: $0.name,
+                    symbol: $0.symbol,
+                    currentAmount: $0.currentAmount,
+                    targetAmount: $0.targetAmount,
+                    deadline: $0.deadline,
+                    tintHex: $0.tintHex
+                )
+            },
+            deposits: deposits.map {
+                VaultDepositSnapshot(
+                    id: $0.id,
+                    date: $0.date,
+                    amount: $0.amount,
+                    note: $0.note,
+                    goalID: $0.goal?.id
+                )
+            }
+        )
+    }
+
+    static func replaceLocalData(
+        with payload: LedgerBackupPayload,
+        context modelContext: ModelContext,
+        entries: [LedgerEntry],
+        tags: [TagRecord],
+        goals: [SavingsGoalRecord],
+        deposits: [VaultDepositRecord]
+    ) throws {
+        deposits.forEach { modelContext.delete($0) }
+        goals.forEach { modelContext.delete($0) }
+        entries.forEach { modelContext.delete($0) }
+        tags.forEach { modelContext.delete($0) }
+
+        for snapshot in payload.tags ?? [] {
+            modelContext.insert(
+                TagRecord(
+                    id: snapshot.id,
+                    name: snapshot.name,
+                    emoji: snapshot.emoji ?? TagEmojiLibrary.defaultEmoji,
+                    tintHex: snapshot.tintHex ?? TagEmojiLibrary.colorHex(for: snapshot.name),
+                    createdAt: snapshot.createdAt
+                )
+            )
+        }
+
+        var goalMap: [UUID: SavingsGoalRecord] = [:]
+        for snapshot in payload.goals {
+            let goal = SavingsGoalRecord(
+                id: snapshot.id,
+                createdAt: snapshot.createdAt,
+                name: snapshot.name,
+                symbol: snapshot.symbol,
+                currentAmount: snapshot.currentAmount,
+                targetAmount: snapshot.targetAmount,
+                deadline: snapshot.deadline,
+                tintHex: snapshot.tintHex
+            )
+            modelContext.insert(goal)
+            goalMap[snapshot.id] = goal
+        }
+
+        for snapshot in payload.entries {
+            let category = CategoryItem(
+                flow: snapshot.flow,
+                name: snapshot.categoryName,
+                symbol: snapshot.categorySymbol,
+                colorHex: snapshot.categoryColorHex
+            )
+            let entry = LedgerEntry(
+                id: snapshot.id,
+                createdAt: snapshot.createdAt,
+                amount: snapshot.amount,
+                originalAmount: snapshot.originalAmount ?? snapshot.amount,
+                currencyCode: snapshot.currencyCode ?? "CNY",
+                exchangeRateToCNY: snapshot.exchangeRateToCNY ?? 1,
+                note: snapshot.note,
+                flow: snapshot.flow,
+                category: category,
+                tagNames: snapshot.tagNames ?? []
+            )
+            modelContext.insert(entry)
+        }
+
+        for snapshot in payload.deposits {
+            let deposit = VaultDepositRecord(
+                id: snapshot.id,
+                date: snapshot.date,
+                amount: snapshot.amount,
+                note: snapshot.note,
+                goal: snapshot.goalID.flatMap { goalMap[$0] }
+            )
+            modelContext.insert(deposit)
+        }
+
+        try modelContext.save()
     }
 }
 
