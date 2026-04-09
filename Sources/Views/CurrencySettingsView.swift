@@ -10,8 +10,12 @@ private struct CurrencyRateItem: Identifiable {
 @MainActor
 struct CurrencySettingsView: View {
     @Environment(\.locale) private var locale
-    @ObservedObject private var currencyStore = CurrencyStore.shared
+    @StateObject private var currencyStore: CurrencyStore
     @State private var searchText = ""
+
+    init() {
+        _currencyStore = StateObject(wrappedValue: CurrencyStore.shared)
+    }
 
     private var baseCurrency: CurrencyDescriptor {
         CurrencyCatalog.descriptor(for: currencyStore.baseCurrencyCode)
@@ -21,9 +25,11 @@ struct CurrencySettingsView: View {
         guard let lastUpdated = currencyStore.lastUpdated else { return "未更新".appLocalized(in: locale) }
         return lastUpdated.formatted(
             .dateTime
+                .year()
+                .month(.defaultDigits)
+                .day()
                 .hour(.twoDigits(amPM: .omitted))
                 .minute(.twoDigits)
-                .second(.twoDigits)
                 .locale(locale)
         )
     }
@@ -47,6 +53,14 @@ struct CurrencySettingsView: View {
             item.descriptor.code.localizedCaseInsensitiveContains(keyword) ||
                 item.descriptor.name.localizedCaseInsensitiveContains(keyword)
         }
+    }
+
+    private var lastUpdatedLabel: some View {
+        Text(L10n.string("currency.lastUpdated", locale: locale, lastUpdatedText))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(SWTheme.textSecondary)
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     var body: some View {
@@ -99,16 +113,15 @@ struct CurrencySettingsView: View {
                     Spacer()
                 }
 
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.string("currency.symbolLabel", locale: locale, baseCurrency.symbol))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(SWTheme.textSecondary)
 
-                    Spacer()
-
-                    Text(L10n.string("currency.lastUpdated", locale: locale, lastUpdatedText))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(SWTheme.textSecondary)
+                    HStack {
+                        Spacer(minLength: 0)
+                        lastUpdatedLabel
+                    }
                 }
 
                 if let errorMessage = currencyStore.errorMessage {

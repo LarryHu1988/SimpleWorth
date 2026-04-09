@@ -108,6 +108,9 @@
 "iCloud 同步已开启，当前会话已立即生效。" = "iCloud Sync is on and now takes effect immediately.";
 "iCloud 同步已关闭，当前会话已切换为本地存储。" = "iCloud Sync is off and this session now uses local storage.";
 "当前无法启用 iCloud 同步，已继续使用本地存储。" = "Unable to enable iCloud Sync right now. The app will continue using local storage.";
+"settings.iCloudEnableFailedWithReason" = "Unable to enable iCloud Sync right now. The app will continue using local storage.\nReason: %@";
+"settings.iCloudEnableMigrationFailed" = "iCloud data migration failed. The app is still using local storage.\n%@";
+"settings.iCloudDisableMigrationFailed" = "Switching back to local storage failed. The app is still using iCloud sync.\n%@";
 "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。" = "iCloud Sync is enabled. Please fully relaunch the app for it to take effect.";
 "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。" = "iCloud Sync is disabled. Please fully relaunch the app for it to take effect.";
 "检测 iCloud 状态" = "Check iCloud Status";

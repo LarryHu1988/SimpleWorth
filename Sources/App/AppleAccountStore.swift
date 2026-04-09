@@ -137,7 +137,7 @@ final class AppleAccountStore: ObservableObject {
     }
 
     private func fetchICloudStatus() async -> CKAccountStatus {
-        let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
+        let container = CKContainer.default()
         do {
             return try await container.accountStatus()
         } catch {

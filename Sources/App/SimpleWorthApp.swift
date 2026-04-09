@@ -43,7 +43,7 @@ private struct AppRootView: View {
     let themeMode: ThemeMode
 
     var body: some View {
-        SeededRootView()
+        debugRootView
             .environmentObject(appRuntimeController)
             .environment(\.locale, appLanguage.locale)
             .modelContainer(appRuntimeController.modelContainer)
@@ -53,10 +53,46 @@ private struct AppRootView: View {
                 }
             }
     }
+
+    @ViewBuilder
+    private var debugRootView: some View {
+#if DEBUG
+        switch ProcessInfo.processInfo.environment["SIMPLEWORTH_DEBUG_SCREEN"] {
+        case "settings":
+            DebugSettingsNavigationHost()
+        case "currency":
+            NavigationStack {
+                CurrencySettingsView()
+            }
+        case "icloud":
+            NavigationStack {
+                ICloudSettingsView()
+            }
+        default:
+            SeededRootView()
+        }
+#else
+        SeededRootView()
+#endif
+    }
+}
+
+private struct DebugSettingsNavigationHost: View {
+    @State private var path: [SettingsRoute] = []
+
+    var body: some View {
+        SettingsNavigationHost(path: $path)
+    }
 }
 
 @MainActor
 final class AppRuntimeController: ObservableObject {
+    struct ICloudSyncUpdateOutcome {
+        let effectiveEnabled: Bool
+        let error: Error?
+        let fallbackReason: String?
+    }
+
     @Published private(set) var modelContainer: ModelContainer
 
     private let defaults: UserDefaults
@@ -70,14 +106,44 @@ final class AppRuntimeController: ObservableObject {
     }
 
     @discardableResult
-    func updateICloudSync(enabled: Bool) -> Bool {
+    func updateICloudSync(
+        enabled: Bool,
+        seedPayload: LedgerBackupPayload? = nil
+    ) -> ICloudSyncUpdateOutcome {
+        let previousEnabled = defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled)
         let result = AppModelContainerFactory.make(iCloudSyncEnabled: enabled, defaults: defaults)
         if enabled && !result.isICloudSyncEnabled {
             defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return false
+            return ICloudSyncUpdateOutcome(
+                effectiveEnabled: false,
+                error: result.error,
+                fallbackReason: result.error?.localizedDescription
+            )
         }
+
+        if let seedPayload {
+            do {
+                try AppModelContainerFactory.seedContainerIfNeeded(
+                    result.container,
+                    with: seedPayload,
+                    overwriteExistingData: !enabled
+                )
+            } catch {
+                defaults.set(previousEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
+                return ICloudSyncUpdateOutcome(
+                    effectiveEnabled: previousEnabled,
+                    error: error,
+                    fallbackReason: error.localizedDescription
+                )
+            }
+        }
+
         modelContainer = result.container
-        return result.isICloudSyncEnabled
+        return ICloudSyncUpdateOutcome(
+            effectiveEnabled: result.isICloudSyncEnabled,
+            error: nil,
+            fallbackReason: nil
+        )
     }
 }
 
@@ -85,7 +151,7 @@ private enum AppModelContainerFactory {
     static func make(
         iCloudSyncEnabled: Bool,
         defaults: UserDefaults = .standard
-    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool) {
+    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool, error: Error?) {
         let schema = Schema([
             TagRecord.self,
             LedgerEntry.self,
@@ -97,38 +163,89 @@ private enum AppModelContainerFactory {
             ? .private(AppConfig.iCloudContainerIdentifier)
             : .none
 
+        let configurationName = iCloudSyncEnabled ? "SimpleWorthICloudStore" : "SimpleWorthLocalStore"
+
         let primaryConfiguration = ModelConfiguration(
+            configurationName,
             schema: schema,
             isStoredInMemoryOnly: false,
             cloudKitDatabase: cloudKitDatabase
         )
 
-        if let container = try? ModelContainer(for: schema, configurations: [primaryConfiguration]) {
+        do {
+            let container = try ModelContainer(for: schema, configurations: [primaryConfiguration])
             defaults.set(iCloudSyncEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (container, iCloudSyncEnabled)
+            return (container, iCloudSyncEnabled, nil)
+        } catch {
+            if !iCloudSyncEnabled {
+                return makeFallbackLocalContainer(schema: schema, defaults: defaults, fallbackError: error)
+            }
+
+            return makeFallbackLocalContainer(schema: schema, defaults: defaults, fallbackError: error)
         }
+    }
+
+    private static func makeFallbackLocalContainer(
+        schema: Schema,
+        defaults: UserDefaults,
+        fallbackError: Error?
+    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool, error: Error?) {
 
         let localConfiguration = ModelConfiguration(
+            "SimpleWorthLocalStore",
             schema: schema,
             isStoredInMemoryOnly: false,
             cloudKitDatabase: .none
         )
         if let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
             defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (localContainer, false)
+            return (localContainer, false, fallbackError)
         }
 
         let inMemoryConfiguration = ModelConfiguration(
+            "SimpleWorthInMemoryStore",
             schema: schema,
             isStoredInMemoryOnly: true,
             cloudKitDatabase: .none
         )
         if let inMemoryContainer = try? ModelContainer(for: schema, configurations: [inMemoryConfiguration]) {
             defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (inMemoryContainer, false)
+            return (inMemoryContainer, false, fallbackError)
         }
 
         fatalError("Could not create ModelContainer in any mode")
+    }
+
+    @MainActor
+    static func seedContainerIfNeeded(
+        _ container: ModelContainer,
+        with payload: LedgerBackupPayload,
+        overwriteExistingData: Bool
+    ) throws {
+        let context = container.mainContext
+        let existingEntries = try context.fetch(FetchDescriptor<LedgerEntry>())
+        let existingTags = try context.fetch(FetchDescriptor<TagRecord>())
+        let existingGoals = try context.fetch(FetchDescriptor<SavingsGoalRecord>())
+        let existingDeposits = try context.fetch(FetchDescriptor<VaultDepositRecord>())
+
+        let destinationHasData =
+            !existingEntries.isEmpty ||
+            !existingTags.isEmpty ||
+            !existingGoals.isEmpty ||
+            !existingDeposits.isEmpty
+
+        guard overwriteExistingData || !destinationHasData else {
+            return
+        }
+
+        try LedgerBackupCoordinator.replaceLocalData(
+            with: payload,
+            context: context,
+            entries: existingEntries,
+            tags: existingTags,
+            goals: existingGoals,
+            deposits: existingDeposits
+        )
     }
 }
 

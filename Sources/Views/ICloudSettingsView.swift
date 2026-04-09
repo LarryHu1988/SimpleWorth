@@ -1,5 +1,4 @@
 import CloudKit
-import Network
 import SwiftData
 import SwiftUI
 
@@ -13,15 +12,18 @@ struct ICloudSettingsView: View {
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .reverse)]) private var goals: [SavingsGoalRecord]
     @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
 
-    @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
+    @AppStorage(SettingsKeys.iCloudSyncEnabled) private var persistedICloudSyncEnabled = false
     @AppStorage(SettingsKeys.backupRetentionDays) private var backupRetentionDays = BackupRetentionRule.keep15Days.rawValue
 
-    @StateObject private var syncMonitor = ICloudStatusMonitor()
     @State private var noticeSheet: SettingsNoticePayload?
     @State private var showRetentionSheet = false
     @State private var showBackupHistory = false
     @State private var suppressNextToggleChange = false
     @State private var backupRecords: [LocalBackupRecord] = []
+    @State private var iCloudSyncEnabled = false
+    @State private var isApplyingSyncToggle = false
+    @State private var syncToggleFailureMessage: String?
+    @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.4"
@@ -44,6 +46,15 @@ struct ICloudSettingsView: View {
         SettingsDetailContainer {
             SettingsSectionCard(title: "同步备份") {
                 autoSyncToggleRow
+
+                if let syncToggleFailureMessage {
+                    Text(syncToggleFailureMessage)
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.accentOrange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                        .padding(.bottom, 2)
+                }
 
                 SettingsRowDivider()
 
@@ -70,46 +81,33 @@ struct ICloudSettingsView: View {
                 }
                 .padding(.vertical, 4)
             }
-
-            SettingsSectionCard(title: "同步状态") {
-                statusRow(
-                    title: "当前同步状态",
-                    value: currentSyncStatusText,
-                    valueColor: currentSyncStatusColor
-                )
-
-                SettingsRowDivider()
-
-                statusRow(
-                    title: "上次同步时间",
-                    value: latestSyncStatusText,
-                    valueColor: SWTheme.textSecondary
-                )
-
-                SettingsRowDivider()
-
-                statusRow(
-                    title: "网络连接状态",
-                    value: syncMonitor.networkStatusText(in: locale),
-                    valueColor: syncMonitor.networkStatusColor
-                )
-
-                SettingsRowDivider()
-
-                statusRow(
-                    title: "iCloud 状态",
-                    value: syncMonitor.iCloudStatusText(in: locale),
-                    valueColor: syncMonitor.iCloudStatusColor
-                )
+        }
+        .overlay {
+            if let notice = noticeSheet {
+                SettingsInlineNoticeOverlay(payload: notice) {
+                    noticeSheet = nil
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(2)
             }
         }
         .navigationTitle("iCloud 同步")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $noticeSheet) { notice in
-            SettingsNoticeSheet(payload: notice) {
-                noticeSheet = nil
+        .alert(
+            "iCloud 自动备份".appLocalized(in: locale),
+            isPresented: Binding(
+                get: { syncToggleFailureAlertMessage != nil },
+                set: { if !$0 { syncToggleFailureAlertMessage = nil } }
+            ),
+            actions: {
+                Button("确定".appLocalized(in: locale)) {
+                    syncToggleFailureAlertMessage = nil
+                }
+            },
+            message: {
+                Text(syncToggleFailureAlertMessage ?? "")
             }
-        }
+        )
         .sheet(isPresented: $showRetentionSheet) {
             BackupRetentionRuleSheet(
                 selectedRule: retentionRule,
@@ -124,11 +122,18 @@ struct ICloudSettingsView: View {
             }
         }
         .task {
-            await refreshPageState()
+            iCloudSyncEnabled = persistedICloudSyncEnabled
+            refreshPageState()
+        }
+        .onChange(of: persistedICloudSyncEnabled) { _, newValue in
+            guard newValue != iCloudSyncEnabled else { return }
+            suppressNextToggleChange = true
+            iCloudSyncEnabled = newValue
         }
         .onChange(of: iCloudSyncEnabled) { _, newValue in
             handleICloudSyncToggleChange(newValue)
         }
+        .animation(.easeOut(duration: 0.18), value: noticeSheet?.id)
     }
 
     private var autoSyncToggleRow: some View {
@@ -148,6 +153,7 @@ struct ICloudSettingsView: View {
                 .labelsHidden()
                 .scaleEffect(SettingsLayout.compactToggleScale)
                 .fixedSize()
+                .disabled(isApplyingSyncToggle)
         }
         .frame(
             maxWidth: .infinity,
@@ -301,51 +307,6 @@ struct ICloudSettingsView: View {
         .buttonStyle(.plain)
     }
 
-    private func statusRow(title: String, value: String, valueColor: Color) -> some View {
-        HStack(spacing: SettingsLayout.rowSpacing) {
-            Text(title.appLocalized(in: locale))
-                .font(SettingsLayout.titleFont)
-                .foregroundStyle(SWTheme.primaryText)
-
-            Spacer(minLength: 12)
-
-            Text(value)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(valueColor)
-                .multilineTextAlignment(.trailing)
-        }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: SettingsLayout.rowContentMinHeight,
-            alignment: .leading
-        )
-        .padding(.vertical, SettingsLayout.rowVerticalPadding)
-    }
-
-    private var currentSyncStatusText: String {
-        if !iCloudSyncEnabled {
-            return "未开启同步".appLocalized(in: locale)
-        }
-
-        return syncMonitor.iCloudStatus == .available
-            ? "同步已开启".appLocalized(in: locale)
-            : "等待 iCloud 可用".appLocalized(in: locale)
-    }
-
-    private var currentSyncStatusColor: Color {
-        if !iCloudSyncEnabled {
-            return SWTheme.textSecondary
-        }
-        return syncMonitor.iCloudStatus == .available ? SWTheme.accentGreen : SWTheme.accentOrange
-    }
-
-    private var latestSyncStatusText: String {
-        guard let latestBackupRecord else {
-            return "暂无记录".appLocalized(in: locale)
-        }
-        return backupTimelineText(for: latestBackupRecord.createdAt)
-    }
-
     private var latestBackupSummaryText: String {
         guard let latestBackupRecord else {
             return "暂无备份".appLocalized(in: locale)
@@ -374,28 +335,12 @@ struct ICloudSettingsView: View {
         return formatter.string(from: date)
     }
 
-    private func backupTimelineText(for date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return L10n.string("settings.backupSummaryToday", locale: locale, shortTimeText(for: date))
-        }
-
-        if Calendar.current.isDateInYesterday(date) {
-            return L10n.string("settings.backupSummaryYesterday", locale: locale, shortTimeText(for: date))
-        }
-
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = locale
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: .now)
-    }
-
-    private func refreshPageState() async {
+    private func refreshPageState() {
         reloadBackupRecords()
         applyRetentionRule(retentionRule)
         if hasAnyUserData {
             ensureAutomaticBackupIfNeeded()
         }
-        await syncMonitor.refreshICloudStatus()
     }
 
     private func reloadBackupRecords() {
@@ -457,37 +402,117 @@ struct ICloudSettingsView: View {
 
     @MainActor
     private func applyICloudToggleChange(_ isEnabled: Bool) async {
-        if isEnabled {
-            await syncMonitor.refreshICloudStatus()
-            guard syncMonitor.iCloudStatus == .available else {
-                suppressNextToggleChange = true
-                iCloudSyncEnabled = false
-                HapticService.warning()
-                presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale))
-                return
-            }
+        isApplyingSyncToggle = true
+        defer { isApplyingSyncToggle = false }
+
+        if isEnabled, let preflightFailure = await iCloudAvailabilityFailureReason() {
+            revertICloudToggle(afterFailedEnablementWith: preflightFailure)
+            return
         }
 
-        let effectiveEnabled = appRuntimeController.updateICloudSync(enabled: isEnabled)
+        let outcome = appRuntimeController.updateICloudSync(
+            enabled: isEnabled,
+            seedPayload: hasAnyUserData ? currentBackupPayload() : nil
+        )
+        let effectiveEnabled = outcome.effectiveEnabled
+        persistedICloudSyncEnabled = effectiveEnabled
         if effectiveEnabled != isEnabled {
             suppressNextToggleChange = true
             iCloudSyncEnabled = effectiveEnabled
         }
 
-        await syncMonitor.refreshICloudStatus()
-
-        if isEnabled && !effectiveEnabled {
-            HapticService.warning()
-            presentNotice(message: "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale))
+        if let error = outcome.error {
+            let message = isEnabled
+                ? iCloudEnableFailureMessage(reason: outcome.fallbackReason ?? error.localizedDescription)
+                : L10n.string("settings.iCloudDisableMigrationFailed", locale: locale, error.localizedDescription)
+            presentICloudToggleFailure(message)
             return
         }
 
+        if isEnabled && !effectiveEnabled {
+            let message = iCloudEnableFailureMessage(reason: outcome.fallbackReason)
+            presentICloudToggleFailure(message)
+            return
+        }
+
+        syncToggleFailureMessage = nil
+        syncToggleFailureAlertMessage = nil
         HapticService.success()
         presentNotice(
             message: effectiveEnabled
                 ? "iCloud 同步已开启，当前会话已立即生效。".appLocalized(in: locale)
                 : "iCloud 同步已关闭，当前会话已切换为本地存储。".appLocalized(in: locale)
         )
+    }
+
+    @MainActor
+    private func revertICloudToggle(afterFailedEnablementWith message: String) {
+        persistedICloudSyncEnabled = false
+        suppressNextToggleChange = true
+        iCloudSyncEnabled = false
+        presentICloudToggleFailure(message)
+    }
+
+    @MainActor
+    private func presentICloudToggleFailure(_ message: String) {
+        syncToggleFailureMessage = message
+        syncToggleFailureAlertMessage = message
+        HapticService.warning()
+    }
+
+    private func iCloudEnableFailureMessage(reason: String?) -> String {
+        guard let reason, !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale)
+        }
+
+        return L10n.string(
+            "settings.iCloudEnableFailedWithReason",
+            locale: locale,
+            humanReadableICloudFailureReason(reason)
+        )
+    }
+
+    private func humanReadableICloudFailureReason(_ rawReason: String) -> String {
+        let trimmed = rawReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+
+        if lowered.contains("entitlement") || lowered.contains("icloud-container-identifiers") {
+            return "当前 App 的 iCloud 能力或签名配置不可用。".appLocalized(in: locale)
+        }
+        if lowered.contains("account") || lowered.contains("ubiquit") || lowered.contains("cloudkit") {
+            return "当前设备未登录 iCloud，或 iCloud / CloudKit 当前不可用。".appLocalized(in: locale)
+        }
+        if lowered.contains("network") || lowered.contains("internet") {
+            return "当前网络不可用，暂时无法连接 iCloud。".appLocalized(in: locale)
+        }
+
+        return trimmed
+    }
+
+    private func iCloudAvailabilityFailureReason() async -> String? {
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            return "当前设备未登录 iCloud，或没有开启 iCloud Drive。".appLocalized(in: locale)
+        }
+
+        do {
+            let status = try await CKContainer(identifier: AppConfig.iCloudContainerIdentifier).accountStatus()
+            switch status {
+            case .available:
+                return nil
+            case .noAccount:
+                return "当前设备未登录 iCloud 账号。".appLocalized(in: locale)
+            case .restricted:
+                return "当前设备限制了 iCloud 使用，暂时无法开启自动备份。".appLocalized(in: locale)
+            case .couldNotDetermine:
+                return "当前暂时无法确认 iCloud 状态，请稍后再试。".appLocalized(in: locale)
+            case .temporarilyUnavailable:
+                return "iCloud 当前暂时不可用，请稍后再试。".appLocalized(in: locale)
+            @unknown default:
+                return "当前暂时无法确认 iCloud 状态，请稍后再试。".appLocalized(in: locale)
+            }
+        } catch {
+            return humanReadableICloudFailureReason(error.localizedDescription)
+        }
     }
 
     private func updateRetentionRule(_ newRule: BackupRetentionRule) {
@@ -574,14 +599,30 @@ private struct ICloudBackupHistoryView: View {
             }
         }
         .sheet(item: $actionPrompt) { prompt in
-            BackupRecordActionSheet(prompt: prompt, locale: locale) {
-                switch prompt.kind {
-                case .restore:
-                    restore(prompt.record)
-                case .delete:
-                    delete(prompt.record)
+            BackupRecordActionSheet(
+                prompt: prompt,
+                locale: locale,
+                onConfirm: {
+                    dismissActionPromptThen {
+                        switch prompt.kind {
+                        case .restore:
+                            restore(prompt.record)
+                        case .delete:
+                            delete(prompt.record)
+                        }
+                    }
+                },
+                onCancel: {
+                    actionPrompt = nil
                 }
-            }
+            )
+        }
+    }
+
+    private func dismissActionPromptThen(_ action: @escaping () -> Void) {
+        actionPrompt = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            action()
         }
     }
 
@@ -1026,11 +1067,10 @@ private struct BackupRecordActionPrompt: Identifiable {
 }
 
 private struct BackupRecordActionSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
     let prompt: BackupRecordActionPrompt
     let locale: Locale
     let onConfirm: () -> Void
+    let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
@@ -1062,10 +1102,7 @@ private struct BackupRecordActionSheet: View {
 
             VStack(spacing: SettingsSheetLayout.buttonSpacing) {
                 Button(confirmTitle.appLocalized(in: locale)) {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                        onConfirm()
-                    }
+                    onConfirm()
                 }
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.white)
@@ -1078,7 +1115,7 @@ private struct BackupRecordActionSheet: View {
                 .buttonStyle(.plain)
 
                 Button("取消".appLocalized(in: locale)) {
-                    dismiss()
+                    onCancel()
                 }
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SWTheme.textSecondary)
@@ -1141,121 +1178,6 @@ private struct BackupRecordActionSheet: View {
             return SWTheme.accentBlue
         case .delete:
             return SWTheme.accentOrange
-        }
-    }
-}
-
-@MainActor
-private final class ICloudStatusMonitor: ObservableObject {
-    @Published private(set) var iCloudStatus: CKAccountStatus = .couldNotDetermine
-    @Published private(set) var networkStatus: ICloudNetworkStatus = .checking
-
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "SimpleWorth.ICloudStatusMonitor")
-
-    init() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
-                self?.networkStatus = ICloudNetworkStatus(path: path)
-            }
-        }
-        monitor.start(queue: queue)
-    }
-
-    deinit {
-        monitor.cancel()
-    }
-
-    func refreshICloudStatus() async {
-        let container = CKContainer(identifier: AppConfig.iCloudContainerIdentifier)
-        do {
-            iCloudStatus = try await container.accountStatus()
-        } catch {
-            iCloudStatus = .couldNotDetermine
-        }
-    }
-
-    func iCloudStatusText(in locale: Locale) -> String {
-        switch iCloudStatus {
-        case .available:
-            return "可用".appLocalized(in: locale)
-        case .noAccount:
-            return "未登录 iCloud".appLocalized(in: locale)
-        case .restricted:
-            return "账号受限".appLocalized(in: locale)
-        case .couldNotDetermine:
-            return "无法确定".appLocalized(in: locale)
-        case .temporarilyUnavailable:
-            return "暂时不可用".appLocalized(in: locale)
-        @unknown default:
-            return "无法确定".appLocalized(in: locale)
-        }
-    }
-
-    var iCloudStatusColor: Color {
-        switch iCloudStatus {
-        case .available:
-            return SWTheme.accentGreen
-        case .noAccount, .restricted, .temporarilyUnavailable:
-            return SWTheme.accentOrange
-        case .couldNotDetermine:
-            return SWTheme.textSecondary
-        @unknown default:
-            return SWTheme.textSecondary
-        }
-    }
-
-    func networkStatusText(in locale: Locale) -> String {
-        networkStatus.title.appLocalized(in: locale)
-    }
-
-    var networkStatusColor: Color {
-        networkStatus.tint
-    }
-}
-
-private enum ICloudNetworkStatus {
-    case checking
-    case connected
-    case offline
-    case limited
-
-    init(path: NWPath) {
-        switch path.status {
-        case .satisfied:
-            if path.isConstrained || path.isExpensive {
-                self = .limited
-            } else {
-                self = .connected
-            }
-        case .unsatisfied, .requiresConnection:
-            self = .offline
-        @unknown default:
-            self = .checking
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .checking:
-            "检测中"
-        case .connected:
-            "正常"
-        case .offline:
-            "离线"
-        case .limited:
-            "受限"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .checking:
-            SWTheme.textSecondary
-        case .connected:
-            SWTheme.accentGreen
-        case .offline, .limited:
-            SWTheme.accentOrange
         }
     }
 }

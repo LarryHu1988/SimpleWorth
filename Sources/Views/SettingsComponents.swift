@@ -247,8 +247,18 @@ private struct AdaptiveSettingsSheetModifier: ViewModifier {
     @State private var measuredHeight: CGFloat = 0
 
     private var resolvedHeight: CGFloat {
-        let maxHeight = UIScreen.main.bounds.height * maxHeightRatio
+        let maxHeight = currentWindowHeight * maxHeightRatio
         return min(max(measuredHeight, minHeight), maxHeight)
+    }
+
+    private var currentWindowHeight: CGFloat {
+        let windowHeight = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .bounds.height
+
+        return windowHeight ?? UIScreen.main.bounds.height
     }
 
     func body(content: Content) -> some View {
@@ -341,5 +351,46 @@ struct SettingsNoticeSheet: View {
         .frame(maxWidth: .infinity, alignment: .top)
         .appBackground()
         .settingsAdaptiveSheet(minHeight: 214)
+    }
+}
+
+struct SettingsInlineNoticeOverlay: View {
+    let payload: SettingsNoticePayload
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+
+            VStack(spacing: 16) {
+                Text("操作结果".appLocalized(in: payload.locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+
+                Text(payload.message)
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("确定".appLocalized(in: payload.locale)) {
+                    onClose()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(SWTheme.accentBlue.opacity(0.92))
+                )
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: 320)
+            .fitnessCard()
+            .padding(.horizontal, 24)
+        }
     }
 }

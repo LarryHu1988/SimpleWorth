@@ -112,6 +112,9 @@
 "iCloud 同步已开启，当前会话已立即生效。" = "iCloud 同步已开启，当前会话已立即生效。";
 "iCloud 同步已关闭，当前会话已切换为本地存储。" = "iCloud 同步已关闭，当前会话已切换为本地存储。";
 "当前无法启用 iCloud 同步，已继续使用本地存储。" = "当前无法启用 iCloud 同步，已继续使用本地存储。";
+"settings.iCloudEnableFailedWithReason" = "当前无法启用 iCloud 同步，已继续使用本地存储。\n原因：%@";
+"settings.iCloudEnableMigrationFailed" = "iCloud 数据迁移失败，当前仍在使用本地存储。\n%@";
+"settings.iCloudDisableMigrationFailed" = "切换到本地存储失败，当前仍保持 iCloud 同步。\n%@";
 "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。" = "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。";
 "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。" = "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。";
 "检测 iCloud 状态" = "检测 iCloud 状态";

@@ -108,6 +108,9 @@
 "iCloud 同步已开启，当前会话已立即生效。" = "iCloud同期を有効にしました。現在のセッションにすぐ反映されます。";
 "iCloud 同步已关闭，当前会话已切换为本地存储。" = "iCloud同期を無効にしました。現在のセッションはローカル保存に切り替わりました。";
 "当前无法启用 iCloud 同步，已继续使用本地存储。" = "現在iCloud同期を有効にできないため、ローカル保存を継続します。";
+"settings.iCloudEnableFailedWithReason" = "現在 iCloud 同期を有効にできないため、ローカル保存を継続します。\n理由: %@";
+"settings.iCloudEnableMigrationFailed" = "iCloud へのデータ移行に失敗したため、現在もローカル保存を使用しています。\n%@";
+"settings.iCloudDisableMigrationFailed" = "ローカル保存への切り替えに失敗したため、現在も iCloud 同期を維持しています。\n%@";
 "已开启 iCloud 同步，请完全退出并重新打开 App 后生效。" = "iCloud 同期を有効にしました。反映のためアプリを完全終了して再起動してください。";
 "已关闭 iCloud 同步，请完全退出并重新打开 App 后生效。" = "iCloud 同期を無効にしました。反映のためアプリを完全終了して再起動してください。";
 "检测 iCloud 状态" = "iCloud 状態を確認";

@@ -39,6 +39,7 @@ struct StatsView: View {
         Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
     )
     @State private var showSettingsSheet = false
+    @State private var settingsNavigationPath: [SettingsRoute] = []
 
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: .now)
@@ -215,7 +216,12 @@ struct StatsView: View {
             }
         }
         .sheet(isPresented: $showSettingsSheet) {
-            StatsSettingsView()
+            SettingsNavigationHost(path: $settingsNavigationPath)
+        }
+        .onChange(of: showSettingsSheet) { _, isPresented in
+            if !isPresented {
+                settingsNavigationPath.removeAll()
+            }
         }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()

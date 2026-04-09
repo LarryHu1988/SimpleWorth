@@ -3,17 +3,6 @@ import SwiftData
 import SwiftUI
 import UIKit
 
-private enum SettingsRoute: Hashable {
-    case iCloud
-    case currency
-    case tags
-    case importBills
-    case feedback
-    case privacy
-    case about
-    case otherApps
-}
-
 private enum ImportNoticeError: Error {
     case message(String)
 
@@ -21,6 +10,27 @@ private enum ImportNoticeError: Error {
         switch self {
         case .message(let text):
             return text
+        }
+    }
+}
+
+enum SettingsRoute: Hashable {
+    case currency
+    case tags
+    case iCloud
+    case billImport
+    case feedback
+    case privacy
+    case about
+    case otherApps
+}
+
+struct SettingsNavigationHost: View {
+    @Binding var path: [SettingsRoute]
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            StatsSettingsView(navigationPath: $path)
         }
     }
 }
@@ -41,15 +51,19 @@ struct StatsSettingsView: View {
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @State private var showShareSheet = false
     @State private var showDetailedTimeInfo = false
-    @State private var navigationPath = NavigationPath()
-
+    @State private var detailedTimeInfoButtonFrame: CGRect = .zero
     @State private var exportDocument: LedgerBackupDocument?
     @State private var showFileExporter = false
 
     @State private var noticeSheet: SettingsNoticePayload?
+    @Binding private var navigationPath: [SettingsRoute]
     private let repoURL = URL(string: "https://github.com/LarryHu1988/SimpleWorth")
     private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
+
+    init(navigationPath: Binding<[SettingsRoute]> = .constant([])) {
+        _navigationPath = navigationPath
+    }
 
     private var selectedThemeMode: ThemeMode {
         ThemeMode(rawValue: themeModeRaw) ?? ThemeMode.resolved()
@@ -82,8 +96,16 @@ struct StatsSettingsView: View {
         return "SimpleWorth-backup-\(formatter.string(from: .now))"
     }
 
+    private var shouldShowDetailedTimeInfoOnDebugLaunch: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment["SIMPLEWORTH_SHOW_DETAILED_TIME_INFO"] == "1"
+#else
+        false
+#endif
+    }
+
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        ZStack(alignment: .topLeading) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: SettingsLayout.pageSectionSpacing) {
                     statsHeaderCard
@@ -109,27 +131,21 @@ struct StatsSettingsView: View {
                     }
 
                     SettingsSectionCard(title: "账单设置") {
-                        SettingsPressableButton {
-                            push(.currency)
-                        } label: {
-                            settingsNavigationRowLabel(
-                                title: "货币选择",
-                                symbol: "dollarsign.circle.fill",
-                                iconColor: SWTheme.accentGreen
-                            )
-                        }
+                        settingsRouteRow(
+                            title: "货币选择",
+                            symbol: "dollarsign.circle.fill",
+                            iconColor: SWTheme.accentGreen,
+                            route: .currency
+                        )
 
                         SettingsRowDivider()
 
-                        SettingsPressableButton {
-                            push(.tags)
-                        } label: {
-                            settingsNavigationRowLabel(
-                                title: "标签管理",
-                                symbol: "tag.fill",
-                                iconColor: SWTheme.accentBlue
-                            )
-                        }
+                        settingsRouteRow(
+                            title: "标签管理",
+                            symbol: "tag.fill",
+                            iconColor: SWTheme.accentBlue,
+                            route: .tags
+                        )
 
                         SettingsRowDivider()
 
@@ -147,13 +163,12 @@ struct StatsSettingsView: View {
                     }
 
                     SettingsSectionCard(title: "数据安全") {
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "iCloud 同步",
                             symbol: "icloud.fill",
-                            iconColor: SWTheme.accentBlue
-                        ) {
-                            push(.iCloud)
-                        }
+                            iconColor: SWTheme.accentBlue,
+                            route: .iCloud
+                        )
 
                         SettingsRowDivider()
 
@@ -167,23 +182,21 @@ struct StatsSettingsView: View {
 
                         SettingsRowDivider()
 
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "账单导入",
                             symbol: "square.and.arrow.down.on.square",
-                            iconColor: SWTheme.accentOrange
-                        ) {
-                            push(.importBills)
-                        }
+                            iconColor: SWTheme.accentOrange,
+                            route: .billImport
+                        )
                     }
 
                     SettingsSectionCard(title: "良性互动") {
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "意见反馈",
                             symbol: "envelope.fill",
-                            iconColor: SWTheme.accentBlue
-                        ) {
-                            push(.feedback)
-                        }
+                            iconColor: SWTheme.accentBlue,
+                            route: .feedback
+                        )
 
                         SettingsRowDivider()
 
@@ -209,108 +222,127 @@ struct StatsSettingsView: View {
                     }
 
                     SettingsSectionCard(title: "了解一下") {
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "隐私协议",
                             symbol: "hand.raised.fill",
-                            iconColor: SWTheme.accentBlue
-                        ) {
-                            push(.privacy)
-                        }
+                            iconColor: SWTheme.accentBlue,
+                            route: .privacy
+                        )
 
                         SettingsRowDivider()
 
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "关于简值",
                             symbol: "info.circle.fill",
-                            iconColor: SWTheme.accentOrange
-                        ) {
-                            push(.about)
-                        }
+                            iconColor: SWTheme.accentOrange,
+                            route: .about
+                        )
 
                         SettingsRowDivider()
 
-                        settingsActionRow(
+                        settingsRouteRow(
                             title: "其他 APP",
                             symbol: "square.grid.2x2.fill",
-                            iconColor: SWTheme.accentGreen
-                        ) {
-                            push(.otherApps)
-                        }
+                            iconColor: SWTheme.accentGreen,
+                            route: .otherApps
+                        )
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 28)
             }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") {
-                        dismiss()
+            .zIndex(0)
+
+            if showDetailedTimeInfo {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            showDetailedTimeInfo = false
+                        }
                     }
-                    .fontWeight(.semibold)
-                }
+                    .zIndex(1)
             }
-            .sheet(item: $noticeSheet) { notice in
-                SettingsNoticeSheet(payload: notice) {
-                    noticeSheet = nil
-                }
-            }
-            .sheet(isPresented: $showShareSheet) {
-                if let repoURL {
-                    ShareSheet(
-                        activityItems: [
-                            "我在用这款记账 App：SimpleWorth（简值），推荐你试试。".appLocalized(in: uiLocale),
-                            repoURL
-                        ],
-                        subject: "SimpleWorth 简值".appLocalized(in: uiLocale)
+        }
+        .coordinateSpace(name: SettingsInfoBubbleFrameKey.coordinateSpaceName)
+        .onPreferenceChange(SettingsInfoBubbleFrameKey.self) { newValue in
+            detailedTimeInfoButtonFrame = newValue
+        }
+        .overlay(alignment: .topLeading) {
+            GeometryReader { proxy in
+                if showDetailedTimeInfo, detailedTimeInfoButtonFrame != .zero {
+                    let bubbleWidth = min(250, max(180, proxy.size.width - 44))
+                    let bubbleX = min(
+                        max(16, detailedTimeInfoButtonFrame.minX - 10),
+                        max(16, proxy.size.width - bubbleWidth - 16)
                     )
-                }
-            }
-            .navigationDestination(for: SettingsRoute.self) { route in
-                switch route {
-                case .iCloud:
-                    ICloudSettingsView()
-                case .currency:
-                    CurrencySettingsView()
-                case .tags:
-                    TagManagementView()
-                case .importBills:
-                    BillImportGuideView(onImportSelected: importBills(from:))
-                case .feedback:
-                    FeedbackContactView(supportEmail: supportEmail)
-                case .privacy:
-                    PrivacyAgreementView(supportEmail: supportEmail)
-                case .about:
-                    AboutSimpleWorthView(appVersionText: appVersionText)
-                case .otherApps:
-                    OtherAppsView(
-                        supportEmail: supportEmail,
-                        authorWebsiteURL: authorWebsiteURL,
-                        repoURL: repoURL
+
+                    SettingsInlineInfoBubble(
+                        text: "开启后，新增/编辑账单可精确到分钟；关闭后仅精确到天。".appLocalized(in: uiLocale),
+                        arrowAlignment: .leading
                     )
+                    .frame(width: bubbleWidth, alignment: .leading)
+                    .offset(x: bubbleX, y: detailedTimeInfoButtonFrame.maxY + 6)
+                    .transition(.scale(scale: 0.96, anchor: .topLeading).combined(with: .opacity))
+                    .zIndex(2)
+                    .allowsHitTesting(false)
                 }
             }
-            .fileExporter(
-                isPresented: $showFileExporter,
-                document: exportDocument,
-                contentType: .json,
-                defaultFilename: backupFileName
-            ) { result in
-                switch result {
-                case .success:
-                    HapticService.success()
-                    presentNotice(message: "账单已成功导出。".appLocalized(in: uiLocale))
-                case .failure(let error):
-                    presentNotice(message: L10n.string("settings.exportFailed", locale: uiLocale, error.localizedDescription))
+        }
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("完成") {
+                    dismiss()
                 }
+                .fontWeight(.semibold)
             }
-            .appBackground()
-            .onChange(of: themeModeRaw) { _, newValue in
-                let mode = ThemeMode(rawValue: newValue) ?? .system
-                AppAppearanceController.apply(themeMode: mode)
+        }
+        .navigationDestination(for: SettingsRoute.self) { route in
+            destinationView(for: route)
+        }
+        .task {
+            if shouldShowDetailedTimeInfoOnDebugLaunch, !showDetailedTimeInfo {
+                showDetailedTimeInfo = true
             }
+        }
+        .sheet(item: $noticeSheet) { notice in
+            SettingsNoticeSheet(payload: notice) {
+                noticeSheet = nil
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let repoURL {
+                ShareSheet(
+                    activityItems: [
+                        "我在用这款记账 App：SimpleWorth（简值），推荐你试试。".appLocalized(in: uiLocale),
+                        repoURL
+                    ],
+                    subject: "SimpleWorth 简值".appLocalized(in: uiLocale)
+                )
+            }
+        }
+        .fileExporter(
+            isPresented: $showFileExporter,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: backupFileName
+        ) { result in
+            switch result {
+            case .success:
+                HapticService.success()
+                presentNotice(message: "账单已成功导出。".appLocalized(in: uiLocale))
+            case .failure(let error):
+                presentNotice(message: L10n.string("settings.exportFailed", locale: uiLocale, error.localizedDescription))
+            }
+        }
+        .appBackground()
+        .onChange(of: themeModeRaw) { _, newValue in
+            let mode = ThemeMode(rawValue: newValue) ?? .system
+            AppAppearanceController.apply(themeMode: mode)
         }
     }
 
@@ -474,6 +506,24 @@ struct StatsSettingsView: View {
         }
     }
 
+    private func settingsRouteRow(
+        title: String,
+        symbol: String,
+        iconColor: Color,
+        route: SettingsRoute
+    ) -> some View {
+        SettingsPressableButton {
+            navigationPath.append(route)
+            HapticService.selection()
+        } label: {
+            settingsNavigationRowLabel(
+                title: title,
+                symbol: symbol,
+                iconColor: iconColor
+            )
+        }
+    }
+
     private func settingToggleRow(
         title: String,
         symbol: String,
@@ -482,7 +532,7 @@ struct StatsSettingsView: View {
         infoText: String? = nil,
         isInfoPresented: Binding<Bool>? = nil
     ) -> some View {
-        HStack(spacing: SettingsLayout.rowSpacing) {
+        return HStack(spacing: SettingsLayout.rowSpacing) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(iconColor)
@@ -492,7 +542,7 @@ struct StatsSettingsView: View {
                 .font(SettingsLayout.titleFont)
                 .foregroundStyle(SWTheme.primaryText)
 
-            if let infoText, let isInfoPresented {
+            if infoText != nil, let isInfoPresented {
                 Button {
                     isInfoPresented.wrappedValue.toggle()
                     HapticService.selection()
@@ -500,16 +550,17 @@ struct StatsSettingsView: View {
                     Image(systemName: "info.circle")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SWTheme.accentBlue)
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L10n.string("settings.infoAccessibility", locale: uiLocale, title.appLocalized(in: uiLocale)))
-                .popover(isPresented: isInfoPresented, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
-                    Text(infoText.appLocalized(in: uiLocale))
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.primaryText)
-                        .padding(12)
-                        .frame(width: 220, alignment: .leading)
-                        .presentationCompactAdaptation(.popover)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: SettingsInfoBubbleFrameKey.self,
+                            value: proxy.frame(in: .named(SettingsInfoBubbleFrameKey.coordinateSpaceName))
+                        )
+                    }
                 }
             }
 
@@ -527,6 +578,33 @@ struct StatsSettingsView: View {
         )
         .contentShape(Rectangle())
         .padding(.vertical, SettingsLayout.rowVerticalPadding)
+        .animation(.easeOut(duration: 0.16), value: isInfoPresented?.wrappedValue ?? false)
+    }
+
+    @ViewBuilder
+    private func destinationView(for route: SettingsRoute) -> some View {
+        switch route {
+        case .currency:
+            CurrencySettingsView()
+        case .tags:
+            TagManagementView()
+        case .iCloud:
+            ICloudSettingsView()
+        case .billImport:
+            BillImportGuideView(onImportSelected: importBills(from:))
+        case .feedback:
+            FeedbackContactView(supportEmail: supportEmail)
+        case .privacy:
+            PrivacyAgreementView(supportEmail: supportEmail)
+        case .about:
+            AboutSimpleWorthView(appVersionText: appVersionText)
+        case .otherApps:
+            OtherAppsView(
+                supportEmail: supportEmail,
+                authorWebsiteURL: authorWebsiteURL,
+                repoURL: repoURL
+            )
+        }
     }
 
     private func settingsNavigationRowLabel(
@@ -771,11 +849,57 @@ struct StatsSettingsView: View {
         noticeSheet = SettingsNoticePayload(message: message, locale: uiLocale)
     }
 
-    private func push(_ route: SettingsRoute) {
-        navigationPath.append(route)
-        HapticService.selection()
+}
+
+private struct SettingsInfoBubbleFrameKey: PreferenceKey {
+    static let coordinateSpaceName = "SettingsInfoBubbleSpace"
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero {
+            value = next
+        }
+    }
+}
+
+private struct SettingsInlineInfoBubble: View {
+    enum ArrowAlignment {
+        case leading
+        case trailing
     }
 
+    let text: String
+    var arrowAlignment: ArrowAlignment = .leading
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(Color.dynamic(light: 0xF4F9FF, dark: 0x203244, lightAlpha: 0.98, darkAlpha: 0.98))
+                .frame(width: 12, height: 12)
+                .rotationEffect(.degrees(45))
+                .offset(x: arrowAlignment == .leading ? 18 : 206, y: 6)
+                .padding(.bottom, -2)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(SWTheme.primaryText)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 240, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.dynamic(light: 0xF4F9FF, dark: 0x203244, lightAlpha: 0.98, darkAlpha: 0.98))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                )
+        }
+        .shadow(color: Color.black.opacity(0.16), radius: 16, x: 0, y: 8)
+    }
 }
 
 private struct SettingsMetricCard: View {
