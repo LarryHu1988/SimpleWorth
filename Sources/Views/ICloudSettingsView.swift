@@ -459,11 +459,6 @@ struct ICloudSettingsView: View {
         syncToggleFailureMessage = nil
         syncToggleFailureAlertMessage = nil
         HapticService.success()
-        presentNotice(
-            message: effectiveEnabled
-                ? "iCloud 同步已开启，当前会话已立即生效。".appLocalized(in: locale)
-                : "iCloud 同步已关闭，当前会话已切换为本地存储。".appLocalized(in: locale)
-        )
     }
 
     @MainActor
