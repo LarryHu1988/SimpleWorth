@@ -15,11 +15,11 @@ struct ICloudSettingsView: View {
     @AppStorage(SettingsKeys.iCloudSyncEnabled) private var persistedICloudSyncEnabled = false
     @AppStorage(SettingsKeys.backupRetentionDays) private var backupRetentionDays = BackupRetentionRule.keep15Days.rawValue
 
-    @State private var noticeSheet: SettingsNoticePayload?
     @State private var showRetentionSheet = false
     @State private var showBackupHistory = false
     @State private var suppressNextToggleChange = false
     @State private var backupRecords: [LocalBackupRecord] = []
+    @State private var backupActionFeedbackMessage: String?
     @State private var iCloudSyncEnabled = false
     @State private var isApplyingSyncToggle = false
     @State private var syncToggleFailureMessage: String?
@@ -68,6 +68,15 @@ struct ICloudSettingsView: View {
 
                 backupActionButtons
 
+                if let backupActionFeedbackMessage {
+                    Text(backupActionFeedbackMessage)
+                        .font(.footnote)
+                        .foregroundStyle(SWTheme.accentOrange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                        .padding(.bottom, 2)
+                }
+
                 SettingsRowDivider()
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -83,39 +92,29 @@ struct ICloudSettingsView: View {
             }
         }
         .overlay {
-            ZStack {
-                if let notice = noticeSheet {
-                    SettingsInlineNoticeOverlay(payload: notice) {
-                        noticeSheet = nil
+            if showRetentionSheet {
+                SettingsBottomSheetOverlay {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        showRetentionSheet = false
                     }
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                    .zIndex(2)
-                }
-
-                if showRetentionSheet {
-                    SettingsBottomSheetOverlay {
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            showRetentionSheet = false
-                        }
-                    } content: {
-                        BackupRetentionRuleSheet(
-                            selectedRule: retentionRule,
-                            locale: locale,
-                            onSelect: { newRule in
-                                updateRetentionRule(newRule)
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    showRetentionSheet = false
-                                }
-                            },
-                            onCancel: {
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    showRetentionSheet = false
-                                }
+                } content: {
+                    BackupRetentionRuleSheet(
+                        selectedRule: retentionRule,
+                        locale: locale,
+                        onSelect: { newRule in
+                            updateRetentionRule(newRule)
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                showRetentionSheet = false
                             }
-                        )
-                    }
-                    .zIndex(3)
+                        },
+                        onCancel: {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                showRetentionSheet = false
+                            }
+                        }
+                    )
                 }
+                .zIndex(3)
             }
         }
         .navigationTitle("iCloud 同步")
@@ -152,7 +151,6 @@ struct ICloudSettingsView: View {
         .onChange(of: iCloudSyncEnabled) { _, newValue in
             handleICloudSyncToggleChange(newValue)
         }
-        .animation(.easeOut(duration: 0.18), value: noticeSheet?.id)
     }
 
     private var autoSyncToggleRow: some View {
@@ -371,7 +369,7 @@ struct ICloudSettingsView: View {
     private func createManualBackup() {
         guard hasAnyUserData else {
             HapticService.warning()
-            presentNotice(message: "当前还没有可备份的数据。".appLocalized(in: locale))
+            backupActionFeedbackMessage = "当前还没有可备份的数据。".appLocalized(in: locale)
             return
         }
 
@@ -380,10 +378,11 @@ struct ICloudSettingsView: View {
             _ = try LocalBackupStore.createBackup(payload: payload, source: .manual)
             LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
             reloadBackupRecords()
+            backupActionFeedbackMessage = nil
             HapticService.success()
         } catch {
             HapticService.warning()
-            presentNotice(message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription))
+            backupActionFeedbackMessage = L10n.string("settings.exportFailed", locale: locale, error.localizedDescription)
         }
     }
 
@@ -539,9 +538,6 @@ struct ICloudSettingsView: View {
         reloadBackupRecords()
     }
 
-    private func presentNotice(message: String) {
-        noticeSheet = SettingsNoticePayload(message: message, locale: locale)
-    }
 }
 
 private struct ICloudBackupHistoryView: View {
