@@ -306,7 +306,7 @@ final class SavingsGoalRecord {
     var targetAmount: Double = 0
     var deadline: Date?
     var tintHex: Int = 0x38BDF8
-    @Relationship(deleteRule: .cascade, inverse: \VaultDepositRecord.goal) var deposits: [VaultDepositRecord]
+    @Relationship(deleteRule: .cascade, inverse: \VaultDepositRecord.goal) var deposits: [VaultDepositRecord]?
 
     init(
         id: UUID = UUID(),
