@@ -4,7 +4,6 @@ import SwiftUI
 
 struct ICloudSettingsView: View {
     @Environment(\.locale) private var locale
-    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]

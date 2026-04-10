@@ -44,9 +44,10 @@ private struct AppRootView: View {
 
     var body: some View {
         debugRootView
+            .id(appRuntimeController.containerSession.id)
             .environmentObject(appRuntimeController)
             .environment(\.locale, appLanguage.locale)
-            .modelContainer(appRuntimeController.modelContainer)
+            .modelContainer(appRuntimeController.containerSession.container)
             .task(id: themeMode.rawValue) {
                 await MainActor.run {
                     AppAppearanceController.apply(themeMode: themeMode)
@@ -87,22 +88,28 @@ private struct DebugSettingsNavigationHost: View {
 
 @MainActor
 final class AppRuntimeController: ObservableObject {
+    struct ContainerSession {
+        let id = UUID()
+        let container: ModelContainer
+    }
+
     struct ICloudSyncUpdateOutcome {
         let effectiveEnabled: Bool
         let error: Error?
         let fallbackReason: String?
     }
 
-    @Published private(set) var modelContainer: ModelContainer
+    @Published private(set) var containerSession: ContainerSession
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.modelContainer = AppModelContainerFactory.make(
+        let initialResult = AppModelContainerFactory.make(
             iCloudSyncEnabled: defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled),
             defaults: defaults
-        ).container
+        )
+        self.containerSession = ContainerSession(container: initialResult.container)
     }
 
     @discardableResult
@@ -138,7 +145,7 @@ final class AppRuntimeController: ObservableObject {
             }
         }
 
-        modelContainer = result.container
+        containerSession = ContainerSession(container: result.container)
         return ICloudSyncUpdateOutcome(
             effectiveEnabled: result.isICloudSyncEnabled,
             error: nil,
