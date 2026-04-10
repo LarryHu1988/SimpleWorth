@@ -394,3 +394,93 @@ struct SettingsInlineNoticeOverlay: View {
         }
     }
 }
+
+struct SettingsBottomSheetOverlay<SheetContent: View>: View {
+    let onDismiss: () -> Void
+    @ViewBuilder let content: SheetContent
+
+    init(onDismiss: @escaping () -> Void, @ViewBuilder content: () -> SheetContent) {
+        self.onDismiss = onDismiss
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .bottom) {
+                Color.black.opacity(0.18)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onDismiss()
+                    }
+
+                content
+                    .frame(maxWidth: min(560, proxy.size.width - 24))
+                    .padding(.horizontal, 12)
+                    .allowsHitTesting(true)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .ignoresSafeArea()
+        }
+    }
+}
+
+private struct SettingsBottomSheetCardModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let topColor = colorScheme == .light
+            ? Color.sw(0x93AFCB, alpha: 0.92)
+            : Color.sw(0x1F2B38, alpha: 0.98)
+        let bottomColor = colorScheme == .light
+            ? Color.sw(0xDCE8F4, alpha: 0.96)
+            : Color.sw(0x0E1620, alpha: 0.98)
+        let sheenColor = colorScheme == .light
+            ? Color.white.opacity(0.30)
+            : Color.white.opacity(0.08)
+        let borderColor = colorScheme == .light
+            ? Color.white.opacity(0.56)
+            : Color.white.opacity(0.16)
+        let sheetShape = UnevenRoundedRectangle(
+            topLeadingRadius: SettingsSheetLayout.cornerRadius,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: SettingsSheetLayout.cornerRadius,
+            style: .continuous
+        )
+
+        content
+            .background(
+                sheetShape
+                    .fill(
+                        LinearGradient(
+                            colors: [topColor, bottomColor],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        sheetShape
+                            .fill(
+                                LinearGradient(
+                                    colors: [sheenColor, .clear, Color.white.opacity(0.01)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(
+                        sheetShape
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+            )
+            .clipShape(sheetShape)
+            .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 10)
+    }
+}
+
+extension View {
+    func settingsBottomSheetCard() -> some View {
+        modifier(SettingsBottomSheetCardModifier())
+    }
+}

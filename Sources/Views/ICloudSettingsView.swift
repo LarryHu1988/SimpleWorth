@@ -26,7 +26,7 @@ struct ICloudSettingsView: View {
     @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.4"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.5"
         return "V\(version)"
     }
 
@@ -83,12 +83,39 @@ struct ICloudSettingsView: View {
             }
         }
         .overlay {
-            if let notice = noticeSheet {
-                SettingsInlineNoticeOverlay(payload: notice) {
-                    noticeSheet = nil
+            ZStack {
+                if let notice = noticeSheet {
+                    SettingsInlineNoticeOverlay(payload: notice) {
+                        noticeSheet = nil
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(2)
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .zIndex(2)
+
+                if showRetentionSheet {
+                    SettingsBottomSheetOverlay {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            showRetentionSheet = false
+                        }
+                    } content: {
+                        BackupRetentionRuleSheet(
+                            selectedRule: retentionRule,
+                            locale: locale,
+                            onSelect: { newRule in
+                                updateRetentionRule(newRule)
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    showRetentionSheet = false
+                                }
+                            },
+                            onCancel: {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    showRetentionSheet = false
+                                }
+                            }
+                        )
+                    }
+                    .zIndex(3)
+                }
             }
         }
         .navigationTitle("iCloud 同步")
@@ -108,14 +135,6 @@ struct ICloudSettingsView: View {
                 Text(syncToggleFailureAlertMessage ?? "")
             }
         )
-        .sheet(isPresented: $showRetentionSheet) {
-            BackupRetentionRuleSheet(
-                selectedRule: retentionRule,
-                locale: locale
-            ) { newRule in
-                updateRetentionRule(newRule)
-            }
-        }
         .navigationDestination(isPresented: $showBackupHistory) {
             ICloudBackupHistoryView(records: backupRecords) {
                 reloadBackupRecords()
@@ -165,7 +184,9 @@ struct ICloudSettingsView: View {
 
     private var autoBackupRuleRow: some View {
         SettingsPressableButton {
-            showRetentionSheet = true
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                showRetentionSheet = true
+            }
             HapticService.selection()
         } label: {
             HStack(spacing: SettingsLayout.rowSpacing) {
@@ -490,10 +511,6 @@ struct ICloudSettingsView: View {
     }
 
     private func iCloudAvailabilityFailureReason() async -> String? {
-        guard FileManager.default.ubiquityIdentityToken != nil else {
-            return "当前设备未登录 iCloud，或没有开启 iCloud Drive。".appLocalized(in: locale)
-        }
-
         do {
             let status = try await CKContainer(identifier: AppConfig.iCloudContainerIdentifier).accountStatus()
             switch status {
@@ -593,34 +610,47 @@ private struct ICloudBackupHistoryView: View {
         }
         .navigationTitle("数据备份")
         .navigationBarTitleDisplayMode(.inline)
+        .overlay {
+            if let prompt = actionPrompt {
+                SettingsBottomSheetOverlay {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        actionPrompt = nil
+                    }
+                } content: {
+                    BackupRecordActionSheet(
+                        prompt: prompt,
+                        locale: locale,
+                        onConfirm: {
+                            dismissActionPromptThen {
+                                switch prompt.kind {
+                                case .restore:
+                                    restore(prompt.record)
+                                case .delete:
+                                    delete(prompt.record)
+                                }
+                            }
+                        },
+                        onCancel: {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                actionPrompt = nil
+                            }
+                        }
+                    )
+                }
+                .zIndex(3)
+            }
+        }
         .sheet(item: $noticeSheet) { notice in
             SettingsNoticeSheet(payload: notice) {
                 noticeSheet = nil
             }
         }
-        .sheet(item: $actionPrompt) { prompt in
-            BackupRecordActionSheet(
-                prompt: prompt,
-                locale: locale,
-                onConfirm: {
-                    dismissActionPromptThen {
-                        switch prompt.kind {
-                        case .restore:
-                            restore(prompt.record)
-                        case .delete:
-                            delete(prompt.record)
-                        }
-                    }
-                },
-                onCancel: {
-                    actionPrompt = nil
-                }
-            )
-        }
     }
 
     private func dismissActionPromptThen(_ action: @escaping () -> Void) {
-        actionPrompt = nil
+        withAnimation(.easeOut(duration: 0.18)) {
+            actionPrompt = nil
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             action()
         }
@@ -662,7 +692,9 @@ private struct ICloudBackupHistoryView: View {
                     symbol: "arrow.counterclockwise",
                     tint: SWTheme.accentBlue
                 ) {
-                    actionPrompt = BackupRecordActionPrompt(kind: .restore, record: record)
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                        actionPrompt = BackupRecordActionPrompt(kind: .restore, record: record)
+                    }
                     HapticService.selection()
                 }
 
@@ -670,7 +702,9 @@ private struct ICloudBackupHistoryView: View {
                     symbol: "trash",
                     tint: SWTheme.accentOrange
                 ) {
-                    actionPrompt = BackupRecordActionPrompt(kind: .delete, record: record)
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                        actionPrompt = BackupRecordActionPrompt(kind: .delete, record: record)
+                    }
                     HapticService.selection()
                 }
             }
@@ -690,6 +724,7 @@ private struct ICloudBackupHistoryView: View {
                         .fill(tint.opacity(0.12))
                 )
         }
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .buttonStyle(.plain)
     }
 
@@ -736,11 +771,10 @@ private struct ICloudBackupHistoryView: View {
 }
 
 private struct BackupRetentionRuleSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
     let selectedRule: BackupRetentionRule
     let locale: Locale
     let onSelect: (BackupRetentionRule) -> Void
+    let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
@@ -763,7 +797,6 @@ private struct BackupRetentionRuleSheet: View {
                 ForEach(BackupRetentionRule.allCases) { rule in
                     Button {
                         onSelect(rule)
-                        dismiss()
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: "calendar.badge.clock")
@@ -793,6 +826,7 @@ private struct BackupRetentionRuleSheet: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 14)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
@@ -805,25 +839,27 @@ private struct BackupRetentionRuleSheet: View {
             .padding(.vertical, 6)
             .fitnessCard()
 
-            Button("取消".appLocalized(in: locale)) {
-                dismiss()
+            Button {
+                onCancel()
+            } label: {
+                Text("取消".appLocalized(in: locale))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(SWTheme.primaryText)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                )
-                .buttonStyle(.plain)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, SettingsSheetLayout.horizontalPadding)
         .padding(.top, SettingsSheetLayout.topPadding)
         .padding(.bottom, SettingsSheetLayout.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .top)
-        .appBackground()
-        .settingsAdaptiveSheet(minHeight: 346)
+        .settingsBottomSheetCard()
     }
 }
 
@@ -1064,6 +1100,33 @@ private struct BackupRecordActionPrompt: Identifiable {
     let id = UUID()
     let kind: Kind
     let record: LocalBackupRecord
+
+    func promptTitle(in locale: Locale) -> String {
+        switch kind {
+        case .restore:
+            return "恢复这个备份".appLocalized(in: locale)
+        case .delete:
+            return "删除这个备份".appLocalized(in: locale)
+        }
+    }
+
+    func confirmTitle(in locale: Locale) -> String {
+        switch kind {
+        case .restore:
+            return "确定恢复".appLocalized(in: locale)
+        case .delete:
+            return "确定删除".appLocalized(in: locale)
+        }
+    }
+
+    func message(in locale: Locale) -> String {
+        switch kind {
+        case .restore:
+            return "恢复后会用这份备份覆盖当前设备上的账单、标签、金库目标和存入记录。".appLocalized(in: locale)
+        case .delete:
+            return "删除后，这份备份文件将无法恢复。".appLocalized(in: locale)
+        }
+    }
 }
 
 private struct BackupRecordActionSheet: View {
@@ -1101,30 +1164,36 @@ private struct BackupRecordActionSheet: View {
             .frame(maxWidth: .infinity)
 
             VStack(spacing: SettingsSheetLayout.buttonSpacing) {
-                Button(confirmTitle.appLocalized(in: locale)) {
+                Button {
                     onConfirm()
+                } label: {
+                    Text(confirmTitle.appLocalized(in: locale))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(promptTint.opacity(0.92))
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(promptTint.opacity(0.92))
-                )
                 .buttonStyle(.plain)
 
-                Button("取消".appLocalized(in: locale)) {
+                Button {
                     onCancel()
+                } label: {
+                    Text("取消".appLocalized(in: locale))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SWTheme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(SWTheme.textSecondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
-                )
                 .buttonStyle(.plain)
             }
         }
@@ -1132,8 +1201,7 @@ private struct BackupRecordActionSheet: View {
         .padding(.top, SettingsSheetLayout.topPadding)
         .padding(.bottom, SettingsSheetLayout.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .top)
-        .appBackground()
-        .settingsAdaptiveSheet(minHeight: 256)
+        .settingsBottomSheetCard()
     }
 
     private var promptTitle: String {
