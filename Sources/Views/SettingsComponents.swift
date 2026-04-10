@@ -306,6 +306,17 @@ struct SettingsNoticeSheet: View {
     let onClose: () -> Void
 
     var body: some View {
+        SettingsNoticeCard(payload: payload, onClose: onClose)
+            .appBackground()
+            .settingsAdaptiveSheet(minHeight: 214)
+    }
+}
+
+struct SettingsNoticeCard: View {
+    let payload: SettingsNoticePayload
+    let onClose: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: SettingsSheetLayout.sectionSpacing) {
             SettingsSheetHandle()
 
@@ -332,25 +343,27 @@ struct SettingsNoticeSheet: View {
             }
             .frame(maxWidth: .infinity)
 
-            Button("确定".appLocalized(in: payload.locale)) {
+            Button {
                 onClose()
+            } label: {
+                Text("确定".appLocalized(in: payload.locale))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(SWTheme.accentBlue.opacity(0.92))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(SWTheme.accentBlue.opacity(0.92))
-            )
             .buttonStyle(.plain)
         }
         .padding(.horizontal, SettingsSheetLayout.horizontalPadding)
         .padding(.top, SettingsSheetLayout.topPadding)
         .padding(.bottom, SettingsSheetLayout.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .top)
-        .appBackground()
-        .settingsAdaptiveSheet(minHeight: 214)
+        .settingsBottomSheetCard()
     }
 }
 

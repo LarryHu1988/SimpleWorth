@@ -165,14 +165,15 @@ private enum AppModelContainerFactory {
 
         let configurationName = iCloudSyncEnabled ? "SimpleWorthICloudStore" : "SimpleWorthLocalStore"
 
-        let primaryConfiguration = ModelConfiguration(
-            configurationName,
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: cloudKitDatabase
-        )
-
         do {
+            let storeURL = try persistentStoreURL(iCloudSyncEnabled: iCloudSyncEnabled)
+            let primaryConfiguration = ModelConfiguration(
+                configurationName,
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: cloudKitDatabase
+            )
+
             let container = try ModelContainer(for: schema, configurations: [primaryConfiguration])
             defaults.set(iCloudSyncEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
             return (container, iCloudSyncEnabled, nil)
@@ -190,14 +191,17 @@ private enum AppModelContainerFactory {
         defaults: UserDefaults,
         fallbackError: Error?
     ) -> (container: ModelContainer, isICloudSyncEnabled: Bool, error: Error?) {
-
-        let localConfiguration = ModelConfiguration(
-            "SimpleWorthLocalStore",
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .none
-        )
-        if let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
+        let localConfiguration: ModelConfiguration? = {
+            guard let url = try? persistentStoreURL(iCloudSyncEnabled: false) else { return nil }
+            return ModelConfiguration(
+                "SimpleWorthLocalStore",
+                schema: schema,
+                url: url,
+                cloudKitDatabase: .none
+            )
+        }()
+        if let localConfiguration,
+           let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
             defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
             return (localContainer, false, fallbackError)
         }
@@ -214,6 +218,19 @@ private enum AppModelContainerFactory {
         }
 
         fatalError("Could not create ModelContainer in any mode")
+    }
+
+    private static func persistentStoreURL(iCloudSyncEnabled: Bool) throws -> URL {
+        let supportDirectory = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let storesDirectory = supportDirectory.appendingPathComponent("Stores", isDirectory: true)
+        try FileManager.default.createDirectory(at: storesDirectory, withIntermediateDirectories: true)
+        let fileName = iCloudSyncEnabled ? "SimpleWorth-iCloud.store" : "SimpleWorth-local.store"
+        return storesDirectory.appendingPathComponent(fileName, isDirectory: false)
     }
 
     @MainActor

@@ -26,7 +26,7 @@ struct ICloudSettingsView: View {
     @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.5"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.6"
         return "V\(version)"
     }
 
@@ -611,38 +611,50 @@ private struct ICloudBackupHistoryView: View {
         .navigationTitle("数据备份")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
-            if let prompt = actionPrompt {
-                SettingsBottomSheetOverlay {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        actionPrompt = nil
-                    }
-                } content: {
-                    BackupRecordActionSheet(
-                        prompt: prompt,
-                        locale: locale,
-                        onConfirm: {
-                            dismissActionPromptThen {
-                                switch prompt.kind {
-                                case .restore:
-                                    restore(prompt.record)
-                                case .delete:
-                                    delete(prompt.record)
+            ZStack {
+                if let prompt = actionPrompt {
+                    SettingsBottomSheetOverlay {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            actionPrompt = nil
+                        }
+                    } content: {
+                        BackupRecordActionSheet(
+                            prompt: prompt,
+                            locale: locale,
+                            onConfirm: {
+                                dismissActionPromptThen {
+                                    switch prompt.kind {
+                                    case .restore:
+                                        restore(prompt.record)
+                                    case .delete:
+                                        delete(prompt.record)
+                                    }
+                                }
+                            },
+                            onCancel: {
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    actionPrompt = nil
                                 }
                             }
-                        },
-                        onCancel: {
+                        )
+                    }
+                    .zIndex(3)
+                }
+
+                if let notice = noticeSheet {
+                    SettingsBottomSheetOverlay {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            noticeSheet = nil
+                        }
+                    } content: {
+                        SettingsNoticeCard(payload: notice) {
                             withAnimation(.easeOut(duration: 0.18)) {
-                                actionPrompt = nil
+                                noticeSheet = nil
                             }
                         }
-                    )
+                    }
+                    .zIndex(4)
                 }
-                .zIndex(3)
-            }
-        }
-        .sheet(item: $noticeSheet) { notice in
-            SettingsNoticeSheet(payload: notice) {
-                noticeSheet = nil
             }
         }
     }
