@@ -128,6 +128,13 @@ private struct DebugSettingsNavigationHost: View {
 
 @MainActor
 final class AppRuntimeController: ObservableObject {
+    enum MainTab: Hashable {
+        case expense
+        case income
+        case vault
+        case stats
+    }
+
     struct ContainerSession {
         let id = UUID()
         let container: ModelContainer
@@ -146,6 +153,9 @@ final class AppRuntimeController: ObservableObject {
 
     @Published private(set) var containerSession: ContainerSession
     @Published private(set) var isSwitchingContainer = false
+    @Published var selectedMainTab: MainTab = .expense
+    @Published var isStatsSettingsPresented = false
+    @Published var statsSettingsPath: [SettingsRoute] = []
 
     private let defaults: UserDefaults
     private var containerSwitchTask: Task<Void, Never>?

@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @Environment(\.locale) private var locale
+    @EnvironmentObject private var appRuntimeController: AppRuntimeController
+
     var body: some View {
-        TabView {
+        TabView(selection: selectedTabBinding) {
             NavigationStack {
                 ExpenseView()
             }
+            .tag(AppRuntimeController.MainTab.expense)
             .tabItem {
                 Label("支出", systemImage: "minus.circle.fill")
             }
@@ -14,6 +16,7 @@ struct MainTabView: View {
             NavigationStack {
                 IncomeView()
             }
+            .tag(AppRuntimeController.MainTab.income)
             .tabItem {
                 Label("收入", systemImage: "plus.circle.fill")
             }
@@ -21,6 +24,7 @@ struct MainTabView: View {
             NavigationStack {
                 VaultView()
             }
+            .tag(AppRuntimeController.MainTab.vault)
             .tabItem {
                 Label("金库", systemImage: "lock.shield.fill")
             }
@@ -28,6 +32,7 @@ struct MainTabView: View {
             NavigationStack {
                 StatsView()
             }
+            .tag(AppRuntimeController.MainTab.stats)
             .tabItem {
                 Label("统计", systemImage: "chart.bar.xaxis")
             }
@@ -42,6 +47,13 @@ struct MainTabView: View {
                 darkAlpha: 0.72
             ),
             for: .tabBar
+        )
+    }
+
+    private var selectedTabBinding: Binding<AppRuntimeController.MainTab> {
+        Binding(
+            get: { appRuntimeController.selectedMainTab },
+            set: { appRuntimeController.selectedMainTab = $0 }
         )
     }
 }

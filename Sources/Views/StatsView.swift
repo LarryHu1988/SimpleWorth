@@ -27,6 +27,7 @@ private enum DistributionMode: String, CaseIterable, Identifiable {
 
 struct StatsView: View {
     @Environment(\.locale) private var locale
+    @EnvironmentObject private var appRuntimeController: AppRuntimeController
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
 
@@ -38,9 +39,6 @@ struct StatsView: View {
         1.0,
         Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
     )
-    @State private var showSettingsSheet = false
-    @State private var settingsNavigationPath: [SettingsRoute] = []
-
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: .now)
         let years = Set(entries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
@@ -205,7 +203,8 @@ struct StatsView: View {
                     yearMenu
 
                     Button {
-                        showSettingsSheet = true
+                        appRuntimeController.selectedMainTab = .stats
+                        appRuntimeController.isStatsSettingsPresented = true
                         HapticService.impact()
                     } label: {
                         Image(systemName: "gearshape.fill")
@@ -215,13 +214,8 @@ struct StatsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettingsSheet) {
-            SettingsNavigationHost(path: $settingsNavigationPath)
-        }
-        .onChange(of: showSettingsSheet) { _, isPresented in
-            if !isPresented {
-                settingsNavigationPath.removeAll()
-            }
+        .sheet(isPresented: settingsSheetPresentedBinding) {
+            SettingsNavigationHost(path: settingsNavigationPathBinding)
         }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
@@ -235,6 +229,28 @@ struct StatsView: View {
             syncScrollWithSelection()
         }
         .appBackground()
+    }
+
+    private var settingsSheetPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { appRuntimeController.isStatsSettingsPresented },
+            set: { newValue in
+                if !newValue && appRuntimeController.isSwitchingContainer {
+                    return
+                }
+                appRuntimeController.isStatsSettingsPresented = newValue
+                if !newValue {
+                    appRuntimeController.statsSettingsPath.removeAll()
+                }
+            }
+        )
+    }
+
+    private var settingsNavigationPathBinding: Binding<[SettingsRoute]> {
+        Binding(
+            get: { appRuntimeController.statsSettingsPath },
+            set: { appRuntimeController.statsSettingsPath = $0 }
+        )
     }
 
     private var yearMenu: some View {
