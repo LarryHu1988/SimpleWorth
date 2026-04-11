@@ -93,6 +93,11 @@ final class AppRuntimeController: ObservableObject {
         let container: ModelContainer
     }
 
+    struct PreparedICloudSyncUpdate {
+        let outcome: ICloudSyncUpdateOutcome
+        fileprivate let container: ModelContainer?
+    }
+
     struct ICloudSyncUpdateOutcome {
         let effectiveEnabled: Bool
         let error: Error?
@@ -112,19 +117,21 @@ final class AppRuntimeController: ObservableObject {
         self.containerSession = ContainerSession(container: initialResult.container)
     }
 
-    @discardableResult
-    func updateICloudSync(
+    func prepareICloudSyncUpdate(
         enabled: Bool,
         seedPayload: LedgerBackupPayload? = nil
-    ) -> ICloudSyncUpdateOutcome {
+    ) -> PreparedICloudSyncUpdate {
         let previousEnabled = defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled)
         let result = AppModelContainerFactory.make(iCloudSyncEnabled: enabled, defaults: defaults)
         if enabled && !result.isICloudSyncEnabled {
             defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return ICloudSyncUpdateOutcome(
-                effectiveEnabled: false,
-                error: result.error,
-                fallbackReason: result.error?.localizedDescription
+            return PreparedICloudSyncUpdate(
+                outcome: ICloudSyncUpdateOutcome(
+                    effectiveEnabled: false,
+                    error: result.error,
+                    fallbackReason: result.error?.localizedDescription
+                ),
+                container: nil
             )
         }
 
@@ -137,20 +144,30 @@ final class AppRuntimeController: ObservableObject {
                 )
             } catch {
                 defaults.set(previousEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
-                return ICloudSyncUpdateOutcome(
-                    effectiveEnabled: previousEnabled,
-                    error: error,
-                    fallbackReason: error.localizedDescription
+                return PreparedICloudSyncUpdate(
+                    outcome: ICloudSyncUpdateOutcome(
+                        effectiveEnabled: previousEnabled,
+                        error: error,
+                        fallbackReason: error.localizedDescription
+                    ),
+                    container: nil
                 )
             }
         }
 
-        containerSession = ContainerSession(container: result.container)
-        return ICloudSyncUpdateOutcome(
-            effectiveEnabled: result.isICloudSyncEnabled,
-            error: nil,
-            fallbackReason: nil
+        return PreparedICloudSyncUpdate(
+            outcome: ICloudSyncUpdateOutcome(
+                effectiveEnabled: result.isICloudSyncEnabled,
+                error: nil,
+                fallbackReason: nil
+            ),
+            container: result.container
         )
+    }
+
+    func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
+        guard let container = preparedUpdate.container else { return }
+        containerSession = ContainerSession(container: container)
     }
 }
 

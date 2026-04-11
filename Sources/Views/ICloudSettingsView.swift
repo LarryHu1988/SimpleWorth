@@ -25,7 +25,7 @@ struct ICloudSettingsView: View {
     @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.6"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.8"
         return "V\(version)"
     }
 
@@ -39,6 +39,14 @@ struct ICloudSettingsView: View {
 
     private var latestBackupRecord: LocalBackupRecord? {
         backupRecords.first
+    }
+
+    private var debugAutoToggleInstruction: String? {
+#if DEBUG
+        ProcessInfo.processInfo.environment["SIMPLEWORTH_DEBUG_AUTO_TOGGLE_ICLOUD"]
+#else
+        nil
+#endif
     }
 
     var body: some View {
@@ -141,6 +149,35 @@ struct ICloudSettingsView: View {
         .task {
             iCloudSyncEnabled = persistedICloudSyncEnabled
             refreshPageState()
+        }
+        .task(id: debugAutoToggleInstruction) {
+#if DEBUG
+            guard let debugAutoToggleInstruction else { return }
+            let normalized = debugAutoToggleInstruction.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let targetEnabled: Bool?
+            let shouldForceRun: Bool
+            switch normalized {
+            case "on", "enable", "enabled", "true", "1":
+                targetEnabled = true
+                shouldForceRun = false
+            case "off", "disable", "disabled", "false", "0":
+                targetEnabled = false
+                shouldForceRun = false
+            case "force-on":
+                targetEnabled = true
+                shouldForceRun = true
+            case "force-off":
+                targetEnabled = false
+                shouldForceRun = true
+            default:
+                targetEnabled = nil
+                shouldForceRun = false
+            }
+
+            guard let targetEnabled else { return }
+            guard shouldForceRun || targetEnabled != persistedICloudSyncEnabled else { return }
+            await applyICloudToggleChange(targetEnabled)
+#endif
         }
         .onChange(of: persistedICloudSyncEnabled) { _, newValue in
             guard newValue != iCloudSyncEnabled else { return }
@@ -429,10 +466,11 @@ struct ICloudSettingsView: View {
             return
         }
 
-        let outcome = appRuntimeController.updateICloudSync(
+        let preparedUpdate = appRuntimeController.prepareICloudSyncUpdate(
             enabled: isEnabled,
             seedPayload: hasAnyUserData ? currentBackupPayload() : nil
         )
+        let outcome = preparedUpdate.outcome
         let effectiveEnabled = outcome.effectiveEnabled
         persistedICloudSyncEnabled = effectiveEnabled
         if effectiveEnabled != isEnabled {
@@ -457,6 +495,12 @@ struct ICloudSettingsView: View {
         syncToggleFailureMessage = nil
         syncToggleFailureAlertMessage = nil
         HapticService.success()
+
+        // Publish the new container after the current toggle interaction settles,
+        // so the old view tree does not keep mutating state while it is being replaced.
+        DispatchQueue.main.async {
+            appRuntimeController.commitPreparedICloudSyncUpdate(preparedUpdate)
+        }
     }
 
     @MainActor
