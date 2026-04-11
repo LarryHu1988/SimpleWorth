@@ -45,11 +45,14 @@ private struct AppRootView: View {
 
     var body: some View {
         ZStack {
-            contentHost
-                .id(appRuntimeController.containerSession.id)
-                .environmentObject(appRuntimeController)
-                .environment(\.locale, appLanguage.locale)
-                .modelContainer(appRuntimeController.containerSession.container)
+            if appRuntimeController.isDisplayingLiveContent {
+                contentHost
+                    .id(appRuntimeController.containerSession.id)
+                    .environmentObject(appRuntimeController)
+                    .environment(\.locale, appLanguage.locale)
+                    .modelContainer(appRuntimeController.containerSession.container)
+                    .transition(.identity)
+            }
 
             if appRuntimeController.isSwitchingContainer {
                 ContainerSwitchingView(snapshotImage: appRuntimeController.containerTransitionSnapshot)
@@ -144,6 +147,7 @@ final class AppRuntimeController: ObservableObject {
 
     @Published private(set) var containerSession: ContainerSession
     @Published private(set) var isSwitchingContainer = false
+    @Published private(set) var isDisplayingLiveContent = true
     @Published private(set) var containerTransitionSnapshot: UIImage?
     @Published var selectedMainTab: MainTab = .expense
     @Published var isStatsSettingsPresented = false
@@ -218,16 +222,25 @@ final class AppRuntimeController: ObservableObject {
         containerSwitchTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
-            // Give the old SwiftData-backed view tree a brief moment to leave the screen
-            // before publishing a brand-new container session.
+            // Let the frozen snapshot reach the screen first, then drop the live
+            // SwiftData view tree before swapping the underlying container.
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            guard !Task.isCancelled else { return }
+
+            self.isDisplayingLiveContent = false
+
+            // Give the old SwiftData-backed view tree a brief moment to fully leave
+            // the hierarchy before publishing a brand-new container session.
             try? await Task.sleep(nanoseconds: 180_000_000)
             guard !Task.isCancelled else { return }
 
             self.containerSession = ContainerSession(container: container)
 
+            self.isDisplayingLiveContent = true
+
             // Keep the frozen snapshot around until the new view tree and settings
             // context have both had time to settle behind it.
-            try? await Task.sleep(nanoseconds: 260_000_000)
+            try? await Task.sleep(nanoseconds: 220_000_000)
             guard !Task.isCancelled else { return }
 
             self.isSwitchingContainer = false
