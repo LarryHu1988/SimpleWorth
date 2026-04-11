@@ -16,6 +16,7 @@ struct ICloudSettingsView: View {
 
     @State private var showRetentionSheet = false
     @State private var showBackupHistory = false
+    @State private var hasInitializedSyncToggleState = false
     @State private var suppressNextToggleChange = false
     @State private var backupRecords: [LocalBackupRecord] = []
     @State private var backupActionFeedbackMessage: String?
@@ -147,7 +148,11 @@ struct ICloudSettingsView: View {
             }
         }
         .task {
-            iCloudSyncEnabled = persistedICloudSyncEnabled
+            if !hasInitializedSyncToggleState {
+                suppressNextToggleChange = true
+                iCloudSyncEnabled = persistedICloudSyncEnabled
+                hasInitializedSyncToggleState = true
+            }
             refreshPageState()
         }
         .task(id: debugAutoToggleInstruction) {
@@ -180,11 +185,13 @@ struct ICloudSettingsView: View {
 #endif
         }
         .onChange(of: persistedICloudSyncEnabled) { _, newValue in
+            guard hasInitializedSyncToggleState else { return }
             guard newValue != iCloudSyncEnabled else { return }
             suppressNextToggleChange = true
             iCloudSyncEnabled = newValue
         }
         .onChange(of: iCloudSyncEnabled) { _, newValue in
+            guard hasInitializedSyncToggleState else { return }
             handleICloudSyncToggleChange(newValue)
         }
     }
