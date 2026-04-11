@@ -44,11 +44,19 @@ private struct AppRootView: View {
     let themeMode: ThemeMode
 
     var body: some View {
-        rootContent
-            .id(appRuntimeController.containerSession.id)
-            .environmentObject(appRuntimeController)
-            .environment(\.locale, appLanguage.locale)
-            .modelContainer(appRuntimeController.containerSession.container)
+        ZStack {
+            contentHost
+                .id(appRuntimeController.containerSession.id)
+                .environmentObject(appRuntimeController)
+                .environment(\.locale, appLanguage.locale)
+                .modelContainer(appRuntimeController.containerSession.container)
+
+            if appRuntimeController.isSwitchingContainer {
+                ContainerSwitchingView(snapshotImage: appRuntimeController.containerTransitionSnapshot)
+                    .transition(.identity)
+                    .allowsHitTesting(false)
+            }
+        }
             .task(id: themeMode.rawValue) {
                 await MainActor.run {
                     AppAppearanceController.apply(themeMode: themeMode)
@@ -56,13 +64,8 @@ private struct AppRootView: View {
             }
     }
 
-    @ViewBuilder
-    private var rootContent: some View {
-        if appRuntimeController.isSwitchingContainer {
-            ContainerSwitchingView(snapshotImage: appRuntimeController.containerTransitionSnapshot)
-        } else {
-            debugRootView
-        }
+    private var contentHost: some View {
+        debugRootView
     }
 
     @ViewBuilder
@@ -222,9 +225,9 @@ final class AppRuntimeController: ObservableObject {
 
             self.containerSession = ContainerSession(container: container)
 
-            // Keep the transition shell around for one more beat so the new container
-            // can settle before we show views backed by fresh @Query chains again.
-            try? await Task.sleep(nanoseconds: 140_000_000)
+            // Keep the frozen snapshot around until the new view tree and settings
+            // context have both had time to settle behind it.
+            try? await Task.sleep(nanoseconds: 260_000_000)
             guard !Task.isCancelled else { return }
 
             self.isSwitchingContainer = false
