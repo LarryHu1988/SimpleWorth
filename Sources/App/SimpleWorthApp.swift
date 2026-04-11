@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 @main
 struct SimpleWorthApp: App {
@@ -58,7 +59,7 @@ private struct AppRootView: View {
     @ViewBuilder
     private var rootContent: some View {
         if appRuntimeController.isSwitchingContainer {
-            ContainerSwitchingView()
+            ContainerSwitchingView(snapshotImage: appRuntimeController.containerTransitionSnapshot)
         } else {
             debugRootView
         }
@@ -88,32 +89,19 @@ private struct AppRootView: View {
 }
 
 private struct ContainerSwitchingView: View {
+    let snapshotImage: UIImage?
+
     var body: some View {
         ZStack {
-            SWTheme.appBackground
-                .ignoresSafeArea()
-
-            VStack(spacing: 14) {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .tint(SWTheme.accentBlue)
-                    .scaleEffect(1.05)
-
-                Text("正在切换同步状态…")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SWTheme.primaryText)
+            if let snapshotImage {
+                Image(uiImage: snapshotImage)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+            } else {
+                SWTheme.appBackground
+                    .ignoresSafeArea()
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 22)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
-            )
-            .padding(24)
         }
     }
 }
@@ -153,6 +141,7 @@ final class AppRuntimeController: ObservableObject {
 
     @Published private(set) var containerSession: ContainerSession
     @Published private(set) var isSwitchingContainer = false
+    @Published private(set) var containerTransitionSnapshot: UIImage?
     @Published var selectedMainTab: MainTab = .expense
     @Published var isStatsSettingsPresented = false
     @Published var statsSettingsPath: [SettingsRoute] = []
@@ -220,6 +209,7 @@ final class AppRuntimeController: ObservableObject {
     func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
         guard let container = preparedUpdate.container else { return }
         containerSwitchTask?.cancel()
+        containerTransitionSnapshot = AppWindowSnapshotFactory.capture()
         isSwitchingContainer = true
 
         containerSwitchTask = Task { @MainActor [weak self] in
@@ -238,7 +228,29 @@ final class AppRuntimeController: ObservableObject {
             guard !Task.isCancelled else { return }
 
             self.isSwitchingContainer = false
+            self.containerTransitionSnapshot = nil
             self.containerSwitchTask = nil
+        }
+    }
+}
+
+private enum AppWindowSnapshotFactory {
+    @MainActor
+    static func capture() -> UIImage? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        let window = windows.first(where: \.isKeyWindow) ?? windows.last
+
+        guard let window else { return nil }
+
+        let format = UIGraphicsImageRendererFormat(for: window.traitCollection)
+        format.scale = window.screen.scale
+        format.opaque = true
+
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds, format: format)
+        return renderer.image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
         }
     }
 }
