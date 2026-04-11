@@ -155,6 +155,8 @@ final class AppRuntimeController: ObservableObject {
 
     private let defaults: UserDefaults
     private var containerSwitchTask: Task<Void, Never>?
+    private var containerSwitchCleanupTask: Task<Void, Never>?
+    private var isAwaitingContainerPresentationRestore = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -216,6 +218,8 @@ final class AppRuntimeController: ObservableObject {
     func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
         guard let container = preparedUpdate.container else { return }
         containerSwitchTask?.cancel()
+        containerSwitchCleanupTask?.cancel()
+        isAwaitingContainerPresentationRestore = false
         containerTransitionSnapshot = AppWindowSnapshotFactory.capture()
         isSwitchingContainer = true
 
@@ -237,16 +241,40 @@ final class AppRuntimeController: ObservableObject {
             self.containerSession = ContainerSession(container: container)
 
             self.isDisplayingLiveContent = true
+            self.isAwaitingContainerPresentationRestore = true
 
-            // Keep the frozen snapshot around until the new view tree and settings
-            // context have both had time to settle behind it.
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            guard !Task.isCancelled else { return }
-
-            self.isSwitchingContainer = false
-            self.containerTransitionSnapshot = nil
             self.containerSwitchTask = nil
+            self.scheduleContainerSwitchCleanupFallback()
         }
+    }
+
+    func notifyICloudSettingsDidAppearAfterContainerSwitch() {
+        guard isAwaitingContainerPresentationRestore else { return }
+        containerSwitchCleanupTask?.cancel()
+        containerSwitchCleanupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else { return }
+            self.finishContainerSwitchTransition()
+        }
+    }
+
+    private func scheduleContainerSwitchCleanupFallback() {
+        containerSwitchCleanupTask?.cancel()
+        containerSwitchCleanupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            self.finishContainerSwitchTransition()
+        }
+    }
+
+    private func finishContainerSwitchTransition() {
+        guard isSwitchingContainer else { return }
+        isAwaitingContainerPresentationRestore = false
+        isSwitchingContainer = false
+        containerTransitionSnapshot = nil
+        containerSwitchCleanupTask = nil
     }
 }
 

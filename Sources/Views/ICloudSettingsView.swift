@@ -155,6 +155,9 @@ struct ICloudSettingsView: View {
             }
             refreshPageState()
         }
+        .task(id: appRuntimeController.containerSession.id) {
+            appRuntimeController.notifyICloudSettingsDidAppearAfterContainerSwitch()
+        }
         .task(id: debugAutoToggleInstruction) {
 #if DEBUG
             guard let debugAutoToggleInstruction else { return }
