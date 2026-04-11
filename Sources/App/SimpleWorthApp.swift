@@ -148,6 +148,7 @@ final class AppRuntimeController: ObservableObject {
     @Published private(set) var isSwitchingContainer = false
 
     private let defaults: UserDefaults
+    private var containerSwitchTask: Task<Void, Never>?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -208,16 +209,26 @@ final class AppRuntimeController: ObservableObject {
 
     func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
         guard let container = preparedUpdate.container else { return }
-        DispatchQueue.main.async {
-            self.isSwitchingContainer = true
+        containerSwitchTask?.cancel()
+        isSwitchingContainer = true
 
-            DispatchQueue.main.async {
-                self.containerSession = ContainerSession(container: container)
+        containerSwitchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
 
-                DispatchQueue.main.async {
-                    self.isSwitchingContainer = false
-                }
-            }
+            // Give the old SwiftData-backed view tree a brief moment to leave the screen
+            // before publishing a brand-new container session.
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+
+            self.containerSession = ContainerSession(container: container)
+
+            // Keep the transition shell around for one more beat so the new container
+            // can settle before we show views backed by fresh @Query chains again.
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard !Task.isCancelled else { return }
+
+            self.isSwitchingContainer = false
+            self.containerSwitchTask = nil
         }
     }
 }
