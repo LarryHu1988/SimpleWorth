@@ -43,7 +43,7 @@ private struct AppRootView: View {
     let themeMode: ThemeMode
 
     var body: some View {
-        debugRootView
+        rootContent
             .id(appRuntimeController.containerSession.id)
             .environmentObject(appRuntimeController)
             .environment(\.locale, appLanguage.locale)
@@ -53,6 +53,15 @@ private struct AppRootView: View {
                     AppAppearanceController.apply(themeMode: themeMode)
                 }
             }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        if appRuntimeController.isSwitchingContainer {
+            ContainerSwitchingView()
+        } else {
+            debugRootView
+        }
     }
 
     @ViewBuilder
@@ -75,6 +84,37 @@ private struct AppRootView: View {
 #else
         SeededRootView()
 #endif
+    }
+}
+
+private struct ContainerSwitchingView: View {
+    var body: some View {
+        ZStack {
+            SWTheme.appBackground
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(SWTheme.accentBlue)
+                    .scaleEffect(1.05)
+
+                Text("正在切换同步状态…")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SWTheme.primaryText)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+            )
+            .padding(24)
+        }
     }
 }
 
@@ -105,6 +145,7 @@ final class AppRuntimeController: ObservableObject {
     }
 
     @Published private(set) var containerSession: ContainerSession
+    @Published private(set) var isSwitchingContainer = false
 
     private let defaults: UserDefaults
 
@@ -167,7 +208,17 @@ final class AppRuntimeController: ObservableObject {
 
     func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
         guard let container = preparedUpdate.container else { return }
-        containerSession = ContainerSession(container: container)
+        DispatchQueue.main.async {
+            self.isSwitchingContainer = true
+
+            DispatchQueue.main.async {
+                self.containerSession = ContainerSession(container: container)
+
+                DispatchQueue.main.async {
+                    self.isSwitchingContainer = false
+                }
+            }
+        }
     }
 }
 

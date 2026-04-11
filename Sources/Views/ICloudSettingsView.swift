@@ -502,12 +502,7 @@ struct ICloudSettingsView: View {
         syncToggleFailureMessage = nil
         syncToggleFailureAlertMessage = nil
         HapticService.success()
-
-        // Publish the new container after the current toggle interaction settles,
-        // so the old view tree does not keep mutating state while it is being replaced.
-        DispatchQueue.main.async {
-            appRuntimeController.commitPreparedICloudSyncUpdate(preparedUpdate)
-        }
+        appRuntimeController.commitPreparedICloudSyncUpdate(preparedUpdate)
     }
 
     @MainActor
