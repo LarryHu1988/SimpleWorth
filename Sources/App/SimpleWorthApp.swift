@@ -66,6 +66,7 @@ private struct AppRootView: View {
                 .environmentObject(appRuntimeController)
                 .environment(\.locale, appLanguage.locale)
                 .modelContainer(appRuntimeController.containerSession.container)
+                .presentationBackground(.clear)
         }
         .task(id: themeMode.rawValue) {
             await MainActor.run {
