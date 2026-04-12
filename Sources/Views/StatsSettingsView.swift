@@ -78,7 +78,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.8"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.0"
         return "V\(version)"
     }
 
@@ -978,7 +978,7 @@ private struct PrivacyAgreementView: View {
                     Text("账单、标签、目标与存入记录默认仅保存在当前设备。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
-                    Text("开启 iCloud 同步后，相关数据会同步到你当前 Apple 账号的 iCloud 私有数据库。")
+                    Text("开启 iCloud 自动备份后，新的备份文件会同步保存到你当前 Apple 账号的 iCloud。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
                 }

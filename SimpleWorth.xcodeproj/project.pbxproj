@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -19,7 +19,6 @@
 		8426C25AB8AB5A7A8F73EBC8 /* EntryEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */; };
 		8C4BC15282FDA9D75A5D52E7 /* ExpenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A015262E5CB25D039C4152B1 /* ExpenseView.swift */; };
 		9189748DDFFA202DB03684CF /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */; };
-		F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */; };
 		A2B0222A7E2498CF07565BB2 /* LedgerFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0081162AD6EA4A233BEBAEF1 /* LedgerFlowView.swift */; };
 		A83243D4AC7326913A51FB24 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8CC5A0E0618DE5718CA19A /* StatsView.swift */; };
 		B6F776736C77E5C3B9AF29A1 /* ICloudSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */; };
@@ -33,6 +32,7 @@
 		D5E2109C6BDB545A5B0B3766 /* CurrencyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00BD27896032AD314F49535 /* CurrencyModels.swift */; };
 		D7319AE5DA9FE7879C53796C /* FinanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE152A23C83913C552261AF /* FinanceModels.swift */; };
 		ED782BB767E744A35C69ACE2 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF770E7D5B3F22C8237C0A0 /* Localization.swift */; };
+		F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */; };
 		FA0E5C8B4C9320B35B972A65 /* StatsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,7 +46,7 @@
 		3362111762B8F8D347B7CEE0 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		33DA35F8A0F5D42A8BF6F79A /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsSettingsView.swift; sourceTree = "<group>"; };
-		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudSettingsView.swift; sourceTree = "<group>"; };
 		7A1A84C9C1CD234D84984D79 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7C96A3031E8C6C9E884649D0 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
@@ -193,7 +193,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2640;
 			};
 			buildConfigurationList = CC0F09E668858878296DAB32 /* Build configuration list for PBXProject "SimpleWorth" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -208,7 +208,6 @@
 			);
 			mainGroup = 537E2A7B543AC8E96392DF3D;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -287,6 +286,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SimpleWorth.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"Sources/Preview Content\"";
+				DEVELOPMENT_TEAM = 2S7X36GQC9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -308,6 +308,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SimpleWorth.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"Sources/Preview Content\"";
+				DEVELOPMENT_TEAM = 2S7X36GQC9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -325,6 +326,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -358,6 +361,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -378,6 +382,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -388,6 +393,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -421,6 +428,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -434,6 +442,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;

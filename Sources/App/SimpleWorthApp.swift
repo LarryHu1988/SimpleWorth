@@ -1,6 +1,5 @@
 import SwiftData
 import SwiftUI
-import UIKit
 
 @main
 struct SimpleWorthApp: App {
@@ -44,29 +43,16 @@ private struct AppRootView: View {
     let themeMode: ThemeMode
 
     var body: some View {
-        ZStack {
-            if appRuntimeController.isDisplayingLiveContent {
-                contentHost
-                    .id(appRuntimeController.containerSession.id)
-                    .environmentObject(appRuntimeController)
-                    .environment(\.locale, appLanguage.locale)
-                    .modelContainer(appRuntimeController.containerSession.container)
-                    .transition(.identity)
-            }
-
-            if appRuntimeController.isSwitchingContainer {
-                ContainerSwitchingView(snapshotImage: appRuntimeController.containerTransitionSnapshot)
-                    .transition(.identity)
-                    .allowsHitTesting(false)
-            }
-        }
+        contentHost
+            .environmentObject(appRuntimeController)
+            .environment(\.locale, appLanguage.locale)
+            .modelContainer(appRuntimeController.container)
         .sheet(isPresented: settingsSheetPresentedBinding) {
-            SettingsNavigationHost(path: settingsNavigationPathBinding)
-                .id(appRuntimeController.containerSession.id)
-                .environmentObject(appRuntimeController)
-                .environment(\.locale, appLanguage.locale)
-                .modelContainer(appRuntimeController.containerSession.container)
-                .presentationBackground(.clear)
+            SettingsSheetPresentationHost(
+                appRuntimeController: appRuntimeController,
+                appLanguage: appLanguage,
+                path: settingsNavigationPathBinding
+            )
         }
         .task(id: themeMode.rawValue) {
             await MainActor.run {
@@ -83,9 +69,6 @@ private struct AppRootView: View {
         Binding(
             get: { appRuntimeController.isStatsSettingsPresented },
             set: { newValue in
-                if !newValue && appRuntimeController.isSwitchingContainer {
-                    return
-                }
                 appRuntimeController.isStatsSettingsPresented = newValue
                 if !newValue {
                     appRuntimeController.statsSettingsPath.removeAll()
@@ -124,21 +107,17 @@ private struct AppRootView: View {
     }
 }
 
-private struct ContainerSwitchingView: View {
-    let snapshotImage: UIImage?
+private struct SettingsSheetPresentationHost: View {
+    @ObservedObject var appRuntimeController: AppRuntimeController
+    let appLanguage: AppLanguage
+    @Binding var path: [SettingsRoute]
 
     var body: some View {
-        ZStack {
-            if let snapshotImage {
-                Image(uiImage: snapshotImage)
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-            } else {
-                SWTheme.appBackground
-                    .ignoresSafeArea()
-            }
-        }
+        SettingsNavigationHost(path: $path)
+            .environmentObject(appRuntimeController)
+            .environment(\.locale, appLanguage.locale)
+            .modelContainer(appRuntimeController.container)
+        .presentationBackground(.clear)
     }
 }
 
@@ -159,181 +138,19 @@ final class AppRuntimeController: ObservableObject {
         case stats
     }
 
-    struct ContainerSession {
-        let id = UUID()
-        let container: ModelContainer
-    }
-
-    struct PreparedICloudSyncUpdate {
-        let outcome: ICloudSyncUpdateOutcome
-        fileprivate let container: ModelContainer?
-    }
-
-    struct ICloudSyncUpdateOutcome {
-        let effectiveEnabled: Bool
-        let error: Error?
-        let fallbackReason: String?
-    }
-
-    @Published private(set) var containerSession: ContainerSession
-    @Published private(set) var isSwitchingContainer = false
-    @Published private(set) var isDisplayingLiveContent = true
-    @Published private(set) var containerTransitionSnapshot: UIImage?
+    let container: ModelContainer
     @Published var selectedMainTab: MainTab = .expense
     @Published var isStatsSettingsPresented = false
     @Published var statsSettingsPath: [SettingsRoute] = []
 
-    private let defaults: UserDefaults
-    private var containerSwitchTask: Task<Void, Never>?
-    private var containerSwitchCleanupTask: Task<Void, Never>?
-    private var isAwaitingContainerPresentationRestore = false
-
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        let initialResult = AppModelContainerFactory.make(
-            iCloudSyncEnabled: defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled),
-            defaults: defaults
-        )
-        self.containerSession = ContainerSession(container: initialResult.container)
-    }
-
-    func prepareICloudSyncUpdate(
-        enabled: Bool,
-        seedPayload: LedgerBackupPayload? = nil
-    ) -> PreparedICloudSyncUpdate {
-        let previousEnabled = defaults.bool(forKey: SettingsKeys.iCloudSyncEnabled)
-        let result = AppModelContainerFactory.make(iCloudSyncEnabled: enabled, defaults: defaults)
-        if enabled && !result.isICloudSyncEnabled {
-            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return PreparedICloudSyncUpdate(
-                outcome: ICloudSyncUpdateOutcome(
-                    effectiveEnabled: false,
-                    error: result.error,
-                    fallbackReason: result.error?.localizedDescription
-                ),
-                container: nil
-            )
-        }
-
-        if let seedPayload {
-            do {
-                try AppModelContainerFactory.seedContainerIfNeeded(
-                    result.container,
-                    with: seedPayload,
-                    overwriteExistingData: !enabled
-                )
-            } catch {
-                defaults.set(previousEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
-                return PreparedICloudSyncUpdate(
-                    outcome: ICloudSyncUpdateOutcome(
-                        effectiveEnabled: previousEnabled,
-                        error: error,
-                        fallbackReason: error.localizedDescription
-                    ),
-                    container: nil
-                )
-            }
-        }
-
-        return PreparedICloudSyncUpdate(
-            outcome: ICloudSyncUpdateOutcome(
-                effectiveEnabled: result.isICloudSyncEnabled,
-                error: nil,
-                fallbackReason: nil
-            ),
-            container: result.container
-        )
-    }
-
-    func commitPreparedICloudSyncUpdate(_ preparedUpdate: PreparedICloudSyncUpdate) {
-        guard let container = preparedUpdate.container else { return }
-        containerSwitchTask?.cancel()
-        containerSwitchCleanupTask?.cancel()
-        isAwaitingContainerPresentationRestore = false
-        containerTransitionSnapshot = AppWindowSnapshotFactory.capture()
-        isSwitchingContainer = true
-
-        containerSwitchTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            // Let the frozen snapshot reach the screen first, then drop the live
-            // SwiftData view tree before swapping the underlying container.
-            try? await Task.sleep(nanoseconds: 16_000_000)
-            guard !Task.isCancelled else { return }
-
-            self.isDisplayingLiveContent = false
-
-            // Give the old SwiftData-backed view tree a brief moment to fully leave
-            // the hierarchy before publishing a brand-new container session.
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            guard !Task.isCancelled else { return }
-
-            self.containerSession = ContainerSession(container: container)
-
-            self.isDisplayingLiveContent = true
-            self.isAwaitingContainerPresentationRestore = true
-
-            self.containerSwitchTask = nil
-            self.scheduleContainerSwitchCleanupFallback()
-        }
-    }
-
-    func notifyICloudSettingsDidAppearAfterContainerSwitch() {
-        guard isAwaitingContainerPresentationRestore else { return }
-        containerSwitchCleanupTask?.cancel()
-        containerSwitchCleanupTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            guard !Task.isCancelled else { return }
-            self.finishContainerSwitchTransition()
-        }
-    }
-
-    private func scheduleContainerSwitchCleanupFallback() {
-        containerSwitchCleanupTask?.cancel()
-        containerSwitchCleanupTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            guard !Task.isCancelled else { return }
-            self.finishContainerSwitchTransition()
-        }
-    }
-
-    private func finishContainerSwitchTransition() {
-        guard isSwitchingContainer else { return }
-        isAwaitingContainerPresentationRestore = false
-        isSwitchingContainer = false
-        containerTransitionSnapshot = nil
-        containerSwitchCleanupTask = nil
-    }
-}
-
-private enum AppWindowSnapshotFactory {
-    @MainActor
-    static func capture() -> UIImage? {
-        let windows = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-        let window = windows.first(where: \.isKeyWindow) ?? windows.last
-
-        guard let window else { return nil }
-
-        let format = UIGraphicsImageRendererFormat(for: window.traitCollection)
-        format.scale = window.screen.scale
-        format.opaque = true
-
-        let renderer = UIGraphicsImageRenderer(bounds: window.bounds, format: format)
-        return renderer.image { _ in
-            window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
-        }
+        self.container = AppModelContainerFactory.make(defaults: defaults)
     }
 }
 
 private enum AppModelContainerFactory {
-    static func make(
-        iCloudSyncEnabled: Bool,
-        defaults: UserDefaults = .standard
-    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool, error: Error?) {
+    @MainActor
+    static func make(defaults: UserDefaults = .standard) -> ModelContainer {
         let schema = Schema([
             TagRecord.self,
             LedgerEntry.self,
@@ -341,40 +158,27 @@ private enum AppModelContainerFactory {
             VaultDepositRecord.self
         ])
 
-        let cloudKitDatabase: ModelConfiguration.CloudKitDatabase = iCloudSyncEnabled
-            ? .private(AppConfig.iCloudContainerIdentifier)
-            : .none
-
-        let configurationName = iCloudSyncEnabled ? "SimpleWorthICloudStore" : "SimpleWorthLocalStore"
-
         do {
-            let storeURL = try persistentStoreURL(iCloudSyncEnabled: iCloudSyncEnabled)
+            let storeURL = try persistentStoreURL(kind: .local)
             let primaryConfiguration = ModelConfiguration(
-                configurationName,
+                "SimpleWorthLocalStore",
                 schema: schema,
                 url: storeURL,
-                cloudKitDatabase: cloudKitDatabase
+                cloudKitDatabase: .none
             )
 
             let container = try ModelContainer(for: schema, configurations: [primaryConfiguration])
-            defaults.set(iCloudSyncEnabled, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (container, iCloudSyncEnabled, nil)
+            try? migrateLegacyICloudStoreIfNeeded(into: container, schema: schema, defaults: defaults)
+            return container
         } catch {
-            if !iCloudSyncEnabled {
-                return makeFallbackLocalContainer(schema: schema, defaults: defaults, fallbackError: error)
-            }
-
-            return makeFallbackLocalContainer(schema: schema, defaults: defaults, fallbackError: error)
+            return makeFallbackLocalContainer(schema: schema)
         }
     }
 
-    private static func makeFallbackLocalContainer(
-        schema: Schema,
-        defaults: UserDefaults,
-        fallbackError: Error?
-    ) -> (container: ModelContainer, isICloudSyncEnabled: Bool, error: Error?) {
+    @MainActor
+    private static func makeFallbackLocalContainer(schema: Schema) -> ModelContainer {
         let localConfiguration: ModelConfiguration? = {
-            guard let url = try? persistentStoreURL(iCloudSyncEnabled: false) else { return nil }
+            guard let url = try? persistentStoreURL(kind: .local) else { return nil }
             return ModelConfiguration(
                 "SimpleWorthLocalStore",
                 schema: schema,
@@ -384,8 +188,7 @@ private enum AppModelContainerFactory {
         }()
         if let localConfiguration,
            let localContainer = try? ModelContainer(for: schema, configurations: [localConfiguration]) {
-            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (localContainer, false, fallbackError)
+            return localContainer
         }
 
         let inMemoryConfiguration = ModelConfiguration(
@@ -395,14 +198,18 @@ private enum AppModelContainerFactory {
             cloudKitDatabase: .none
         )
         if let inMemoryContainer = try? ModelContainer(for: schema, configurations: [inMemoryConfiguration]) {
-            defaults.set(false, forKey: SettingsKeys.iCloudSyncEnabled)
-            return (inMemoryContainer, false, fallbackError)
+            return inMemoryContainer
         }
 
         fatalError("Could not create ModelContainer in any mode")
     }
 
-    private static func persistentStoreURL(iCloudSyncEnabled: Bool) throws -> URL {
+    private enum StoreKind {
+        case local
+        case legacyICloud
+    }
+
+    private static func persistentStoreURL(kind: StoreKind) throws -> URL {
         let supportDirectory = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -411,8 +218,105 @@ private enum AppModelContainerFactory {
         )
         let storesDirectory = supportDirectory.appendingPathComponent("Stores", isDirectory: true)
         try FileManager.default.createDirectory(at: storesDirectory, withIntermediateDirectories: true)
-        let fileName = iCloudSyncEnabled ? "SimpleWorth-iCloud.store" : "SimpleWorth-local.store"
+        let fileName: String
+        switch kind {
+        case .local:
+            fileName = "SimpleWorth-local.store"
+        case .legacyICloud:
+            fileName = "SimpleWorth-iCloud.store"
+        }
         return storesDirectory.appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    @MainActor
+    private static func migrateLegacyICloudStoreIfNeeded(
+        into localContainer: ModelContainer,
+        schema: Schema,
+        defaults: UserDefaults
+    ) throws {
+        guard !defaults.bool(forKey: SettingsKeys.didMigrateLegacyICloudStoreToLocal) else { return }
+
+        let localContext = localContainer.mainContext
+        let localEntries = try localContext.fetch(FetchDescriptor<LedgerEntry>())
+        let localTags = try localContext.fetch(FetchDescriptor<TagRecord>())
+        let localGoals = try localContext.fetch(FetchDescriptor<SavingsGoalRecord>())
+        let localDeposits = try localContext.fetch(FetchDescriptor<VaultDepositRecord>())
+        let localHasData =
+            !localEntries.isEmpty ||
+            !localTags.isEmpty ||
+            !localGoals.isEmpty ||
+            !localDeposits.isEmpty
+
+        guard !localHasData else {
+            defaults.set(true, forKey: SettingsKeys.didMigrateLegacyICloudStoreToLocal)
+            return
+        }
+
+        let legacyStoreURL = try persistentStoreURL(kind: .legacyICloud)
+        guard FileManager.default.fileExists(atPath: legacyStoreURL.path) else {
+            defaults.set(true, forKey: SettingsKeys.didMigrateLegacyICloudStoreToLocal)
+            return
+        }
+
+        guard let legacyContainer = makeLegacyICloudContainer(schema: schema, storeURL: legacyStoreURL) else {
+            return
+        }
+
+        let legacyContext = legacyContainer.mainContext
+        let legacyEntries = try legacyContext.fetch(FetchDescriptor<LedgerEntry>())
+        let legacyTags = try legacyContext.fetch(FetchDescriptor<TagRecord>())
+        let legacyGoals = try legacyContext.fetch(FetchDescriptor<SavingsGoalRecord>())
+        let legacyDeposits = try legacyContext.fetch(FetchDescriptor<VaultDepositRecord>())
+
+        let legacyHasData =
+            !legacyEntries.isEmpty ||
+            !legacyTags.isEmpty ||
+            !legacyGoals.isEmpty ||
+            !legacyDeposits.isEmpty
+
+        guard legacyHasData else {
+            defaults.set(true, forKey: SettingsKeys.didMigrateLegacyICloudStoreToLocal)
+            return
+        }
+
+        let payload = LedgerBackupCoordinator.makePayload(
+            appVersion: "legacy-iCloud-store",
+            entries: legacyEntries,
+            tags: legacyTags,
+            goals: legacyGoals,
+            deposits: legacyDeposits
+        )
+        try LedgerBackupCoordinator.replaceLocalData(
+            with: payload,
+            context: localContext,
+            entries: localEntries,
+            tags: localTags,
+            goals: localGoals,
+            deposits: localDeposits
+        )
+        defaults.set(true, forKey: SettingsKeys.didMigrateLegacyICloudStoreToLocal)
+    }
+
+    @MainActor
+    private static func makeLegacyICloudContainer(schema: Schema, storeURL: URL) -> ModelContainer? {
+        let cloudKitConfiguration = ModelConfiguration(
+            "SimpleWorthLegacyICloudStore",
+            schema: schema,
+            url: storeURL,
+            cloudKitDatabase: .private(AppConfig.iCloudContainerIdentifier)
+        )
+
+        if let container = try? ModelContainer(for: schema, configurations: [cloudKitConfiguration]) {
+            return container
+        }
+
+        let localReadConfiguration = ModelConfiguration(
+            "SimpleWorthLegacyICloudStoreFallback",
+            schema: schema,
+            url: storeURL,
+            cloudKitDatabase: .none
+        )
+        return try? ModelContainer(for: schema, configurations: [localReadConfiguration])
     }
 
     @MainActor

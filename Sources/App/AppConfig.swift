@@ -6,6 +6,7 @@ enum AppConfig {
 
 enum SettingsKeys {
     static let iCloudSyncEnabled = "settings.iCloudSyncEnabled"
+    static let didMigrateLegacyICloudStoreToLocal = "settings.didMigrateLegacyICloudStoreToLocal"
     static let backupRetentionDays = "settings.backupRetentionDays"
     static let baseCurrencyCode = "settings.baseCurrencyCode"
     static let themeMode = "settings.themeMode"

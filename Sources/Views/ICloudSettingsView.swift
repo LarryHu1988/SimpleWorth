@@ -4,7 +4,6 @@ import SwiftUI
 
 struct ICloudSettingsView: View {
     @Environment(\.locale) private var locale
-    @EnvironmentObject private var appRuntimeController: AppRuntimeController
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
@@ -26,7 +25,7 @@ struct ICloudSettingsView: View {
     @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.8"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.0"
         return "V\(version)"
     }
 
@@ -88,11 +87,11 @@ struct ICloudSettingsView: View {
                 SettingsRowDivider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("开启后会把账单、标签、金库目标和存入记录同步到当前设备的 iCloud 私有数据库，并每天自动保留一份本地备份。")
+                    Text("开启后，新的备份文件会同时保存在本机和当前 Apple 账号的 iCloud，方便在同账号设备上恢复。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
 
-                    Text("恢复备份会覆盖当前设备上的账单数据，建议先确认现在的内容已经保存。")
+                    Text("关闭后不会影响当前账单内容，只会停止后续备份同步到 iCloud。恢复备份会覆盖当前设备上的账单数据，建议先确认现在的内容已经保存。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
                 }
@@ -154,9 +153,6 @@ struct ICloudSettingsView: View {
                 hasInitializedSyncToggleState = true
             }
             refreshPageState()
-        }
-        .task(id: appRuntimeController.containerSession.id) {
-            appRuntimeController.notifyICloudSettingsDidAppearAfterContainerSwitch()
         }
         .task(id: debugAutoToggleInstruction) {
 #if DEBUG
@@ -421,7 +417,11 @@ struct ICloudSettingsView: View {
 
         do {
             let payload = currentBackupPayload()
-            _ = try LocalBackupStore.createBackup(payload: payload, source: .manual)
+            _ = try LocalBackupStore.createBackup(
+                payload: payload,
+                source: .manual,
+                mirrorToICloud: persistedICloudSyncEnabled
+            )
             LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
             reloadBackupRecords()
             backupActionFeedbackMessage = nil
@@ -436,7 +436,8 @@ struct ICloudSettingsView: View {
         do {
             try LocalBackupStore.ensureAutomaticBackupIfNeeded(
                 payload: currentBackupPayload(),
-                shouldCreate: hasAnyUserData
+                shouldCreate: hasAnyUserData,
+                mirrorToICloud: persistedICloudSyncEnabled
             )
             LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
             reloadBackupRecords()
@@ -476,36 +477,29 @@ struct ICloudSettingsView: View {
             return
         }
 
-        let preparedUpdate = appRuntimeController.prepareICloudSyncUpdate(
-            enabled: isEnabled,
-            seedPayload: hasAnyUserData ? currentBackupPayload() : nil
-        )
-        let outcome = preparedUpdate.outcome
-        let effectiveEnabled = outcome.effectiveEnabled
-        persistedICloudSyncEnabled = effectiveEnabled
-        if effectiveEnabled != isEnabled {
-            suppressNextToggleChange = true
-            iCloudSyncEnabled = effectiveEnabled
-        }
-
-        if let error = outcome.error {
-            let message = isEnabled
-                ? iCloudEnableFailureMessage(reason: outcome.fallbackReason ?? error.localizedDescription)
-                : L10n.string("settings.iCloudDisableMigrationFailed", locale: locale, error.localizedDescription)
-            presentICloudToggleFailure(message)
-            return
-        }
-
-        if isEnabled && !effectiveEnabled {
-            let message = iCloudEnableFailureMessage(reason: outcome.fallbackReason)
-            presentICloudToggleFailure(message)
-            return
-        }
-
+        persistedICloudSyncEnabled = isEnabled
+        suppressNextToggleChange = true
+        iCloudSyncEnabled = isEnabled
         syncToggleFailureMessage = nil
         syncToggleFailureAlertMessage = nil
-        HapticService.success()
-        appRuntimeController.commitPreparedICloudSyncUpdate(preparedUpdate)
+
+        do {
+            if isEnabled {
+                try LocalBackupStore.syncExistingLocalBackupsToICloud()
+                if hasAnyUserData {
+                    try LocalBackupStore.ensureAutomaticBackupIfNeeded(
+                        payload: currentBackupPayload(),
+                        shouldCreate: true,
+                        mirrorToICloud: true
+                    )
+                }
+            }
+            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
+            reloadBackupRecords()
+            HapticService.success()
+        } catch {
+            revertICloudToggle(afterFailedEnablementWith: iCloudEnableFailureMessage(reason: error.localizedDescription))
+        }
     }
 
     @MainActor
@@ -525,14 +519,13 @@ struct ICloudSettingsView: View {
 
     private func iCloudEnableFailureMessage(reason: String?) -> String {
         guard let reason, !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "当前无法启用 iCloud 同步，已继续使用本地存储。".appLocalized(in: locale)
+            return "当前无法启用 iCloud 自动备份，请检查 iCloud 状态后再试。".appLocalized(in: locale)
         }
 
-        return L10n.string(
-            "settings.iCloudEnableFailedWithReason",
-            locale: locale,
-            humanReadableICloudFailureReason(reason)
-        )
+        return """
+        \("当前无法启用 iCloud 自动备份。".appLocalized(in: locale))
+        \("原因：".appLocalized(in: locale))\(humanReadableICloudFailureReason(reason))
+        """
     }
 
     private func humanReadableICloudFailureReason(_ rawReason: String) -> String {
@@ -544,6 +537,9 @@ struct ICloudSettingsView: View {
         }
         if lowered.contains("account") || lowered.contains("ubiquit") || lowered.contains("cloudkit") {
             return "当前设备未登录 iCloud，或 iCloud / CloudKit 当前不可用。".appLocalized(in: locale)
+        }
+        if lowered.contains("nosuchfile") || lowered.contains("file") || lowered.contains("documents") {
+            return "当前设备未开启 iCloud Drive，暂时无法保存 iCloud 备份。".appLocalized(in: locale)
         }
         if lowered.contains("network") || lowered.contains("internet") {
             return "当前网络不可用，暂时无法连接 iCloud。".appLocalized(in: locale)
@@ -557,6 +553,9 @@ struct ICloudSettingsView: View {
             let status = try await CKContainer(identifier: AppConfig.iCloudContainerIdentifier).accountStatus()
             switch status {
             case .available:
+                guard FileManager.default.url(forUbiquityContainerIdentifier: AppConfig.iCloudContainerIdentifier) != nil else {
+                    return "当前设备未开启 iCloud Drive，暂时无法保存 iCloud 备份。".appLocalized(in: locale)
+                }
                 return nil
             case .noAccount:
                 return "当前设备未登录 iCloud 账号。".appLocalized(in: locale)
@@ -974,29 +973,76 @@ private enum BackupSource: String {
     }
 }
 
+private enum BackupStorageLocation: String, CaseIterable, Hashable {
+    case local
+    case iCloud
+
+    var folderName: String {
+        switch self {
+        case .local:
+            return "ICloudLocalBackups"
+        case .iCloud:
+            return "Backups"
+        }
+    }
+
+    func title(in locale: Locale) -> String {
+        switch self {
+        case .local:
+            return "本机".appLocalized(in: locale)
+        case .iCloud:
+            return "iCloud".appLocalized(in: locale)
+        }
+    }
+}
+
 private struct LocalBackupRecord: Identifiable {
     let id: String
     let source: BackupSource
-    let fileURL: URL
+    let localFileURL: URL?
+    let iCloudFileURL: URL?
     let createdAt: Date
     let payload: LedgerBackupPayload
     let fileSize: Int64
 
+    var fileURL: URL {
+        iCloudFileURL ?? localFileURL ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    }
+
+    var availableLocations: [BackupStorageLocation] {
+        var locations: [BackupStorageLocation] = []
+        if iCloudFileURL != nil {
+            locations.append(.iCloud)
+        }
+        if localFileURL != nil {
+            locations.append(.local)
+        }
+        return locations
+    }
+
     var symbolName: String {
+        if availableLocations.contains(.iCloud) {
+            return source == .automatic ? "icloud.and.arrow.up.fill" : "icloud.fill"
+        }
+
         switch source {
         case .automatic:
-            "clock.arrow.circlepath"
+            return "clock.arrow.circlepath"
         case .manual:
-            "internaldrive.fill"
+            return "internaldrive.fill"
         }
     }
 
     var tintColor: Color {
+        if availableLocations.contains(.iCloud) {
+            return SWTheme.accentBlue
+        }
+
         switch source {
         case .automatic:
-            SWTheme.accentBlue
+            return SWTheme.accentBlue
         case .manual:
-            SWTheme.accentGreen
+            return SWTheme.accentGreen
         }
     }
 
@@ -1035,109 +1081,211 @@ private struct LocalBackupRecord: Identifiable {
 
     func metaText(in locale: Locale) -> String {
         let sizeText = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
-        return L10n.string("settings.backupRecordMeta", locale: locale, payload.appVersion, sizeText)
+        let locationText = availableLocations
+            .map { $0.title(in: locale) }
+            .joined(separator: " · ")
+        return [payload.appVersion, sizeText, locationText]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 }
 
 private enum LocalBackupStore {
-    private static let folderName = "ICloudLocalBackups"
-
     static func loadRecords() -> [LocalBackupRecord] {
-        guard let directoryURL = try? backupDirectoryURL() else {
-            return []
-        }
-
-        let fileManager = FileManager.default
-        let urls = (try? fileManager.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        )) ?? []
-
-        let records = urls.compactMap { fileURL -> LocalBackupRecord? in
-            guard fileURL.pathExtension.lowercased() == "json",
-                  let data = try? Data(contentsOf: fileURL),
-                  let payload = try? LedgerBackupCodec.decodePayload(from: data) else {
-                return nil
-            }
-
-            let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
-            let fileSize = Int64(values?.fileSize ?? data.count)
-            let source = BackupSource(fileName: fileURL.lastPathComponent)
-
-            return LocalBackupRecord(
-                id: fileURL.deletingPathExtension().lastPathComponent,
-                source: source,
-                fileURL: fileURL,
-                createdAt: payload.exportedAt,
-                payload: payload,
-                fileSize: fileSize
-            )
-        }
-
-        return records.sorted { $0.createdAt > $1.createdAt }
+        loadGroupedRecords()
+            .values
+            .map(\.record)
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
-    static func createBackup(payload: LedgerBackupPayload, source: BackupSource) throws -> LocalBackupRecord {
-        let directoryURL = try backupDirectoryURL()
+    static func createBackup(
+        payload: LedgerBackupPayload,
+        source: BackupSource,
+        mirrorToICloud: Bool
+    ) throws -> LocalBackupRecord {
+        let localDirectoryURL = try backupDirectoryURL(for: .local)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let timestamp = formatter.string(from: payload.exportedAt)
         let fileName = "\(source.filePrefix)-backup-\(timestamp)-\(UUID().uuidString.prefix(6)).json"
-        let fileURL = directoryURL.appendingPathComponent(fileName)
         let data = try LedgerBackupCodec.encodePayload(payload)
-        try data.write(to: fileURL, options: .atomic)
+        let localFileURL = localDirectoryURL.appendingPathComponent(fileName)
+        try data.write(to: localFileURL, options: .atomic)
+
+        var iCloudFileURL: URL?
+        if mirrorToICloud, let iCloudDirectoryURL = try? backupDirectoryURL(for: .iCloud) {
+            let destinationURL = iCloudDirectoryURL.appendingPathComponent(fileName)
+            try data.write(to: destinationURL, options: .atomic)
+            iCloudFileURL = destinationURL
+        }
 
         return LocalBackupRecord(
-            id: fileURL.deletingPathExtension().lastPathComponent,
+            id: localFileURL.deletingPathExtension().lastPathComponent,
             source: source,
-            fileURL: fileURL,
+            localFileURL: localFileURL,
+            iCloudFileURL: iCloudFileURL,
             createdAt: payload.exportedAt,
             payload: payload,
             fileSize: Int64(data.count)
         )
     }
 
-    static func ensureAutomaticBackupIfNeeded(payload: LedgerBackupPayload, shouldCreate: Bool) throws {
+    static func ensureAutomaticBackupIfNeeded(
+        payload: LedgerBackupPayload,
+        shouldCreate: Bool,
+        mirrorToICloud: Bool
+    ) throws {
         guard shouldCreate else { return }
         let records = loadRecords()
         if records.contains(where: { $0.source == .automatic && Calendar.current.isDate($0.createdAt, inSameDayAs: payload.exportedAt) }) {
             return
         }
-        _ = try createBackup(payload: payload, source: .automatic)
+        _ = try createBackup(payload: payload, source: .automatic, mirrorToICloud: mirrorToICloud)
     }
 
     static func deleteBackup(_ record: LocalBackupRecord) throws {
-        try FileManager.default.removeItem(at: record.fileURL)
+        if let localFileURL = record.localFileURL, FileManager.default.fileExists(atPath: localFileURL.path) {
+            try FileManager.default.removeItem(at: localFileURL)
+        }
+        if let iCloudFileURL = record.iCloudFileURL, FileManager.default.fileExists(atPath: iCloudFileURL.path) {
+            try FileManager.default.removeItem(at: iCloudFileURL)
+        }
     }
 
     static func removeExpiredBackups(keepingLast days: Int) {
-        guard let directoryURL = try? backupDirectoryURL() else { return }
         let expirationDate = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
         let records = loadRecords()
         let expired = records.filter { $0.createdAt < expirationDate }
         for record in expired {
-            try? FileManager.default.removeItem(at: record.fileURL)
+            try? deleteBackup(record)
         }
 
-        if expired.isEmpty {
-            let staleFiles = (try? FileManager.default.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)) ?? []
-            staleFiles
-                .filter { $0.pathExtension.lowercased() != "json" }
-                .forEach { try? FileManager.default.removeItem(at: $0) }
+        removeNonJSONFiles(at: try? backupDirectoryURL(for: .local, createIfMissing: false))
+        removeNonJSONFiles(at: try? backupDirectoryURL(for: .iCloud, createIfMissing: false))
+    }
+
+    static func syncExistingLocalBackupsToICloud() throws {
+        guard let localDirectoryURL = try? backupDirectoryURL(for: .local, createIfMissing: false) else { return }
+        let iCloudDirectoryURL = try backupDirectoryURL(for: .iCloud)
+
+        let localFiles = (try? FileManager.default.contentsOfDirectory(
+            at: localDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        for fileURL in localFiles where fileURL.pathExtension.lowercased() == "json" {
+            let destinationURL = iCloudDirectoryURL.appendingPathComponent(fileURL.lastPathComponent)
+            guard !FileManager.default.fileExists(atPath: destinationURL.path) else { continue }
+            let data = try Data(contentsOf: fileURL)
+            try data.write(to: destinationURL, options: .atomic)
         }
     }
 
-    private static func backupDirectoryURL() throws -> URL {
-        let baseURL = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let directoryURL = baseURL.appendingPathComponent(folderName, isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    private struct PartialRecord {
+        var source: BackupSource
+        var localFileURL: URL?
+        var iCloudFileURL: URL?
+        var createdAt: Date
+        var payload: LedgerBackupPayload
+        var fileSize: Int64
+
+        var record: LocalBackupRecord {
+            LocalBackupRecord(
+                id: (iCloudFileURL ?? localFileURL)?.deletingPathExtension().lastPathComponent ?? UUID().uuidString,
+                source: source,
+                localFileURL: localFileURL,
+                iCloudFileURL: iCloudFileURL,
+                createdAt: createdAt,
+                payload: payload,
+                fileSize: fileSize
+            )
+        }
+    }
+
+    private static func loadGroupedRecords() -> [String: PartialRecord] {
+        var grouped: [String: PartialRecord] = [:]
+
+        for location in BackupStorageLocation.allCases {
+            guard let directoryURL = try? backupDirectoryURL(for: location, createIfMissing: false) else { continue }
+            let urls = (try? FileManager.default.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )) ?? []
+
+            for fileURL in urls where fileURL.pathExtension.lowercased() == "json" {
+                guard
+                    let data = try? Data(contentsOf: fileURL),
+                    let payload = try? LedgerBackupCodec.decodePayload(from: data)
+                else {
+                    continue
+                }
+
+                let key = fileURL.deletingPathExtension().lastPathComponent
+                let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+                let fileSize = Int64(values?.fileSize ?? data.count)
+                var partial = grouped[key] ?? PartialRecord(
+                    source: BackupSource(fileName: fileURL.lastPathComponent),
+                    localFileURL: nil,
+                    iCloudFileURL: nil,
+                    createdAt: payload.exportedAt,
+                    payload: payload,
+                    fileSize: fileSize
+                )
+
+                partial.createdAt = payload.exportedAt
+                partial.payload = payload
+                partial.fileSize = fileSize
+                switch location {
+                case .local:
+                    partial.localFileURL = fileURL
+                case .iCloud:
+                    partial.iCloudFileURL = fileURL
+                }
+                grouped[key] = partial
+            }
+        }
+
+        return grouped
+    }
+
+    private static func removeNonJSONFiles(at directoryURL: URL?) {
+        guard let directoryURL else { return }
+        let staleFiles = (try? FileManager.default.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)) ?? []
+        staleFiles
+            .filter { $0.pathExtension.lowercased() != "json" }
+            .forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
+    private static func backupDirectoryURL(
+        for location: BackupStorageLocation,
+        createIfMissing: Bool = true
+    ) throws -> URL {
+        let directoryURL: URL
+
+        switch location {
+        case .local:
+            let baseURL = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            directoryURL = baseURL.appendingPathComponent(location.folderName, isDirectory: true)
+        case .iCloud:
+            guard let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: AppConfig.iCloudContainerIdentifier) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            directoryURL = ubiquityURL
+                .appendingPathComponent("Documents", isDirectory: true)
+                .appendingPathComponent(location.folderName, isDirectory: true)
+        }
+
+        if createIfMissing {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
         return directoryURL
     }
 }
