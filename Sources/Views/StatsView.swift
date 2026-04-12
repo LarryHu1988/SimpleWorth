@@ -214,9 +214,6 @@ struct StatsView: View {
                 }
             }
         }
-        .sheet(isPresented: settingsSheetPresentedBinding) {
-            SettingsNavigationHost(path: settingsNavigationPathBinding)
-        }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
             syncScrollWithSelection()
@@ -229,28 +226,6 @@ struct StatsView: View {
             syncScrollWithSelection()
         }
         .appBackground()
-    }
-
-    private var settingsSheetPresentedBinding: Binding<Bool> {
-        Binding(
-            get: { appRuntimeController.isStatsSettingsPresented },
-            set: { newValue in
-                if !newValue && appRuntimeController.isSwitchingContainer {
-                    return
-                }
-                appRuntimeController.isStatsSettingsPresented = newValue
-                if !newValue {
-                    appRuntimeController.statsSettingsPath.removeAll()
-                }
-            }
-        )
-    }
-
-    private var settingsNavigationPathBinding: Binding<[SettingsRoute]> {
-        Binding(
-            get: { appRuntimeController.statsSettingsPath },
-            set: { appRuntimeController.statsSettingsPath = $0 }
-        )
     }
 
     private var yearMenu: some View {

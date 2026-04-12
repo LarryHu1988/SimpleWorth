@@ -60,15 +60,44 @@ private struct AppRootView: View {
                     .allowsHitTesting(false)
             }
         }
-            .task(id: themeMode.rawValue) {
-                await MainActor.run {
-                    AppAppearanceController.apply(themeMode: themeMode)
-                }
+        .sheet(isPresented: settingsSheetPresentedBinding) {
+            SettingsNavigationHost(path: settingsNavigationPathBinding)
+                .id(appRuntimeController.containerSession.id)
+                .environmentObject(appRuntimeController)
+                .environment(\.locale, appLanguage.locale)
+                .modelContainer(appRuntimeController.containerSession.container)
+        }
+        .task(id: themeMode.rawValue) {
+            await MainActor.run {
+                AppAppearanceController.apply(themeMode: themeMode)
             }
+        }
     }
 
     private var contentHost: some View {
         debugRootView
+    }
+
+    private var settingsSheetPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { appRuntimeController.isStatsSettingsPresented },
+            set: { newValue in
+                if !newValue && appRuntimeController.isSwitchingContainer {
+                    return
+                }
+                appRuntimeController.isStatsSettingsPresented = newValue
+                if !newValue {
+                    appRuntimeController.statsSettingsPath.removeAll()
+                }
+            }
+        )
+    }
+
+    private var settingsNavigationPathBinding: Binding<[SettingsRoute]> {
+        Binding(
+            get: { appRuntimeController.statsSettingsPath },
+            set: { appRuntimeController.statsSettingsPath = $0 }
+        )
     }
 
     @ViewBuilder
