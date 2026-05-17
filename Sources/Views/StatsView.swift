@@ -118,7 +118,7 @@ struct StatsView: View {
 
             stats = grouped.compactMap { key, values -> CategoryStat? in
                 guard let first = values.first else { return nil }
-                let total = values.reduce(0) { $0 + $1.amount }
+                let total = values.reduce(0) { $0 + statisticContribution(for: $1) }
                 return CategoryStat(
                     key: key,
                     name: first.categoryName,
@@ -134,13 +134,14 @@ struct StatsView: View {
 
             for entry in filtered {
                 let tagNames = entry.tagNames
+                let contribution = statisticContribution(for: entry)
 
                 if tagNames.isEmpty {
-                    totals["__untagged__", default: 0] += entry.amount
+                    totals["__untagged__", default: 0] += contribution
                     continue
                 }
 
-                let sharedAmount = entry.amount / Double(tagNames.count)
+                let sharedAmount = contribution / Double(tagNames.count)
                 for tagName in tagNames {
                     totals[tagName, default: 0] += sharedAmount
                 }
@@ -161,12 +162,15 @@ struct StatsView: View {
         return stats
             .filter { $0.amount > 0.001 }
             .sorted { $0.amount > $1.amount }
-            .prefix(6)
-            .map { $0 }
     }
 
     private var selectedTotal: Double {
-        selectedStats.reduce(0) { $0 + $1.amount }
+        switch selectedFlow {
+        case .expense:
+            return totalExpense
+        case .income:
+            return totalIncome
+        }
     }
 
     private var distributionEmptyTitle: String {
@@ -182,6 +186,15 @@ struct StatsView: View {
         selectedDistributionMode == .tag
             ? "先为账单补充标签，或点击趋势图中的月份切换统计范围".appLocalized(in: locale)
             : "点击趋势图中的月份可以切换统计范围".appLocalized(in: locale)
+    }
+
+    private func statisticContribution(for entry: LedgerEntry) -> Double {
+        switch selectedFlow {
+        case .expense:
+            return entry.expenseContribution
+        case .income:
+            return entry.incomeContribution
+        }
     }
 
     var body: some View {

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -31,8 +31,8 @@
 		D3095B2FB03E1DC5C07AC05D /* IncomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B94BEFD9C323A270E01E209C /* IncomeView.swift */; };
 		D5E2109C6BDB545A5B0B3766 /* CurrencyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00BD27896032AD314F49535 /* CurrencyModels.swift */; };
 		D7319AE5DA9FE7879C53796C /* FinanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE152A23C83913C552261AF /* FinanceModels.swift */; };
+		DFD0C89E89A2B47F0DF9A7CE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 41568042F719AE8596557443 /* PrivacyInfo.xcprivacy */; };
 		ED782BB767E744A35C69ACE2 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF770E7D5B3F22C8237C0A0 /* Localization.swift */; };
-		F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */; };
 		FA0E5C8B4C9320B35B972A65 /* StatsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,7 +46,8 @@
 		3362111762B8F8D347B7CEE0 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		33DA35F8A0F5D42A8BF6F79A /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		40A1700D407FDF15CB4AA5A1 /* StatsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsSettingsView.swift; sourceTree = "<group>"; };
-		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		41568042F719AE8596557443 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		448B7EDBB83C712F0BD5FE9C /* SimpleWorth.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SimpleWorth.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5053CDD11B4F64F61DA9EE9D /* ICloudSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudSettingsView.swift; sourceTree = "<group>"; };
 		7A1A84C9C1CD234D84984D79 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7C96A3031E8C6C9E884649D0 /* HapticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticService.swift; sourceTree = "<group>"; };
@@ -69,7 +70,6 @@
 		E04970AE91E610D9A97C9FA7 /* CurrencySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencySettingsView.swift; sourceTree = "<group>"; };
 		EEE152A23C83913C552261AF /* FinanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceModels.swift; sourceTree = "<group>"; };
 		EF62C5B7D24F0855E1716C6F /* EntryEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditorSheet.swift; sourceTree = "<group>"; };
-		F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -78,10 +78,10 @@
 			children = (
 				B52DE9EC98F2005E61FE0AD2 /* Assets.xcassets */,
 				7A1A84C9C1CD234D84984D79 /* Info.plist */,
-				2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */,
-				F06A53A3B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy */,
+				41568042F719AE8596557443 /* PrivacyInfo.xcprivacy */,
 				80B07A187DC27AC6B1B65EBA /* SimpleWorth.entitlements */,
 				C71ACF11F43F0A3E38043196 /* App */,
+				2DAB8726DBA419C0AC8A2B3F /* Localizable.strings */,
 				E9DEEA706D0037D1F4D93A4F /* Models */,
 				AB91057A5C42964655DCF72F /* Preview Content */,
 				6905A993D9B7C226001524CD /* Theme */,
@@ -193,10 +193,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5061A98AC462DE1653BC1AA2 = {
+						DevelopmentTeam = 2S7X36GQC9;
+					};
+				};
 			};
 			buildConfigurationList = CC0F09E668858878296DAB32 /* Build configuration list for PBXProject "SimpleWorth" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -208,6 +212,8 @@
 			);
 			mainGroup = 537E2A7B543AC8E96392DF3D;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0B6F8AB56D5CAF1F0712E9BE /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -224,7 +230,7 @@
 				7A1A28AE38C2DBF30E497DB3 /* Assets.xcassets in Resources */,
 				9189748DDFFA202DB03684CF /* Localizable.strings in Resources */,
 				C993890191256770B6D56F67 /* Preview Assets.xcassets in Resources */,
-				F06A53A2B18C4C5D9A1E1101 /* PrivacyInfo.xcprivacy in Resources */,
+				DFD0C89E89A2B47F0DF9A7CE /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

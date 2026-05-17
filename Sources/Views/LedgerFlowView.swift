@@ -23,6 +23,7 @@ struct LedgerFlowView: View {
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var showCategoryGrid = false
+    @State private var showRecentEntries = true
 
     private var categories: [CategoryItem] {
         CategoryLibrary.categories(for: flow)
@@ -63,7 +64,7 @@ struct LedgerFlowView: View {
     }
 
     private var recentEntries: [LedgerEntry] {
-        Array(selectedPeriodEntries.prefix(20))
+        selectedPeriodEntries
     }
 
     private var selectedPeriodTotal: Double {
@@ -126,8 +127,8 @@ struct LedgerFlowView: View {
 
     private var recentSubtitle: String {
         flow == .expense
-            ? "点按可编辑，左滑退款或删除，右滑复制（退款账单除外）".appLocalized(in: locale)
-            : "点按可编辑，左滑删除，右滑复制".appLocalized(in: locale)
+            ? L10n.string("ledger.recentSubtitle.expense", locale: locale, Int64(selectedPeriodEntries.count))
+            : L10n.string("ledger.recentSubtitle.income", locale: locale, Int64(selectedPeriodEntries.count))
     }
 
     private var emptyTitle: String {
@@ -333,7 +334,36 @@ struct LedgerFlowView: View {
 
     private var transactionCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: recentTitle, subtitle: recentSubtitle)
+            HStack(alignment: .top, spacing: 12) {
+                SectionTitle(title: recentTitle, subtitle: recentSubtitle)
+
+                Spacer(minLength: 8)
+
+                if !selectedPeriodEntries.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            showRecentEntries.toggle()
+                        }
+                        HapticService.selection()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(showRecentEntries ? "收起".appLocalized(in: locale) : "展开".appLocalized(in: locale))
+                                .font(.caption.weight(.semibold))
+                            Image(systemName: showRecentEntries ? "chevron.up" : "chevron.down")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .foregroundStyle(SWTheme.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showRecentEntries ? "收起本月记录".appLocalized(in: locale) : "展开本月记录".appLocalized(in: locale))
+                }
+            }
 
             if recentEntries.isEmpty {
                 EmptyStateCard(
@@ -341,6 +371,12 @@ struct LedgerFlowView: View {
                     subtitle: emptySubtitle,
                     symbol: flow == .expense ? "tray.fill" : "banknote.fill"
                 )
+            } else if !showRecentEntries {
+                Text(L10n.string("ledger.recentCollapsed", locale: locale, Int64(selectedPeriodEntries.count)))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
             } else {
                 VStack(spacing: 10) {
                     ForEach(recentEntries) { entry in
