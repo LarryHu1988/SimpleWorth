@@ -85,15 +85,16 @@ struct CategoryGridSection: View {
     let categories: [CategoryItem]
     var onTapCategory: ((CategoryItem) -> Void)? = nil
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 70), spacing: 12)
-    ]
+    private let columns = Array(
+        repeating: GridItem(.flexible(minimum: 44), spacing: 6),
+        count: 5
+    )
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: title, subtitle: subtitle)
 
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(categories) { item in
                     CategoryIconCell(item: item)
                         .contentShape(Rectangle())
@@ -113,16 +114,16 @@ struct CategoryIconCell: View {
     let item: CategoryItem
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             ZStack {
                 Circle()
                     .fill(item.color.opacity(0.2))
-                    .frame(width: 52, height: 52)
+                    .frame(width: 38, height: 38)
                 Circle()
                     .stroke(item.color.opacity(0.55), lineWidth: 1)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 38, height: 38)
                 Image(systemName: item.symbol)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(item.color)
             }
 
@@ -130,10 +131,10 @@ struct CategoryIconCell: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(SWTheme.primaryText)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.65)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.03))

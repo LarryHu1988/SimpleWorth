@@ -491,24 +491,27 @@ struct EntryEditorSheet: View {
     }
 
     private var categoryCard: some View {
-        let columns = [GridItem(.adaptive(minimum: 70), spacing: 10)]
+        let columns = Array(
+            repeating: GridItem(.flexible(minimum: 44), spacing: 6),
+            count: 5
+        )
 
         return VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "分类", subtitle: "快速选择图标分类")
 
-            LazyVGrid(columns: columns, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(categories) { category in
                     Button {
                         selectedCategoryID = category.id
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 6) {
                             ZStack {
                                 Circle()
                                     .fill(category.color.opacity(0.18))
-                                    .frame(width: 44, height: 44)
+                                    .frame(width: 38, height: 38)
 
                                 Image(systemName: category.symbol)
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(category.color)
                             }
 
@@ -516,9 +519,10 @@ struct EntryEditorSheet: View {
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(SWTheme.primaryText)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.65)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(Color.white.opacity(0.03))

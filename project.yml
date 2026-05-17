@@ -34,8 +34,8 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.7.1
-        CFBundleVersion: "9"
+        CFBundleShortVersionString: 0.7.2
+        CFBundleVersion: "10"
         UILaunchScreen: {}
         UIRequiresFullScreen: false
         UISupportedInterfaceOrientations:
