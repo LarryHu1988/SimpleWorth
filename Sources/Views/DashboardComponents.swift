@@ -167,6 +167,10 @@ struct LedgerRow: View {
         return signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits, locale: locale)
     }
 
+    private var refundAmountText: String {
+        refundAmount.currencyText(code: "CNY", fractionDigits: 2, locale: locale)
+    }
+
     private var allTagNames: [String] {
         entry.tagNames
     }
@@ -234,7 +238,7 @@ struct LedgerRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.uturn.backward.circle.fill")
                             .font(.caption2.weight(.bold))
-                        Text(L10n.string("ledger.refundApplied", locale: locale, refundAmount.cnyText(in: locale)))
+                        Text(L10n.string("ledger.refundApplied", locale: locale, refundAmountText))
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(SWTheme.accentBlue)
@@ -315,6 +319,52 @@ struct SwipeableLedgerRow: View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
+        .simultaneousGesture(longPressHapticGesture)
+        .contextMenu {
+            Button {
+                closeActions()
+                HapticService.selection()
+                onTap()
+            } label: {
+                Label("编辑".appLocalized(in: locale), systemImage: "pencil")
+            }
+
+            if showCopyAction {
+                Button {
+                    closeActions()
+                    HapticService.selection()
+                    onCopy()
+                } label: {
+                    Label("复制".appLocalized(in: locale), systemImage: "doc.on.doc.fill")
+                }
+            }
+
+            if showRefundAction {
+                Button {
+                    closeActions()
+                    HapticService.selection()
+                    onRefund()
+                } label: {
+                    Label("退款".appLocalized(in: locale), systemImage: "arrow.uturn.backward.circle.fill")
+                }
+            }
+
+            Button(role: .destructive) {
+                closeActions()
+                HapticService.warning()
+                onDelete()
+            } label: {
+                Label("删除".appLocalized(in: locale), systemImage: "trash.fill")
+            }
+        } preview: {
+            LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName, refundAmount: refundAmount)
+                .padding(10)
+                .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(.regularMaterial)
+                )
+        }
         .onDisappear {
             resetImmediately()
         }
@@ -469,6 +519,14 @@ struct SwipeableLedgerRow: View {
                         baseOffsetX = 0
                     }
                 }
+            }
+    }
+
+    private var longPressHapticGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.32)
+            .onEnded { _ in
+                guard !isHorizontalDragging else { return }
+                HapticService.impact(style: .medium)
             }
     }
 

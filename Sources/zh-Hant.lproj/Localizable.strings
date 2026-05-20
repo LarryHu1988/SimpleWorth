@@ -17,10 +17,12 @@
 "ledger.addFlow" = "新增%@";
 "ledger.showCategory" = "顯示%@";
 "ledger.hideCategory" = "隱藏%@";
-"ledger.recentSubtitle.expense" = "當月共 %lld 筆，點按可編輯，左滑退款或刪除，右滑複製（退款帳單除外）";
-"ledger.recentSubtitle.income" = "當月共 %lld 筆，點按可編輯，左滑刪除，右滑複製";
+"ledger.recentSubtitle.expense" = "當月共 %lld 筆，點按編輯，長按開啟操作選單，也可左右滑操作";
+"ledger.recentSubtitle.income" = "當月共 %lld 筆，點按編輯，長按開啟操作選單，也可左右滑操作";
 "ledger.recentCollapsed" = "已折疊當月 %lld 筆記錄";
 "ledger.refundApplied" = "已退款 %@";
+"ledger.refundDetailTitle" = "退款記錄";
+"ledger.refundDetailSubtitle" = "已關聯到本帳單的退款";
 "stats.emptyDistribution" = "暫無%@%@數據";
 "entry.refundNotePrefix" = "退款：%@";
 "entry.currencyRate" = "1 %@ ≈ %@";
@@ -230,6 +232,9 @@
 "退款录入" = "退款錄入";
 "原账单金额，仅用于参考" = "原帳單金額，僅供參考";
 "退款金额" = "退款金額";
+"退款记录" = "退款記錄";
+"累计退款" = "累計退款";
+"退款后净额" = "退款後淨額";
 "例如：午餐简餐 / 月度工资" = "例如：午餐簡餐 / 月薪";
 "选择入账日期" = "選擇入帳日期";
 "快速选择图标分类" = "快速選擇圖示分類";

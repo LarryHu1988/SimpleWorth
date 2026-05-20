@@ -17,10 +17,12 @@
 "ledger.addFlow" = "Add %@";
 "ledger.showCategory" = "Show %@";
 "ledger.hideCategory" = "Hide %@";
-"ledger.recentSubtitle.expense" = "%lld entries this month. Tap to edit, swipe left to refund or delete, swipe right to duplicate (refund entries excluded)";
-"ledger.recentSubtitle.income" = "%lld entries this month. Tap to edit, swipe left to delete, swipe right to duplicate";
+"ledger.recentSubtitle.expense" = "%lld entries this month. Tap to edit, long-press for actions, or swipe for quick actions";
+"ledger.recentSubtitle.income" = "%lld entries this month. Tap to edit, long-press for actions, or swipe for quick actions";
 "ledger.recentCollapsed" = "%lld entries for this month are collapsed";
 "ledger.refundApplied" = "Refunded %@";
+"ledger.refundDetailTitle" = "Refunds";
+"ledger.refundDetailSubtitle" = "Refunds linked to this entry";
 "stats.emptyDistribution" = "No %@ %@ data";
 "entry.refundNotePrefix" = "Refund: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";
@@ -230,6 +232,9 @@
 "退款录入" = "Refund";
 "原账单金额，仅用于参考" = "Original amount, for reference only";
 "退款金额" = "Refund Amount";
+"退款记录" = "Refunds";
+"累计退款" = "Total Refunded";
+"退款后净额" = "Net After Refunds";
 "例如：午餐简餐 / 月度工资" = "e.g. Lunch / Monthly salary";
 "选择入账日期" = "Choose booking date";
 "快速选择图标分类" = "Quick icon categories";

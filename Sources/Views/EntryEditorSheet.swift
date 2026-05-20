@@ -21,6 +21,7 @@ struct EntryEditorSheet: View {
     let entry: LedgerEntry?
     let presetCategoryID: String?
     let operation: EntryEditorOperation
+    let linkedRefundEntries: [LedgerEntry]
 
     @State private var note: String
     @State private var amountText: String
@@ -34,12 +35,14 @@ struct EntryEditorSheet: View {
         flow: FlowType,
         entry: LedgerEntry? = nil,
         presetCategoryID: String? = nil,
-        operation: EntryEditorOperation = .create
+        operation: EntryEditorOperation = .create,
+        linkedRefundEntries: [LedgerEntry] = []
     ) {
         self.flow = flow
         self.entry = entry
         self.presetCategoryID = presetCategoryID
         self.operation = operation
+        self.linkedRefundEntries = linkedRefundEntries
 
         let fallback = CategoryLibrary.defaultCategory(for: flow)
         let editingCategory = entry.map {
@@ -235,6 +238,38 @@ struct EntryEditorSheet: View {
         return true
     }
 
+    private var sortedLinkedRefundEntries: [LedgerEntry] {
+        linkedRefundEntries.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+
+            if lhs.resolvedRecordedAt != rhs.resolvedRecordedAt {
+                return lhs.resolvedRecordedAt > rhs.resolvedRecordedAt
+            }
+
+            return lhs.id.uuidString > rhs.id.uuidString
+        }
+    }
+
+    private var shouldShowRefundDetail: Bool {
+        !isRefundOperation && !sortedLinkedRefundEntries.isEmpty
+    }
+
+    private var linkedRefundTotalCNY: Double {
+        sortedLinkedRefundEntries.reduce(0) { $0 + $1.amount }
+    }
+
+    private var linkedRefundTotalText: String {
+        linkedRefundTotalCNY.currencyText(code: "CNY", fractionDigits: 2, locale: locale)
+    }
+
+    private var linkedRefundNetText: String? {
+        guard let entry else { return nil }
+        return max(entry.amount - linkedRefundTotalCNY, 0)
+            .currencyText(code: "CNY", fractionDigits: 2, locale: locale)
+    }
+
     private var datePickerComponents: DatePickerComponents {
         detailedTimeEnabled ? [.date, .hourAndMinute] : [.date]
     }
@@ -248,6 +283,9 @@ struct EntryEditorSheet: View {
                         refundAmountCard
                     } else {
                         amountCard
+                    }
+                    if shouldShowRefundDetail {
+                        refundDetailCard
                     }
                     noteCard
                     dateCard
@@ -337,6 +375,119 @@ struct EntryEditorSheet: View {
             }
         }
         .fitnessCard()
+    }
+
+    private var refundDetailCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.string("ledger.refundDetailTitle", locale: locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+
+                Text(L10n.string("ledger.refundDetailSubtitle", locale: locale))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+
+            HStack(spacing: 10) {
+                refundSummaryPill(
+                    title: "累计退款",
+                    value: linkedRefundTotalText,
+                    tint: SWTheme.accentBlue,
+                    symbol: "arrow.uturn.backward.circle.fill"
+                )
+
+                if let linkedRefundNetText {
+                    refundSummaryPill(
+                        title: "退款后净额",
+                        value: linkedRefundNetText,
+                        tint: SWTheme.accentGreen,
+                        symbol: "equal.circle.fill"
+                    )
+                }
+            }
+
+            VStack(spacing: 8) {
+                ForEach(sortedLinkedRefundEntries) { refundEntry in
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(SWTheme.accentBlue.opacity(0.16))
+                                .frame(width: 30, height: 30)
+                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(SWTheme.accentBlue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(refundEntry.note)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(SWTheme.primaryText)
+                                .lineLimit(2)
+
+                            Text(refundEntry.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
+                                .font(.caption2)
+                                .foregroundStyle(SWTheme.textSecondary)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("+\(refundDisplayAmountText(for: refundEntry))")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(SWTheme.accentBlue)
+
+                            if CurrencyCatalog.normalize(code: refundEntry.currencyCode) != "CNY" {
+                                Text(refundEntry.amount.currencyText(code: "CNY", fractionDigits: 2, locale: locale))
+                                    .font(.caption2)
+                                    .foregroundStyle(SWTheme.textSecondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white.opacity(0.04))
+                    )
+                }
+            }
+        }
+        .fitnessCard()
+    }
+
+    private func refundSummaryPill(title: String, value: String, tint: Color, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.appLocalized(in: locale))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+                Text(value)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(tint.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(tint.opacity(0.22), lineWidth: 1)
+                )
+        )
+    }
+
+    private func refundDisplayAmountText(for refundEntry: LedgerEntry) -> String {
+        let code = CurrencyCatalog.normalize(code: refundEntry.currencyCode)
+        let digits = CurrencyCatalog.fractionDigits(for: code)
+        return refundEntry.displayAmount.currencyText(code: code, fractionDigits: digits, locale: locale)
     }
 
     private var sourceAmountCard: some View {
@@ -546,9 +697,7 @@ struct EntryEditorSheet: View {
     }
 
     private var tagCard: some View {
-        let columns = [GridItem(.adaptive(minimum: 132), spacing: 8)]
-
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "标签", subtitle: "可选，为账单补充标签")
 
             if managedTags.isEmpty {
@@ -563,7 +712,7 @@ struct EntryEditorSheet: View {
                             .fill(Color.white.opacity(0.04))
                     )
             } else {
-                LazyVGrid(columns: columns, spacing: 8) {
+                TagCloudLayout(horizontalSpacing: 8, verticalSpacing: 8) {
                     ForEach(managedTags) { tag in
                         let isSelected = selectedTagNames.contains(tag.name)
 
@@ -577,11 +726,13 @@ struct EntryEditorSheet: View {
                                     .padding(.top, 1)
                                 Text(tag.name)
                                     .font(.caption.weight(.semibold))
+                                    .lineLimit(nil)
                                     .multilineTextAlignment(.leading)
                                     .fixedSize(horizontal: false, vertical: true)
+                                    .layoutPriority(1)
                             }
                             .foregroundStyle(isSelected ? Color.white : SWTheme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(minWidth: tagChipMinimumWidth(for: tag.name), alignment: .leading)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 10)
                             .background(
@@ -602,6 +753,21 @@ struct EntryEditorSheet: View {
             }
         }
         .fitnessCard()
+    }
+
+    private func tagChipMinimumWidth(for name: String) -> CGFloat {
+        switch name.count {
+        case 0...2:
+            return 70
+        case 3...4:
+            return 86
+        case 5...6:
+            return 108
+        case 7...9:
+            return 132
+        default:
+            return 156
+        }
     }
 
     private func save() {
@@ -675,6 +841,101 @@ struct EntryEditorSheet: View {
         }
     }
 
+}
+
+private struct TagCloudLayout: Layout {
+    var horizontalSpacing: CGFloat = 8
+    var verticalSpacing: CGFloat = 8
+
+    private struct Item {
+        let index: Int
+        let size: CGSize
+    }
+
+    private struct Row {
+        var items: [Item] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = resolvedWidth(from: proposal.width)
+        let rows = makeRows(subviews: subviews, maxWidth: maxWidth)
+        let height = rows.reduce(CGFloat.zero) { partialResult, row in
+            partialResult + row.height
+        } + CGFloat(max(rows.count - 1, 0)) * verticalSpacing
+
+        return CGSize(width: maxWidth, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let rows = makeRows(subviews: subviews, maxWidth: bounds.width)
+        var y = bounds.minY
+
+        for row in rows {
+            var x = bounds.minX
+
+            for item in row.items {
+                subviews[item.index].place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: item.size.width, height: item.size.height)
+                )
+                x += item.size.width + horizontalSpacing
+            }
+
+            y += row.height + verticalSpacing
+        }
+    }
+
+    private func makeRows(subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+        guard !subviews.isEmpty else { return [] }
+
+        var rows: [Row] = []
+        var currentRow = Row()
+        let availableWidth = resolvedWidth(from: maxWidth)
+
+        for index in subviews.indices {
+            let proposedSize = subviews[index].sizeThatFits(
+                ProposedViewSize(width: availableWidth, height: nil)
+            )
+            let itemSize = CGSize(
+                width: min(proposedSize.width, availableWidth),
+                height: proposedSize.height
+            )
+            let nextWidth = currentRow.items.isEmpty
+                ? itemSize.width
+                : currentRow.width + horizontalSpacing + itemSize.width
+
+            if nextWidth > availableWidth, !currentRow.items.isEmpty {
+                rows.append(currentRow)
+                currentRow = Row(items: [Item(index: index, size: itemSize)], width: itemSize.width, height: itemSize.height)
+            } else {
+                currentRow.items.append(Item(index: index, size: itemSize))
+                currentRow.width = nextWidth
+                currentRow.height = max(currentRow.height, itemSize.height)
+            }
+        }
+
+        if !currentRow.items.isEmpty {
+            rows.append(currentRow)
+        }
+
+        return rows
+    }
+
+    private func resolvedWidth(from width: CGFloat?) -> CGFloat {
+        max(width ?? 320, 1)
+    }
 }
 
 @MainActor

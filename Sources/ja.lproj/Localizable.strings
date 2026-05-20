@@ -17,10 +17,12 @@
 "ledger.addFlow" = "%@を追加";
 "ledger.showCategory" = "%@を表示";
 "ledger.hideCategory" = "%@を非表示";
-"ledger.recentSubtitle.expense" = "今月 %lld 件。タップで編集、左スワイプで返金または削除、右スワイプで複製（返金明細を除く）";
-"ledger.recentSubtitle.income" = "今月 %lld 件。タップで編集、左スワイプで削除、右スワイプで複製";
+"ledger.recentSubtitle.expense" = "今月 %lld 件。タップで編集、長押しで操作メニュー、スワイプでクイック操作";
+"ledger.recentSubtitle.income" = "今月 %lld 件。タップで編集、長押しで操作メニュー、スワイプでクイック操作";
 "ledger.recentCollapsed" = "今月の %lld 件を折りたたみ中";
 "ledger.refundApplied" = "%@ 返金済み";
+"ledger.refundDetailTitle" = "返金記録";
+"ledger.refundDetailSubtitle" = "この明細に紐づく返金";
 "stats.emptyDistribution" = "%@ %@ データがありません";
 "entry.refundNotePrefix" = "返金: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";
@@ -230,6 +232,9 @@
 "退款录入" = "返金入力";
 "原账单金额，仅用于参考" = "元の明細金額（参考用）";
 "退款金额" = "返金額";
+"退款记录" = "返金記録";
+"累计退款" = "返金合計";
+"退款后净额" = "返金後の純額";
 "例如：午餐简餐 / 月度工资" = "例: 昼食 / 月給";
 "选择入账日期" = "計上日を選択";
 "快速选择图标分类" = "アイコン分類をすばやく選択";

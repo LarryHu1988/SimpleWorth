@@ -82,6 +82,19 @@ struct LedgerFlowView: View {
         return result
     }
 
+    private var refundEntriesBySourceEntryID: [UUID: [LedgerEntry]] {
+        var result: [UUID: [LedgerEntry]] = [:]
+
+        for entry in entries where entry.flow == .expense && entry.isRefundEntry {
+            guard let sourceEntryID = entry.refundSourceEntryID else { continue }
+            result[sourceEntryID, default: []].append(entry)
+        }
+
+        return result.mapValues { entries in
+            entries.sorted(by: isNewerLedgerEntry)
+        }
+    }
+
     private var selectedPeriodTotal: Double {
         totalAmount(inMonthOf: selectedPeriodDate)
     }
@@ -210,7 +223,12 @@ struct LedgerFlowView: View {
             EntryEditorSheet(flow: flow, presetCategoryID: presetCategoryID, operation: .create)
         }
         .sheet(item: $editingTarget) { target in
-            EntryEditorSheet(flow: flow, entry: target.entry, operation: .edit)
+            EntryEditorSheet(
+                flow: flow,
+                entry: target.entry,
+                operation: .edit,
+                linkedRefundEntries: refundEntries(for: target.entry)
+            )
         }
         .sheet(item: $copyTarget) { target in
             EntryEditorSheet(flow: flow, entry: target.entry, operation: .copy)
@@ -425,6 +443,10 @@ struct LedgerFlowView: View {
     private func presentCreateSheet(categoryID: String?) {
         presetCategoryID = categoryID
         showCreateSheet = true
+    }
+
+    private func refundEntries(for entry: LedgerEntry) -> [LedgerEntry] {
+        refundEntriesBySourceEntryID[entry.id] ?? []
     }
 
     private func normalizeSelectionIfNeeded() {
