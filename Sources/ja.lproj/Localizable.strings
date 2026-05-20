@@ -20,6 +20,7 @@
 "ledger.recentSubtitle.expense" = "今月 %lld 件。タップで編集、左スワイプで返金または削除、右スワイプで複製（返金明細を除く）";
 "ledger.recentSubtitle.income" = "今月 %lld 件。タップで編集、左スワイプで削除、右スワイプで複製";
 "ledger.recentCollapsed" = "今月の %lld 件を折りたたみ中";
+"ledger.refundApplied" = "%@ 返金済み";
 "stats.emptyDistribution" = "%@ %@ データがありません";
 "entry.refundNotePrefix" = "返金: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";

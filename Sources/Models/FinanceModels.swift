@@ -159,6 +159,7 @@ final class TagRecord {
 final class LedgerEntry {
     var id: UUID = UUID()
     var createdAt: Date = Date.now
+    var recordedAt: Date?
     // Normalized to CNY for unified statistics and chart aggregation.
     var amount: Double = 0
     // Original user input amount in the selected currency.
@@ -172,10 +173,12 @@ final class LedgerEntry {
     var categorySymbol: String = ""
     var categoryColorHex: Int = 0x9CA3AF
     var tagNamesRaw: String = "[]"
+    var refundSourceEntryIDRaw: String?
 
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
+        recordedAt: Date? = .now,
         amount: Double,
         originalAmount: Double? = nil,
         currencyCode: String = "CNY",
@@ -183,10 +186,12 @@ final class LedgerEntry {
         note: String,
         flow: FlowType,
         category: CategoryItem,
-        tagNames: [String] = []
+        tagNames: [String] = [],
+        refundSourceEntryID: UUID? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
+        self.recordedAt = recordedAt
         self.amount = amount
         self.originalAmount = originalAmount ?? amount
         self.currencyCode = currencyCode
@@ -197,6 +202,7 @@ final class LedgerEntry {
         self.categorySymbol = category.symbol
         self.categoryColorHex = category.colorHex
         self.tagNames = tagNames
+        self.refundSourceEntryID = refundSourceEntryID
     }
 
     var flow: FlowType {
@@ -206,6 +212,20 @@ final class LedgerEntry {
 
     var categoryColor: Color {
         Color.sw(UInt(categoryColorHex))
+    }
+
+    var resolvedRecordedAt: Date {
+        recordedAt ?? createdAt
+    }
+
+    var refundSourceEntryID: UUID? {
+        get {
+            guard let rawValue = refundSourceEntryIDRaw else { return nil }
+            return UUID(uuidString: rawValue)
+        }
+        set {
+            refundSourceEntryIDRaw = newValue?.uuidString
+        }
     }
 
     var displayAmount: Double {

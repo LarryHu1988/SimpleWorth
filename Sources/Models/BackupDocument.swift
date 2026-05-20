@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct LedgerEntrySnapshot: Codable {
     let id: UUID
     let createdAt: Date
+    let recordedAt: Date?
     let amount: Double
     let originalAmount: Double?
     let currencyCode: String?
@@ -16,6 +17,7 @@ struct LedgerEntrySnapshot: Codable {
     let categoryName: String
     let categorySymbol: String
     let categoryColorHex: Int
+    let refundSourceEntryID: UUID?
 }
 
 struct TagSnapshot: Codable {
@@ -106,6 +108,7 @@ enum LedgerBackupCoordinator {
                 LedgerEntrySnapshot(
                     id: $0.id,
                     createdAt: $0.createdAt,
+                    recordedAt: $0.recordedAt,
                     amount: $0.amount,
                     originalAmount: $0.originalAmount,
                     currencyCode: $0.currencyCode,
@@ -115,7 +118,8 @@ enum LedgerBackupCoordinator {
                     flow: $0.flow,
                     categoryName: $0.categoryName,
                     categorySymbol: $0.categorySymbol,
-                    categoryColorHex: $0.categoryColorHex
+                    categoryColorHex: $0.categoryColorHex,
+                    refundSourceEntryID: $0.refundSourceEntryID
                 )
             },
             tags: tags.map {
@@ -202,6 +206,7 @@ enum LedgerBackupCoordinator {
             let entry = LedgerEntry(
                 id: snapshot.id,
                 createdAt: snapshot.createdAt,
+                recordedAt: snapshot.recordedAt,
                 amount: snapshot.amount,
                 originalAmount: snapshot.originalAmount ?? snapshot.amount,
                 currencyCode: snapshot.currencyCode ?? "CNY",
@@ -209,7 +214,8 @@ enum LedgerBackupCoordinator {
                 note: snapshot.note,
                 flow: snapshot.flow,
                 category: category,
-                tagNames: snapshot.tagNames ?? []
+                tagNames: snapshot.tagNames ?? [],
+                refundSourceEntryID: snapshot.refundSourceEntryID
             )
             modelContext.insert(entry)
         }

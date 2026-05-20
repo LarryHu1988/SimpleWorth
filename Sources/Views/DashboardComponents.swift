@@ -151,6 +151,7 @@ struct LedgerRow: View {
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     let entry: LedgerEntry
     var tagTintHexByName: [String: Int] = [:]
+    var refundAmount: Double = 0
 
     private var signedDisplayAmount: Double {
         entry.signedDisplayAmount
@@ -228,6 +229,22 @@ struct LedgerRow: View {
                         }
                     }
                 }
+
+                if refundAmount > 0.001 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.uturn.backward.circle.fill")
+                            .font(.caption2.weight(.bold))
+                        Text(L10n.string("ledger.refundApplied", locale: locale, refundAmount.cnyText(in: locale)))
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(SWTheme.accentBlue)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(SWTheme.accentBlue.opacity(0.14))
+                    )
+                }
             }
 
             Spacer(minLength: 8)
@@ -253,6 +270,7 @@ struct SwipeableLedgerRow: View {
     @Environment(\.locale) private var locale
     let entry: LedgerEntry
     var tagTintHexByName: [String: Int] = [:]
+    var refundAmount: Double = 0
     var showCopyAction: Bool = true
     var showRefundAction: Bool = true
     let onTap: () -> Void
@@ -287,7 +305,7 @@ struct SwipeableLedgerRow: View {
         ZStack {
             actionBackground
 
-            LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName)
+            LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName, refundAmount: refundAmount)
                 .offset(x: offsetX)
                 .contentShape(Rectangle())
                 .allowsHitTesting(!isOpen || isHorizontalDragging)

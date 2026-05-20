@@ -546,7 +546,7 @@ struct EntryEditorSheet: View {
     }
 
     private var tagCard: some View {
-        let columns = [GridItem(.adaptive(minimum: 82), spacing: 10)]
+        let columns = [GridItem(.adaptive(minimum: 132), spacing: 8)]
 
         return VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "标签", subtitle: "可选，为账单补充标签")
@@ -563,23 +563,25 @@ struct EntryEditorSheet: View {
                             .fill(Color.white.opacity(0.04))
                     )
             } else {
-                LazyVGrid(columns: columns, spacing: 10) {
+                LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(managedTags) { tag in
                         let isSelected = selectedTagNames.contains(tag.name)
 
                         Button {
                             toggleTag(named: tag.name)
                         } label: {
-                            HStack(spacing: 7) {
+                            HStack(alignment: .top, spacing: 7) {
                                 Image(systemName: "tag.fill")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(tag.tintColor)
+                                    .padding(.top, 1)
                                 Text(tag.name)
                                     .font(.caption.weight(.semibold))
-                                    .lineLimit(1)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .foregroundStyle(isSelected ? Color.white : SWTheme.textSecondary)
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 10)
                             .background(
@@ -648,7 +650,8 @@ struct EntryEditorSheet: View {
                 note: noteToSave,
                 flow: flow,
                 category: categoryToSave,
-                tagNames: selectedTagNames
+                tagNames: selectedTagNames,
+                refundSourceEntryID: isRefundOperation ? entry?.id : nil
             )
             modelContext.insert(newEntry)
         }

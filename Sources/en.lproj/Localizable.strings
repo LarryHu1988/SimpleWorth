@@ -20,6 +20,7 @@
 "ledger.recentSubtitle.expense" = "%lld entries this month. Tap to edit, swipe left to refund or delete, swipe right to duplicate (refund entries excluded)";
 "ledger.recentSubtitle.income" = "%lld entries this month. Tap to edit, swipe left to delete, swipe right to duplicate";
 "ledger.recentCollapsed" = "%lld entries for this month are collapsed";
+"ledger.refundApplied" = "Refunded %@";
 "stats.emptyDistribution" = "No %@ %@ data";
 "entry.refundNotePrefix" = "Refund: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";

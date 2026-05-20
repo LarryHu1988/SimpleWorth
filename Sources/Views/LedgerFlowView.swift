@@ -60,11 +60,26 @@ struct LedgerFlowView: View {
 
     private var selectedPeriodEntries: [LedgerEntry] {
         let range = monthRange(for: selectedPeriodDate)
-        return entries.filter { range.contains($0.createdAt) }
+        return entries
+            .filter { entry in
+                range.contains(entry.createdAt) && !(flow == .expense && entry.isRefundEntry)
+            }
+            .sorted(by: isNewerLedgerEntry)
     }
 
     private var recentEntries: [LedgerEntry] {
         selectedPeriodEntries
+    }
+
+    private var refundAmountBySourceEntryID: [UUID: Double] {
+        var result: [UUID: Double] = [:]
+
+        for entry in entries where entry.flow == .expense && entry.isRefundEntry {
+            guard let sourceEntryID = entry.refundSourceEntryID else { continue }
+            result[sourceEntryID, default: 0] += entry.amount
+        }
+
+        return result
     }
 
     private var selectedPeriodTotal: Double {
@@ -383,6 +398,7 @@ struct LedgerFlowView: View {
                         SwipeableLedgerRow(
                             entry: entry,
                             tagTintHexByName: tagTintHexByName,
+                            refundAmount: refundAmountBySourceEntryID[entry.id] ?? 0,
                             showCopyAction: !entry.isRefundEntry,
                             showRefundAction: flow == .expense,
                             onTap: {
@@ -444,8 +460,25 @@ struct LedgerFlowView: View {
 
     private func delete(_ entry: LedgerEntry) {
         withAnimation {
+            if flow == .expense {
+                for refundEntry in entries where refundEntry.refundSourceEntryID == entry.id {
+                    modelContext.delete(refundEntry)
+                }
+            }
             modelContext.delete(entry)
             try? modelContext.save()
         }
+    }
+
+    private func isNewerLedgerEntry(_ lhs: LedgerEntry, than rhs: LedgerEntry) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+
+        if lhs.resolvedRecordedAt != rhs.resolvedRecordedAt {
+            return lhs.resolvedRecordedAt > rhs.resolvedRecordedAt
+        }
+
+        return lhs.id.uuidString > rhs.id.uuidString
     }
 }

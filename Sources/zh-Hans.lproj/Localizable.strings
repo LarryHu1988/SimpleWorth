@@ -20,6 +20,7 @@
 "ledger.recentSubtitle.expense" = "当月共 %lld 笔，点按可编辑，左滑退款或删除，右滑复制（退款账单除外）";
 "ledger.recentSubtitle.income" = "当月共 %lld 笔，点按可编辑，左滑删除，右滑复制";
 "ledger.recentCollapsed" = "已折叠当月 %lld 笔记录";
+"ledger.refundApplied" = "已退款 %@";
 "stats.emptyDistribution" = "暂无%@%@数据";
 "entry.refundNotePrefix" = "退款：%@";
 "entry.currencyRate" = "1 %@ ≈ %@";
