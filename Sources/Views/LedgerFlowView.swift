@@ -19,6 +19,7 @@ struct LedgerFlowView: View {
     @State private var editingTarget: EntryEditTarget?
     @State private var copyTarget: EntryEditTarget?
     @State private var refundTarget: EntryEditTarget?
+    @State private var actionMenuTarget: EntryEditTarget?
     @State private var pendingDeleteEntry: LedgerEntry?
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
@@ -234,7 +235,13 @@ struct LedgerFlowView: View {
             EntryEditorSheet(flow: flow, entry: target.entry, operation: .copy)
         }
         .sheet(item: $refundTarget) { target in
-            EntryEditorSheet(flow: target.entry.flow, entry: target.entry, operation: .refund)
+            EntryEditorSheet(
+                flow: target.entry.flow,
+                entry: target.entry,
+                operation: .refund,
+                linkedRefundEntries: refundEntries(for: target.entry),
+                refundLimitAmountCNY: remainingRefundAmountCNY(for: target.entry)
+            )
         }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
@@ -264,6 +271,49 @@ struct LedgerFlowView: View {
             }
         } message: { _ in
             Text("删除后将同步更新统计数据，且无法撤销。")
+        }
+        .confirmationDialog(
+            "账单操作",
+            isPresented: Binding(
+                get: { actionMenuTarget != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        actionMenuTarget = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: actionMenuTarget
+        ) { target in
+            Button("编辑") {
+                editingTarget = target
+                actionMenuTarget = nil
+            }
+
+            if !target.entry.isRefundEntry {
+                Button("复制") {
+                    copyTarget = target
+                    actionMenuTarget = nil
+                }
+            }
+
+            if flow == .expense, !target.entry.isRefundEntry {
+                Button("退款") {
+                    refundTarget = target
+                    actionMenuTarget = nil
+                }
+            }
+
+            Button("删除", role: .destructive) {
+                pendingDeleteEntry = target.entry
+                actionMenuTarget = nil
+            }
+
+            Button("取消", role: .cancel) {
+                actionMenuTarget = nil
+            }
+        } message: { target in
+            Text(target.entry.note)
         }
         .appBackground()
     }
@@ -431,6 +481,9 @@ struct LedgerFlowView: View {
                             },
                             onDelete: {
                                 pendingDeleteEntry = entry
+                            },
+                            onShowActions: {
+                                actionMenuTarget = EntryEditTarget(id: entry.id, entry: entry)
                             }
                         )
                     }
@@ -447,6 +500,10 @@ struct LedgerFlowView: View {
 
     private func refundEntries(for entry: LedgerEntry) -> [LedgerEntry] {
         refundEntriesBySourceEntryID[entry.id] ?? []
+    }
+
+    private func remainingRefundAmountCNY(for entry: LedgerEntry) -> Double {
+        max(entry.amount - (refundAmountBySourceEntryID[entry.id] ?? 0), 0)
     }
 
     private func normalizeSelectionIfNeeded() {
@@ -468,9 +525,16 @@ struct LedgerFlowView: View {
 
     private func totalAmount(inMonthOf date: Date) -> Double {
         let range = monthRange(for: date)
-        return entries
-            .filter { range.contains($0.createdAt) }
-            .reduce(0) { $0 + $1.flowPageContribution }
+        switch flow {
+        case .expense:
+            return entries
+                .filter { range.contains($0.createdAt) && !$0.isRefundEntry }
+                .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
+        case .income:
+            return entries
+                .filter { range.contains($0.createdAt) }
+                .reduce(0) { $0 + $1.incomeContribution }
+        }
     }
 
     private func monthRange(for date: Date) -> DateInterval {
@@ -492,13 +556,26 @@ struct LedgerFlowView: View {
         }
     }
 
+    private func adjustedExpenseAmount(for entry: LedgerEntry) -> Double {
+        guard entry.flow == .expense, !entry.isRefundEntry else { return 0 }
+        return max(entry.amount - (refundAmountBySourceEntryID[entry.id] ?? 0), 0)
+    }
+
     private func isNewerLedgerEntry(_ lhs: LedgerEntry, than rhs: LedgerEntry) -> Bool {
-        if lhs.createdAt != rhs.createdAt {
-            return lhs.createdAt > rhs.createdAt
+        let calendar = Calendar.current
+        let lhsDay = calendar.startOfDay(for: lhs.createdAt)
+        let rhsDay = calendar.startOfDay(for: rhs.createdAt)
+
+        if lhsDay != rhsDay {
+            return lhsDay > rhsDay
         }
 
         if lhs.resolvedRecordedAt != rhs.resolvedRecordedAt {
             return lhs.resolvedRecordedAt > rhs.resolvedRecordedAt
+        }
+
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
         }
 
         return lhs.id.uuidString > rhs.id.uuidString

@@ -226,6 +226,8 @@
 "最近存入" = "Recent Deposits";
 "暂无存入记录" = "No deposits yet";
 "编辑" = "Edit";
+"编辑退款" = "Edit Refund";
+"账单操作" = "Entry Actions";
 "新增" = "Add";
 "金额" = "Amount";
 "原账单金额" = "Original Entry Amount";

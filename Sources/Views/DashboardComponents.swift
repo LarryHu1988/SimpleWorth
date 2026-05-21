@@ -281,6 +281,7 @@ struct SwipeableLedgerRow: View {
     let onCopy: () -> Void
     let onRefund: () -> Void
     let onDelete: () -> Void
+    let onShowActions: () -> Void
 
     @State private var offsetX: CGFloat = 0
     @State private var baseOffsetX: CGFloat = 0
@@ -319,52 +320,7 @@ struct SwipeableLedgerRow: View {
         }
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
-        .simultaneousGesture(longPressHapticGesture)
-        .contextMenu {
-            Button {
-                closeActions()
-                HapticService.selection()
-                onTap()
-            } label: {
-                Label("编辑".appLocalized(in: locale), systemImage: "pencil")
-            }
-
-            if showCopyAction {
-                Button {
-                    closeActions()
-                    HapticService.selection()
-                    onCopy()
-                } label: {
-                    Label("复制".appLocalized(in: locale), systemImage: "doc.on.doc.fill")
-                }
-            }
-
-            if showRefundAction {
-                Button {
-                    closeActions()
-                    HapticService.selection()
-                    onRefund()
-                } label: {
-                    Label("退款".appLocalized(in: locale), systemImage: "arrow.uturn.backward.circle.fill")
-                }
-            }
-
-            Button(role: .destructive) {
-                closeActions()
-                HapticService.warning()
-                onDelete()
-            } label: {
-                Label("删除".appLocalized(in: locale), systemImage: "trash.fill")
-            }
-        } preview: {
-            LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName, refundAmount: refundAmount)
-                .padding(10)
-                .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(.regularMaterial)
-                )
-        }
+        .simultaneousGesture(longPressActionGesture)
         .onDisappear {
             resetImmediately()
         }
@@ -522,11 +478,13 @@ struct SwipeableLedgerRow: View {
             }
     }
 
-    private var longPressHapticGesture: some Gesture {
+    private var longPressActionGesture: some Gesture {
         LongPressGesture(minimumDuration: 0.32)
             .onEnded { _ in
                 guard !isHorizontalDragging else { return }
+                closeActions()
                 HapticService.impact(style: .medium)
+                onShowActions()
             }
     }
 

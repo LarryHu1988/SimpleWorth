@@ -6,6 +6,7 @@ enum EntryEditorOperation {
     case edit
     case copy
     case refund
+    case editRefund
 }
 
 @MainActor
@@ -22,6 +23,8 @@ struct EntryEditorSheet: View {
     let presetCategoryID: String?
     let operation: EntryEditorOperation
     let linkedRefundEntries: [LedgerEntry]
+    let refundLimitAmountCNY: Double?
+    let onSaved: (() -> Void)?
 
     @State private var note: String
     @State private var amountText: String
@@ -30,19 +33,25 @@ struct EntryEditorSheet: View {
     @State private var selectedCurrencyCode: String
     @State private var selectedTagNames: [String]
     @State private var showCurrencyPicker = false
+    @State private var editingRefundEntry: LedgerEntry?
+    @State private var refundDetailRefreshID = UUID()
 
     init(
         flow: FlowType,
         entry: LedgerEntry? = nil,
         presetCategoryID: String? = nil,
         operation: EntryEditorOperation = .create,
-        linkedRefundEntries: [LedgerEntry] = []
+        linkedRefundEntries: [LedgerEntry] = [],
+        refundLimitAmountCNY: Double? = nil,
+        onSaved: (() -> Void)? = nil
     ) {
         self.flow = flow
         self.entry = entry
         self.presetCategoryID = presetCategoryID
         self.operation = operation
         self.linkedRefundEntries = linkedRefundEntries
+        self.refundLimitAmountCNY = refundLimitAmountCNY
+        self.onSaved = onSaved
 
         let fallback = CategoryLibrary.defaultCategory(for: flow)
         let editingCategory = entry.map {
@@ -55,7 +64,7 @@ struct EntryEditorSheet: View {
         }
         let refundCategory = CategoryLibrary.category(named: CategoryLibrary.refundCategoryName, flow: flow)
         let preferredCategory: CategoryItem
-        if operation == .refund {
+        if operation == .refund || operation == .editRefund {
             preferredCategory = refundCategory ?? fallback
         } else {
             preferredCategory = editingCategory ?? fallback
@@ -70,13 +79,15 @@ struct EntryEditorSheet: View {
         case .refund:
             let source = entry?.note.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             initialNote = source.isEmpty ? "退款".appLocalized : L10n.string("entry.refundNotePrefix", source)
+        case .editRefund:
+            initialNote = entry?.note ?? ""
         }
 
         let initialDate: Date
         switch operation {
         case .create:
             initialDate = .now
-        case .edit:
+        case .edit, .editRefund:
             initialDate = entry?.createdAt ?? .now
         case .copy, .refund:
             initialDate = .now
@@ -185,6 +196,8 @@ struct EntryEditorSheet: View {
             return L10n.string("entry.copyFlow", locale: locale, flow.localizedTitle(in: locale))
         case .refund:
             return "退款录入".appLocalized(in: locale)
+        case .editRefund:
+            return "编辑退款".appLocalized(in: locale)
         }
     }
 
@@ -198,11 +211,21 @@ struct EntryEditorSheet: View {
             return "复制".appLocalized(in: locale)
         case .refund:
             return "退款".appLocalized(in: locale)
+        case .editRefund:
+            return "更新".appLocalized(in: locale)
         }
     }
 
-    private var isRefundOperation: Bool {
+    private var isCreatingRefundOperation: Bool {
         operation == .refund
+    }
+
+    private var isEditingRefundOperation: Bool {
+        operation == .editRefund
+    }
+
+    private var isRefundForm: Bool {
+        isCreatingRefundOperation || isEditingRefundOperation
     }
 
     private var sourceEntryAmountTitle: String {
@@ -231,10 +254,16 @@ struct EntryEditorSheet: View {
 
     private var canSave: Bool {
         guard let normalizedAmount, normalizedAmount > 0 else { return false }
-        guard convertedAmountCNY != nil, rateToCNY != nil else { return false }
-        if isRefundOperation, let sourceAmount = entry?.displayAmount, normalizedAmount > sourceAmount {
+        guard let convertedAmountCNY, rateToCNY != nil else { return false }
+
+        if isRefundForm, let refundLimitAmountCNY, convertedAmountCNY > refundLimitAmountCNY + 0.005 {
             return false
         }
+
+        if operation == .edit, entry?.isRefundEntry == false, convertedAmountCNY + 0.005 < linkedRefundTotalCNY {
+            return false
+        }
+
         return true
     }
 
@@ -253,7 +282,7 @@ struct EntryEditorSheet: View {
     }
 
     private var shouldShowRefundDetail: Bool {
-        !isRefundOperation && !sortedLinkedRefundEntries.isEmpty
+        !isRefundForm && !sortedLinkedRefundEntries.isEmpty
     }
 
     private var linkedRefundTotalCNY: Double {
@@ -278,19 +307,22 @@ struct EntryEditorSheet: View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 16) {
-                    if isRefundOperation {
+                    if isCreatingRefundOperation {
                         sourceAmountCard
+                        refundAmountCard
+                    } else if isEditingRefundOperation {
                         refundAmountCard
                     } else {
                         amountCard
                     }
                     if shouldShowRefundDetail {
                         refundDetailCard
+                            .id(refundDetailRefreshID)
                     }
                     noteCard
                     dateCard
                     tagCard
-                    if !isRefundOperation {
+                    if !isRefundForm {
                         categoryCard
                     }
                 }
@@ -325,6 +357,18 @@ struct EntryEditorSheet: View {
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showCurrencyPicker) {
             CurrencyPickerSheet(selectedCode: $selectedCurrencyCode)
+        }
+        .sheet(item: $editingRefundEntry) { refundEntry in
+            EntryEditorSheet(
+                flow: refundEntry.flow,
+                entry: refundEntry,
+                operation: .editRefund,
+                refundLimitAmountCNY: refundEditLimitAmountCNY(for: refundEntry),
+                onSaved: {
+                    refundDetailRefreshID = UUID()
+                    onSaved?()
+                }
+            )
         }
     }
 
@@ -409,41 +453,51 @@ struct EntryEditorSheet: View {
 
             VStack(spacing: 8) {
                 ForEach(sortedLinkedRefundEntries) { refundEntry in
-                    HStack(spacing: 10) {
-                        ZStack {
-                            Circle()
-                                .fill(SWTheme.accentBlue.opacity(0.16))
-                                .frame(width: 30, height: 30)
-                            Image(systemName: "arrow.uturn.backward.circle.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(SWTheme.accentBlue)
-                        }
+                    Button {
+                        HapticService.selection()
+                        editingRefundEntry = refundEntry
+                    } label: {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(SWTheme.accentBlue.opacity(0.16))
+                                    .frame(width: 30, height: 30)
+                                Image(systemName: "arrow.uturn.backward.circle.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(SWTheme.accentBlue)
+                            }
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(refundEntry.note)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(SWTheme.primaryText)
-                                .lineLimit(2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(refundEntry.note)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(SWTheme.primaryText)
+                                    .lineLimit(2)
 
-                            Text(refundEntry.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
-                                .font(.caption2)
-                                .foregroundStyle(SWTheme.textSecondary)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("+\(refundDisplayAmountText(for: refundEntry))")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(SWTheme.accentBlue)
-
-                            if CurrencyCatalog.normalize(code: refundEntry.currencyCode) != "CNY" {
-                                Text(refundEntry.amount.currencyText(code: "CNY", fractionDigits: 2, locale: locale))
+                                Text(refundEntry.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
                                     .font(.caption2)
                                     .foregroundStyle(SWTheme.textSecondary)
                             }
+
+                            Spacer(minLength: 8)
+
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("+\(refundDisplayAmountText(for: refundEntry))")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(SWTheme.accentBlue)
+
+                                if CurrencyCatalog.normalize(code: refundEntry.currencyCode) != "CNY" {
+                                    Text(refundEntry.amount.currencyText(code: "CNY", fractionDigits: 2, locale: locale))
+                                        .font(.caption2)
+                                        .foregroundStyle(SWTheme.textSecondary)
+                                }
+                            }
+
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SWTheme.textSecondary)
                         }
                     }
+                    .buttonStyle(.plain)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(
@@ -488,6 +542,11 @@ struct EntryEditorSheet: View {
         let code = CurrencyCatalog.normalize(code: refundEntry.currencyCode)
         let digits = CurrencyCatalog.fractionDigits(for: code)
         return refundEntry.displayAmount.currencyText(code: code, fractionDigits: digits, locale: locale)
+    }
+
+    private func refundEditLimitAmountCNY(for refundEntry: LedgerEntry) -> Double? {
+        guard let entry else { return nil }
+        return max(entry.amount - linkedRefundTotalCNY + refundEntry.amount, 0)
     }
 
     private var sourceAmountCard: some View {
@@ -781,7 +840,7 @@ struct EntryEditorSheet: View {
 
         let finalNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let categoryToSave: CategoryItem = {
-            if isRefundOperation, let refundCategory = CategoryLibrary.category(
+            if isRefundForm, let refundCategory = CategoryLibrary.category(
                 named: CategoryLibrary.refundCategoryName,
                 flow: flow
             ) {
@@ -789,12 +848,12 @@ struct EntryEditorSheet: View {
             }
             return selectedCategory
         }()
-        let noteFallback = isRefundOperation ? CategoryLibrary.refundCategoryName : categoryToSave.name
+        let noteFallback = isRefundForm ? CategoryLibrary.refundCategoryName : categoryToSave.name
         let noteToSave = finalNote.isEmpty ? noteFallback : finalNote
         let finalDate = detailedTimeEnabled ? date : Calendar.current.startOfDay(for: date)
         let currencyCode = normalizedCurrencyCode
 
-        if operation == .edit, let entry {
+        if (operation == .edit || operation == .editRefund), let entry {
             entry.amount = amountInCNY
             entry.originalAmount = originalAmount
             entry.currencyCode = currencyCode
@@ -817,12 +876,13 @@ struct EntryEditorSheet: View {
                 flow: flow,
                 category: categoryToSave,
                 tagNames: selectedTagNames,
-                refundSourceEntryID: isRefundOperation ? entry?.id : nil
+                refundSourceEntryID: isCreatingRefundOperation ? entry?.id : nil
             )
             modelContext.insert(newEntry)
         }
 
         try? modelContext.save()
+        onSaved?()
         dismiss()
     }
 

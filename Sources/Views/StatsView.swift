@@ -53,9 +53,21 @@ struct StatsView: View {
         }
     }
 
+    private var expenseRefundAmountBySourceEntryID: [UUID: Double] {
+        var result: [UUID: Double] = [:]
+
+        for entry in entries where entry.flow == .expense && entry.isRefundEntry {
+            guard let sourceEntryID = entry.refundSourceEntryID else { continue }
+            result[sourceEntryID, default: 0] += entry.amount
+        }
+
+        return result
+    }
+
     private var totalExpense: Double {
         selectedMonthEntries
-            .reduce(0) { $0 + $1.expenseContribution }
+            .filter { $0.flow == .expense && !$0.isRefundEntry }
+            .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
     }
 
     private var totalIncome: Double {
@@ -97,7 +109,8 @@ struct StatsView: View {
             }
 
             let expense = rows
-                .reduce(0) { $0 + $1.expenseContribution }
+                .filter { $0.flow == .expense && !$0.isRefundEntry }
+                .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
 
             let income = rows
                 .reduce(0) { $0 + $1.incomeContribution }
@@ -107,7 +120,9 @@ struct StatsView: View {
     }
 
     private var selectedStats: [CategoryStat] {
-        let filtered = selectedMonthEntries.filter { $0.flow == selectedFlow }
+        let filtered = selectedMonthEntries.filter { entry in
+            entry.flow == selectedFlow && (selectedFlow == .income || !entry.isRefundEntry)
+        }
         let stats: [CategoryStat]
 
         switch selectedDistributionMode {
@@ -191,10 +206,20 @@ struct StatsView: View {
     private func statisticContribution(for entry: LedgerEntry) -> Double {
         switch selectedFlow {
         case .expense:
-            return entry.expenseContribution
+            return adjustedExpenseAmount(for: entry)
         case .income:
             return entry.incomeContribution
         }
+    }
+
+    private func adjustedExpenseAmount(for entry: LedgerEntry) -> Double {
+        guard entry.flow == .expense, !entry.isRefundEntry else { return 0 }
+        return max(entry.amount - (expenseRefundAmountBySourceEntryID[entry.id] ?? 0), 0)
+    }
+
+    private func percentageText(for amount: Double) -> String {
+        guard selectedTotal > 0 else { return "0%" }
+        return "\((amount / selectedTotal * 100).formatted(.number.precision(.fractionLength(1))))%"
     }
 
     var body: some View {
@@ -436,9 +461,15 @@ struct StatsView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(SWTheme.primaryText)
                             Spacer()
-                            Text(item.amount.cnyText(in: locale))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(SWTheme.primaryText)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(item.amount.cnyText(in: locale))
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(SWTheme.primaryText)
+
+                                Text(percentageText(for: item.amount))
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(SWTheme.textSecondary)
+                            }
                         }
                         .padding(.vertical, 6)
                     }
