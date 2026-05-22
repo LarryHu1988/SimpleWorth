@@ -25,6 +25,13 @@ private enum DistributionMode: String, CaseIterable, Identifiable {
     }
 }
 
+private struct StatsDrilldownTarget: Identifiable {
+    let id: String
+    let mode: DistributionMode
+    let flow: FlowType
+    let stat: CategoryStat
+}
+
 struct StatsView: View {
     @Environment(\.locale) private var locale
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
@@ -39,6 +46,7 @@ struct StatsView: View {
         1.0,
         Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
     )
+    @State private var drilldownTarget: StatsDrilldownTarget?
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: .now)
         let years = Set(entries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
@@ -263,6 +271,23 @@ struct StatsView: View {
             resetToCurrentPeriod()
             syncScrollWithSelection()
         }
+        .sheet(item: $drilldownTarget) { target in
+            StatsDrilldownSheet(
+                title: target.mode == .category ? "分类明细" : "标签明细",
+                item: target.stat,
+                itemName: displayName(for: target.stat, mode: target.mode),
+                summaryText: L10n.string(
+                    "stats.drilldownSummary",
+                    locale: locale,
+                    Int64(drilldownEntries(for: target).count),
+                    percentageText(for: target.stat.amount)
+                ),
+                amountText: target.stat.amount.cnyText(in: locale),
+                entries: drilldownEntries(for: target),
+                refundAmountBySourceEntryID: expenseRefundAmountBySourceEntryID,
+                tagTintHexByName: tagTintHexByName
+            )
+        }
         .appBackground()
     }
 
@@ -446,32 +471,48 @@ struct StatsView: View {
 
                 VStack(spacing: 10) {
                     ForEach(selectedStats) { item in
-                        HStack(spacing: 10) {
-                            if item.usesEmoji {
-                                Text(item.symbol)
-                                    .font(.headline)
-                                    .frame(width: 20)
-                            } else {
-                                Image(systemName: item.symbol)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(item.color)
-                                    .frame(width: 20)
-                            }
-                            Text(selectedDistributionMode == .category ? item.name.appLocalized(in: locale) : item.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(SWTheme.primaryText)
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(item.amount.cnyText(in: locale))
-                                    .font(.subheadline.weight(.bold))
+                        Button {
+                            drilldownTarget = StatsDrilldownTarget(
+                                id: "\(selectedFlow.id)-\(selectedDistributionMode.id)-\(item.id)",
+                                mode: selectedDistributionMode,
+                                flow: selectedFlow,
+                                stat: item
+                            )
+                            HapticService.selection()
+                        } label: {
+                            HStack(spacing: 10) {
+                                if item.usesEmoji {
+                                    Text(item.symbol)
+                                        .font(.headline)
+                                        .frame(width: 20)
+                                } else {
+                                    Image(systemName: item.symbol)
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(item.color)
+                                        .frame(width: 20)
+                                }
+                                Text(displayName(for: item, mode: selectedDistributionMode))
+                                    .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(SWTheme.primaryText)
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(item.amount.cnyText(in: locale))
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(SWTheme.primaryText)
 
-                                Text(percentageText(for: item.amount))
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(SWTheme.textSecondary)
+                                    Text(percentageText(for: item.amount))
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(SWTheme.textSecondary)
+                                }
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(SWTheme.textSecondary.opacity(0.75))
                             }
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 6)
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -589,6 +630,155 @@ struct StatsView: View {
         selectedMonth = tappedMonth
         syncScrollWithSelection()
         HapticService.selection()
+    }
+
+    private func displayName(for stat: CategoryStat, mode: DistributionMode) -> String {
+        mode == .category ? stat.name.appLocalized(in: locale) : stat.name
+    }
+
+    private func drilldownEntries(for target: StatsDrilldownTarget) -> [LedgerEntry] {
+        let baseEntries = selectedMonthEntries.filter { entry in
+            entry.flow == target.flow && (target.flow == .income || !entry.isRefundEntry)
+        }
+        let matchedEntries: [LedgerEntry]
+
+        switch target.mode {
+        case .category:
+            matchedEntries = baseEntries.filter { entry in
+                entry.categoryName == target.stat.name
+                    && entry.categorySymbol == target.stat.symbol
+                    && entry.categoryColorHex == target.stat.colorHex
+            }
+        case .tag:
+            let tagName = target.stat.key.replacingOccurrences(of: "tag|", with: "")
+            if tagName == "__untagged__" {
+                matchedEntries = baseEntries.filter { $0.tagNames.isEmpty }
+            } else {
+                matchedEntries = baseEntries.filter { $0.tagNames.contains(tagName) }
+            }
+        }
+
+        return matchedEntries.sorted(by: isNewerStatsEntry)
+    }
+
+    private func isNewerStatsEntry(_ lhs: LedgerEntry, than rhs: LedgerEntry) -> Bool {
+        let calendar = Calendar.current
+        let lhsDay = calendar.startOfDay(for: lhs.createdAt)
+        let rhsDay = calendar.startOfDay(for: rhs.createdAt)
+
+        if lhsDay != rhsDay {
+            return lhsDay > rhsDay
+        }
+
+        if lhs.resolvedRecordedAt != rhs.resolvedRecordedAt {
+            return lhs.resolvedRecordedAt > rhs.resolvedRecordedAt
+        }
+
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+
+        return lhs.id.uuidString > rhs.id.uuidString
+    }
+}
+
+private struct StatsDrilldownSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
+
+    let title: String
+    let item: CategoryStat
+    let itemName: String
+    let summaryText: String
+    let amountText: String
+    let entries: [LedgerEntry]
+    let refundAmountBySourceEntryID: [UUID: Double]
+    let tagTintHexByName: [String: Int]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 14) {
+                    summaryCard
+
+                    if entries.isEmpty {
+                        EmptyStateCard(
+                            title: "该维度下暂无记录",
+                            subtitle: "返回统计页后可切换月份或维度查看。",
+                            symbol: "list.bullet.rectangle"
+                        )
+                    } else {
+                        ForEach(entries) { entry in
+                            LedgerRow(
+                                entry: entry,
+                                tagTintHexByName: tagTintHexByName,
+                                refundAmount: refundAmountBySourceEntryID[entry.id] ?? 0
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 24)
+            }
+            .navigationTitle(title.appLocalized(in: locale))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成".appLocalized(in: locale)) {
+                        dismiss()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+            }
+            .appBackground()
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var summaryCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(item.color.opacity(0.18))
+                    .frame(width: 48, height: 48)
+
+                if item.usesEmoji {
+                    Text(item.symbol)
+                        .font(.title3)
+                } else {
+                    Image(systemName: item.symbol)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(item.color)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(itemName)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .lineLimit(2)
+
+                Text(summaryText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 5) {
+                Text("统计金额".appLocalized(in: locale))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+
+                Text(amountText)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .minimumScaleFactor(0.75)
+            }
+        }
+        .fitnessCard()
     }
 }
 

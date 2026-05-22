@@ -6,6 +6,12 @@ private struct EntryEditTarget: Identifiable {
     let entry: LedgerEntry
 }
 
+private struct LedgerActionMenuTarget: Identifiable {
+    let id: UUID
+    let entry: LedgerEntry
+    let sourceFrame: CGRect
+}
+
 struct LedgerFlowView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
@@ -19,7 +25,7 @@ struct LedgerFlowView: View {
     @State private var editingTarget: EntryEditTarget?
     @State private var copyTarget: EntryEditTarget?
     @State private var refundTarget: EntryEditTarget?
-    @State private var actionMenuTarget: EntryEditTarget?
+    @State private var actionMenuTarget: LedgerActionMenuTarget?
     @State private var pendingDeleteEntry: LedgerEntry?
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
@@ -171,35 +177,40 @@ struct LedgerFlowView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 18) {
-                FlowSummaryCard(
-                    flow: flow,
-                    periodTitle: L10n.string("ledger.periodFlow", locale: locale, selectedPeriodLabel, flow.localizedTitle(in: locale)),
-                    amount: selectedPeriodTotal,
-                    compareText: compareText,
-                    ringProgress: ringProgress
-                )
-
-                categoryToggleCard
-
-                if showCategoryGrid {
-                    CategoryGridSection(
-                        title: categoryTitle,
-                        subtitle: categorySubtitle,
-                        categories: categories,
-                        onTapCategory: { category in
-                            presentCreateSheet(categoryID: category.id)
-                        }
+        ZStack(alignment: .topLeading) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 18) {
+                    FlowSummaryCard(
+                        flow: flow,
+                        periodTitle: L10n.string("ledger.periodFlow", locale: locale, selectedPeriodLabel, flow.localizedTitle(in: locale)),
+                        amount: selectedPeriodTotal,
+                        compareText: compareText,
+                        ringProgress: ringProgress
                     )
-                }
 
-                transactionCard
+                    categoryToggleCard
+
+                    if showCategoryGrid {
+                        CategoryGridSection(
+                            title: categoryTitle,
+                            subtitle: categorySubtitle,
+                            categories: categories,
+                            onTapCategory: { category in
+                                presentCreateSheet(categoryID: category.id)
+                            }
+                        )
+                    }
+
+                    transactionCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
+
+            actionMenuOverlay
         }
+        .coordinateSpace(name: LedgerRowCoordinateSpace.name)
         .navigationTitle(flow.localizedTitle(in: locale))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -272,50 +283,53 @@ struct LedgerFlowView: View {
         } message: { _ in
             Text("删除后将同步更新统计数据，且无法撤销。")
         }
-        .confirmationDialog(
-            "账单操作",
-            isPresented: Binding(
-                get: { actionMenuTarget != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        actionMenuTarget = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible,
-            presenting: actionMenuTarget
-        ) { target in
-            Button("编辑") {
-                editingTarget = target
-                actionMenuTarget = nil
-            }
-
-            if !target.entry.isRefundEntry {
-                Button("复制") {
-                    copyTarget = target
-                    actionMenuTarget = nil
-                }
-            }
-
-            if flow == .expense, !target.entry.isRefundEntry {
-                Button("退款") {
-                    refundTarget = target
-                    actionMenuTarget = nil
-                }
-            }
-
-            Button("删除", role: .destructive) {
-                pendingDeleteEntry = target.entry
-                actionMenuTarget = nil
-            }
-
-            Button("取消", role: .cancel) {
-                actionMenuTarget = nil
-            }
-        } message: { target in
-            Text(target.entry.note)
-        }
         .appBackground()
+    }
+
+    private var actionMenuOverlay: some View {
+        GeometryReader { proxy in
+            if let target = actionMenuTarget {
+                ZStack(alignment: .topLeading) {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.easeOut(duration: 0.12)) {
+                                actionMenuTarget = nil
+                            }
+                        }
+
+                    LedgerFloatingActionMenu(
+                        entry: target.entry,
+                        flow: flow,
+                        onEdit: {
+                            editingTarget = EntryEditTarget(id: target.id, entry: target.entry)
+                            actionMenuTarget = nil
+                        },
+                        onCopy: {
+                            copyTarget = EntryEditTarget(id: target.id, entry: target.entry)
+                            actionMenuTarget = nil
+                        },
+                        onRefund: {
+                            refundTarget = EntryEditTarget(id: target.id, entry: target.entry)
+                            actionMenuTarget = nil
+                        },
+                        onDelete: {
+                            pendingDeleteEntry = target.entry
+                            actionMenuTarget = nil
+                        }
+                    )
+                    .frame(width: LedgerFloatingActionMenu.menuWidth)
+                    .position(actionMenuPosition(
+                        for: target.sourceFrame,
+                        in: proxy.size,
+                        actionCount: actionMenuActionCount(for: target.entry)
+                    ))
+                    .transition(.scale(scale: 0.94).combined(with: .opacity))
+                }
+                .animation(.spring(response: 0.24, dampingFraction: 0.86), value: target.id)
+            }
+        }
+        .allowsHitTesting(actionMenuTarget != nil)
     }
 
     private var categoryToggleCard: some View {
@@ -482,8 +496,14 @@ struct LedgerFlowView: View {
                             onDelete: {
                                 pendingDeleteEntry = entry
                             },
-                            onShowActions: {
-                                actionMenuTarget = EntryEditTarget(id: entry.id, entry: entry)
+                            onShowActions: { sourceFrame in
+                                withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                                    actionMenuTarget = LedgerActionMenuTarget(
+                                        id: entry.id,
+                                        entry: entry,
+                                        sourceFrame: sourceFrame
+                                    )
+                                }
                             }
                         )
                     }
@@ -561,6 +581,35 @@ struct LedgerFlowView: View {
         return max(entry.amount - (refundAmountBySourceEntryID[entry.id] ?? 0), 0)
     }
 
+    private func actionMenuActionCount(for entry: LedgerEntry) -> Int {
+        var count = 2
+        if !entry.isRefundEntry {
+            count += 1
+        }
+        if flow == .expense, !entry.isRefundEntry {
+            count += 1
+        }
+        return count
+    }
+
+    private func actionMenuPosition(for frame: CGRect, in containerSize: CGSize, actionCount: Int) -> CGPoint {
+        let horizontalPadding: CGFloat = 16
+        let menuWidth = LedgerFloatingActionMenu.menuWidth
+        let menuHeight = LedgerFloatingActionMenu.estimatedHeight(for: actionCount)
+        let safeFrame = frame.isEmpty
+            ? CGRect(x: horizontalPadding, y: containerSize.height * 0.42, width: containerSize.width - horizontalPadding * 2, height: 56)
+            : frame
+        let minX = menuWidth / 2 + horizontalPadding
+        let maxX = max(minX, containerSize.width - menuWidth / 2 - horizontalPadding)
+        let x = min(max(safeFrame.midX, minX), maxX)
+        let belowY = safeFrame.maxY + 8 + menuHeight / 2
+        let aboveY = safeFrame.minY - 8 - menuHeight / 2
+        let maxY = max(menuHeight / 2 + horizontalPadding, containerSize.height - menuHeight / 2 - horizontalPadding)
+        let y = belowY <= maxY ? belowY : max(menuHeight / 2 + horizontalPadding, aboveY)
+
+        return CGPoint(x: x, y: y)
+    }
+
     private func isNewerLedgerEntry(_ lhs: LedgerEntry, than rhs: LedgerEntry) -> Bool {
         let calendar = Calendar.current
         let lhsDay = calendar.startOfDay(for: lhs.createdAt)
@@ -579,5 +628,86 @@ struct LedgerFlowView: View {
         }
 
         return lhs.id.uuidString > rhs.id.uuidString
+    }
+}
+
+private struct LedgerFloatingActionMenu: View {
+    @Environment(\.locale) private var locale
+
+    static let menuWidth: CGFloat = 190
+
+    let entry: LedgerEntry
+    let flow: FlowType
+    let onEdit: () -> Void
+    let onCopy: () -> Void
+    let onRefund: () -> Void
+    let onDelete: () -> Void
+
+    static func estimatedHeight(for actionCount: Int) -> CGFloat {
+        CGFloat(actionCount) * 44 + 18
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            actionButton(title: "编辑", symbol: "pencil", tint: SWTheme.accentBlue, action: onEdit)
+
+            if !entry.isRefundEntry {
+                divider
+                actionButton(title: "复制", symbol: "doc.on.doc.fill", tint: SWTheme.accentGreen, action: onCopy)
+            }
+
+            if flow == .expense, !entry.isRefundEntry {
+                divider
+                actionButton(title: "退款", symbol: "arrow.uturn.backward.circle.fill", tint: SWTheme.accentOrange, action: onRefund)
+            }
+
+            divider
+            actionButton(title: "删除", symbol: "trash.fill", tint: .red, action: onDelete)
+        }
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.16), radius: 16, x: 0, y: 8)
+        )
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.12))
+            .frame(height: 1)
+            .padding(.leading, 44)
+    }
+
+    private func actionButton(title: String, symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            HapticService.selection()
+            action()
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: symbol)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 24, height: 24)
+
+                Text(title.appLocalized(in: locale))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SWTheme.primaryText)
+
+                Spacer(minLength: 0)
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

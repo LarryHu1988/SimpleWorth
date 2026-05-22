@@ -24,6 +24,12 @@
 "ledger.refundDetailTitle" = "返金記録";
 "ledger.refundDetailSubtitle" = "この明細に紐づく返金";
 "stats.emptyDistribution" = "%@ %@ データがありません";
+"stats.drilldownSummary" = "%lld 件 · %@";
+"分类明细" = "カテゴリ詳細";
+"标签明细" = "タグ詳細";
+"统计金额" = "集計金額";
+"该维度下暂无记录" = "このグループに記録はありません";
+"返回统计页后可切换月份或维度查看。" = "統計に戻ると月や集計軸を切り替えられます。";
 "entry.refundNotePrefix" = "返金: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";
 "entry.convertedAmount" = "換算 %@";

@@ -24,6 +24,12 @@
 "ledger.refundDetailTitle" = "退款记录";
 "ledger.refundDetailSubtitle" = "已关联到本账单的退款";
 "stats.emptyDistribution" = "暂无%@%@数据";
+"stats.drilldownSummary" = "共 %lld 笔记录 · 占比 %@";
+"分类明细" = "分类明细";
+"标签明细" = "标签明细";
+"统计金额" = "统计金额";
+"该维度下暂无记录" = "该维度下暂无记录";
+"返回统计页后可切换月份或维度查看。" = "返回统计页后可切换月份或维度查看。";
 "entry.refundNotePrefix" = "退款：%@";
 "entry.currencyRate" = "1 %@ ≈ %@";
 "entry.convertedAmount" = "折合 %@";

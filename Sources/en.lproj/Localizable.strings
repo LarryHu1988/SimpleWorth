@@ -24,6 +24,12 @@
 "ledger.refundDetailTitle" = "Refunds";
 "ledger.refundDetailSubtitle" = "Refunds linked to this entry";
 "stats.emptyDistribution" = "No %@ %@ data";
+"stats.drilldownSummary" = "%lld entries · %@";
+"分类明细" = "Category Details";
+"标签明细" = "Tag Details";
+"统计金额" = "Stat Amount";
+"该维度下暂无记录" = "No entries in this group";
+"返回统计页后可切换月份或维度查看。" = "Go back to Stats to switch the month or dimension.";
 "entry.refundNotePrefix" = "Refund: %@";
 "entry.currencyRate" = "1 %@ ≈ %@";
 "entry.convertedAmount" = "≈ %@";
