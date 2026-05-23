@@ -42,6 +42,8 @@ struct StatsView: View {
     @State private var selectedDistributionMode: DistributionMode = .category
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
+    @State private var selectedDistributionAngle: Double?
+    @State private var selectedDistributionStatID: String?
     @State private var chartScrollStartMonth = max(
         1.0,
         Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
@@ -196,6 +198,15 @@ struct StatsView: View {
         }
     }
 
+    private var selectedDistributionStat: CategoryStat? {
+        guard let selectedDistributionStatID else { return nil }
+        return selectedStats.first { $0.id == selectedDistributionStatID }
+    }
+
+    private var distributionChartTotal: Double {
+        selectedStats.reduce(0) { $0 + $1.amount }
+    }
+
     private var distributionEmptyTitle: String {
         L10n.string(
             "stats.emptyDistribution",
@@ -228,6 +239,143 @@ struct StatsView: View {
     private func percentageText(for amount: Double) -> String {
         guard selectedTotal > 0 else { return "0%" }
         return "\((amount / selectedTotal * 100).formatted(.number.precision(.fractionLength(1))))%"
+    }
+
+    @ViewBuilder
+    private func distributionCenterLabel(for stat: CategoryStat?) -> some View {
+        VStack(spacing: 6) {
+            if let stat {
+                Text(displayName(for: stat, mode: selectedDistributionMode))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(stat.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(stat.amount.cnyText(in: locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .minimumScaleFactor(0.72)
+
+                Text(percentageText(for: stat.amount))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            } else {
+                Text("\(selectedFlow.localizedTitle(in: locale))\(selectedDistributionMode.localizedTitle(in: locale))")
+                    .font(.caption)
+                    .foregroundStyle(SWTheme.textSecondary)
+
+                Text(selectedTotal.cnyText(in: locale))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SWTheme.primaryText)
+                    .minimumScaleFactor(0.72)
+            }
+        }
+        .frame(width: 116)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            clearDistributionSelection()
+        }
+    }
+
+    @ViewBuilder
+    private func distributionRow(for item: CategoryStat, isSelected: Bool) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(item.color.opacity(isSelected ? 0.22 : 0.12))
+                    .frame(width: 28, height: 28)
+
+                if item.usesEmoji {
+                    Text(item.symbol)
+                        .font(.headline)
+                } else {
+                    Image(systemName: item.symbol)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(item.color)
+                }
+            }
+            .frame(width: 28, height: 28)
+
+            Text(displayName(for: item, mode: selectedDistributionMode))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SWTheme.primaryText)
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(item.amount.cnyText(in: locale))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(isSelected ? item.color : SWTheme.primaryText)
+
+                Text(percentageText(for: item.amount))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(isSelected ? item.color.opacity(0.9) : SWTheme.textSecondary.opacity(0.75))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? item.color.opacity(0.13) : Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(isSelected ? item.color.opacity(0.52) : Color.clear, lineWidth: 1)
+                )
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func updateDistributionSelection(from angle: Double?) {
+        guard let angle else {
+            selectedDistributionStatID = nil
+            return
+        }
+
+        guard let statID = distributionStatID(for: angle) else { return }
+        guard selectedDistributionStatID != statID else { return }
+
+        selectedDistributionStatID = statID
+        HapticService.selection()
+    }
+
+    private func distributionStatID(for angle: Double) -> String? {
+        guard distributionChartTotal > 0 else { return nil }
+
+        let clampedAngle = min(max(angle, 0), distributionChartTotal)
+        var cumulativeAmount = 0.0
+
+        for item in selectedStats {
+            cumulativeAmount += item.amount
+            if clampedAngle <= cumulativeAmount {
+                return item.id
+            }
+        }
+
+        return selectedStats.last?.id
+    }
+
+    private func distributionAngleMidpoint(for stat: CategoryStat) -> Double? {
+        var cumulativeAmount = 0.0
+
+        for item in selectedStats {
+            let startAmount = cumulativeAmount
+            cumulativeAmount += item.amount
+
+            if item.id == stat.id {
+                return startAmount + item.amount / 2
+            }
+        }
+
+        return nil
+    }
+
+    private func clearDistributionSelection() {
+        selectedDistributionAngle = nil
+        selectedDistributionStatID = nil
     }
 
     var body: some View {
@@ -263,9 +411,23 @@ struct StatsView: View {
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
             syncScrollWithSelection()
+            clearDistributionSelection()
         }
         .onChange(of: selectedMonth) { _, _ in
             syncScrollWithSelection()
+            clearDistributionSelection()
+        }
+        .onChange(of: selectedYear) { _, _ in
+            clearDistributionSelection()
+        }
+        .onChange(of: selectedFlow) { _, _ in
+            clearDistributionSelection()
+        }
+        .onChange(of: selectedDistributionMode) { _, _ in
+            clearDistributionSelection()
+        }
+        .onChange(of: selectedDistributionAngle) { _, newValue in
+            updateDistributionSelection(from: newValue)
         }
         .onAppear {
             resetToCurrentPeriod()
@@ -447,31 +609,33 @@ struct StatsView: View {
                     symbol: selectedFlow == .expense ? "minus.circle" : "plus.circle"
                 )
             } else {
+                let highlightedStat = selectedDistributionStat
+                let hasHighlightedStat = highlightedStat != nil
+
                 ZStack {
                     Chart(selectedStats) { item in
+                        let isHighlighted = highlightedStat?.id == item.id
                         SectorMark(
                             angle: .value("金额", item.amount),
                             innerRadius: .ratio(0.58),
                             angularInset: 2
                         )
                         .foregroundStyle(item.color.gradient)
+                        .opacity(!hasHighlightedStat || isHighlighted ? 1 : 0.26)
                     }
+                    .chartAngleSelection(value: $selectedDistributionAngle)
                     .frame(height: 250)
 
-                    VStack(spacing: 6) {
-                        Text("\(selectedFlow.localizedTitle(in: locale))\(selectedDistributionMode.localizedTitle(in: locale))")
-                            .font(.caption)
-                            .foregroundStyle(SWTheme.textSecondary)
-                        Text(selectedTotal.cnyText(in: locale))
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(SWTheme.primaryText)
-                    }
+                    distributionCenterLabel(for: highlightedStat)
                 }
                 .animation(.easeInOut(duration: 0.2), value: selectedFlow)
+                .animation(.easeInOut(duration: 0.18), value: selectedDistributionStatID)
 
                 VStack(spacing: 10) {
                     ForEach(selectedStats) { item in
                         Button {
+                            selectedDistributionStatID = item.id
+                            selectedDistributionAngle = distributionAngleMidpoint(for: item)
                             drilldownTarget = StatsDrilldownTarget(
                                 id: "\(selectedFlow.id)-\(selectedDistributionMode.id)-\(item.id)",
                                 mode: selectedDistributionMode,
@@ -480,37 +644,7 @@ struct StatsView: View {
                             )
                             HapticService.selection()
                         } label: {
-                            HStack(spacing: 10) {
-                                if item.usesEmoji {
-                                    Text(item.symbol)
-                                        .font(.headline)
-                                        .frame(width: 20)
-                                } else {
-                                    Image(systemName: item.symbol)
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(item.color)
-                                        .frame(width: 20)
-                                }
-                                Text(displayName(for: item, mode: selectedDistributionMode))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(SWTheme.primaryText)
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(item.amount.cnyText(in: locale))
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(SWTheme.primaryText)
-
-                                    Text(percentageText(for: item.amount))
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(SWTheme.textSecondary)
-                                }
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(SWTheme.textSecondary.opacity(0.75))
-                            }
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
+                            distributionRow(for: item, isSelected: selectedDistributionStatID == item.id)
                         }
                         .buttonStyle(.plain)
                     }

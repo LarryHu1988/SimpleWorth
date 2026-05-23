@@ -17,8 +17,8 @@
 "ledger.addFlow" = "新增%@";
 "ledger.showCategory" = "顯示%@";
 "ledger.hideCategory" = "隱藏%@";
-"ledger.recentSubtitle.expense" = "當月共 %lld 筆，點按編輯，長按開啟操作選單，也可左右滑操作";
-"ledger.recentSubtitle.income" = "當月共 %lld 筆，點按編輯，長按開啟操作選單，也可左右滑操作";
+"ledger.recentSubtitle.expense" = "當月共 %lld 筆，點按編輯，也可左右滑操作";
+"ledger.recentSubtitle.income" = "當月共 %lld 筆，點按編輯，也可左右滑操作";
 "ledger.recentCollapsed" = "已折疊當月 %lld 筆記錄";
 "ledger.refundApplied" = "已退款 %@";
 "ledger.refundDetailTitle" = "退款記錄";

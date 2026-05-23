@@ -270,18 +270,6 @@ struct LedgerRow: View {
     }
 }
 
-enum LedgerRowCoordinateSpace {
-    static let name = "simpleworth.ledger-row-coordinate-space"
-}
-
-private struct LedgerRowFramePreferenceKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
 struct SwipeableLedgerRow: View {
     @Environment(\.locale) private var locale
     let entry: LedgerEntry
@@ -293,12 +281,13 @@ struct SwipeableLedgerRow: View {
     let onCopy: () -> Void
     let onRefund: () -> Void
     let onDelete: () -> Void
-    let onShowActions: (CGRect) -> Void
 
     @State private var offsetX: CGFloat = 0
     @State private var baseOffsetX: CGFloat = 0
     @State private var isHorizontalDragging = false
-    @State private var rowFrame: CGRect = .zero
+    @State private var lastHorizontalDragEndedAt = Date.distantPast
+
+    private let tapSuppressionInterval: TimeInterval = 0.28
 
     private var leadingWidth: CGFloat {
         showCopyAction ? 84 : 0
@@ -326,30 +315,19 @@ struct SwipeableLedgerRow: View {
             LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName, refundAmount: refundAmount)
                 .offset(x: offsetX)
                 .contentShape(Rectangle())
-                .allowsHitTesting(!isOpen || isHorizontalDragging)
+                .allowsHitTesting(!isOpen && !isHorizontalDragging)
                 .onTapGesture {
-                    onTap()
+                    handleRowTap()
                 }
         }
         .contentShape(Rectangle())
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: LedgerRowFramePreferenceKey.self,
-                    value: proxy.frame(in: .named(LedgerRowCoordinateSpace.name))
-                )
-            }
-        )
-        .onPreferenceChange(LedgerRowFramePreferenceKey.self) { newValue in
-            rowFrame = newValue
-        }
         .simultaneousGesture(dragGesture)
-        .simultaneousGesture(longPressActionGesture)
         .onDisappear {
             resetImmediately()
         }
         .onTapGesture {
             if isOpen {
+                lastHorizontalDragEndedAt = Date()
                 closeActions()
             }
         }
@@ -459,6 +437,13 @@ struct SwipeableLedgerRow: View {
         offsetX = 0
         baseOffsetX = 0
         isHorizontalDragging = false
+        lastHorizontalDragEndedAt = .distantPast
+    }
+
+    private func handleRowTap() {
+        guard !isOpen, !isHorizontalDragging else { return }
+        guard Date().timeIntervalSince(lastHorizontalDragEndedAt) >= tapSuppressionInterval else { return }
+        onTap()
     }
 
     private var dragGesture: some Gesture {
@@ -480,8 +465,11 @@ struct SwipeableLedgerRow: View {
                 offsetX = clampedOffset(baseOffsetX + translation.width)
             }
             .onEnded { value in
-                defer { isHorizontalDragging = false }
                 guard isHorizontalDragging else { return }
+                defer {
+                    lastHorizontalDragEndedAt = Date()
+                    isHorizontalDragging = false
+                }
 
                 let predictedOffset = settledOffset(baseOffsetX + value.predictedEndTranslation.width)
                 let leadingThreshold = leadingWidth * 0.42
@@ -499,16 +487,6 @@ struct SwipeableLedgerRow: View {
                         baseOffsetX = 0
                     }
                 }
-            }
-    }
-
-    private var longPressActionGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.32)
-            .onEnded { _ in
-                guard !isHorizontalDragging else { return }
-                closeActions()
-                HapticService.impact(style: .medium)
-                onShowActions(rowFrame)
             }
     }
 

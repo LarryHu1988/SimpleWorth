@@ -17,8 +17,8 @@
 "ledger.addFlow" = "Add %@";
 "ledger.showCategory" = "Show %@";
 "ledger.hideCategory" = "Hide %@";
-"ledger.recentSubtitle.expense" = "%lld entries this month. Tap to edit, long-press for actions, or swipe for quick actions";
-"ledger.recentSubtitle.income" = "%lld entries this month. Tap to edit, long-press for actions, or swipe for quick actions";
+"ledger.recentSubtitle.expense" = "%lld entries this month. Tap to edit or swipe for quick actions";
+"ledger.recentSubtitle.income" = "%lld entries this month. Tap to edit or swipe for quick actions";
 "ledger.recentCollapsed" = "%lld entries for this month are collapsed";
 "ledger.refundApplied" = "Refunded %@";
 "ledger.refundDetailTitle" = "Refunds";

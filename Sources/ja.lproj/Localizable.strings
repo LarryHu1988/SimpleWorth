@@ -17,8 +17,8 @@
 "ledger.addFlow" = "%@を追加";
 "ledger.showCategory" = "%@を表示";
 "ledger.hideCategory" = "%@を非表示";
-"ledger.recentSubtitle.expense" = "今月 %lld 件。タップで編集、長押しで操作メニュー、スワイプでクイック操作";
-"ledger.recentSubtitle.income" = "今月 %lld 件。タップで編集、長押しで操作メニュー、スワイプでクイック操作";
+"ledger.recentSubtitle.expense" = "今月 %lld 件。タップで編集、スワイプでクイック操作";
+"ledger.recentSubtitle.income" = "今月 %lld 件。タップで編集、スワイプでクイック操作";
 "ledger.recentCollapsed" = "今月の %lld 件を折りたたみ中";
 "ledger.refundApplied" = "%@ 返金済み";
 "ledger.refundDetailTitle" = "返金記録";
