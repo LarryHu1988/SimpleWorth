@@ -149,30 +149,86 @@ struct CategoryIconCell: View {
 struct LedgerRow: View {
     @Environment(\.locale) private var locale
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
-    let entry: LedgerEntry
-    var tagTintHexByName: [String: Int] = [:]
-    var refundAmount: Double = 0
+    private let snapshot: LedgerRowSnapshot
 
-    private var signedDisplayAmount: Double {
-        entry.signedDisplayAmount
+    init(entry: LedgerEntry, tagTintHexByName: [String: Int] = [:], refundAmount: Double = 0) {
+        snapshot = LedgerRowSnapshot(
+            id: entry.id,
+            note: entry.note,
+            createdAt: entry.createdAt,
+            signedDisplayAmount: entry.signedDisplayAmount,
+            signedCNYAmount: entry.signedAmountInCNY,
+            currencyCode: entry.currencyCode,
+            flow: entry.flow,
+            isRefundEntry: entry.isRefundEntry,
+            categorySymbol: entry.categorySymbol,
+            categoryColorHex: entry.categoryColorHex,
+            tagNames: entry.tagNames,
+            tagTintHexByName: tagTintHexByName,
+            refundAmount: refundAmount
+        )
     }
 
-    private var signedCNYAmount: Double {
-        entry.signedAmountInCNY
+    var body: some View {
+        LedgerRowContent(
+            snapshot: snapshot,
+            locale: locale,
+            detailedTimeEnabled: detailedTimeEnabled
+        )
+        .equatable()
+    }
+}
+
+private struct LedgerRowSnapshot: Equatable {
+    let id: UUID
+    let note: String
+    let createdAt: Date
+    let signedDisplayAmount: Double
+    let signedCNYAmount: Double
+    let currencyCode: String
+    let flow: FlowType
+    let isRefundEntry: Bool
+    let categorySymbol: String
+    let categoryColorHex: Int
+    let tagNames: [String]
+    let tagTintHexByName: [String: Int]
+    let refundAmount: Double
+}
+
+private struct LedgerRowContent: View, Equatable {
+    let snapshot: LedgerRowSnapshot
+    let locale: Locale
+    let detailedTimeEnabled: Bool
+
+    static func == (lhs: LedgerRowContent, rhs: LedgerRowContent) -> Bool {
+        lhs.snapshot == rhs.snapshot
+            && lhs.detailedTimeEnabled == rhs.detailedTimeEnabled
+            && lhs.locale.identifier == rhs.locale.identifier
     }
 
     private var signedDisplayAmountText: String {
-        let code = CurrencyCatalog.normalize(code: entry.currencyCode)
+        let code = CurrencyCatalog.normalize(code: snapshot.currencyCode)
         let digits = CurrencyCatalog.fractionDigits(for: code)
-        return signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits, locale: locale)
+        return snapshot.signedDisplayAmount.signedCurrencyText(code: code, fractionDigits: digits, locale: locale)
+    }
+
+    private var categoryColor: Color {
+        Color.sw(UInt(snapshot.categoryColorHex))
+    }
+
+    private var amountTint: Color {
+        if snapshot.flow == .income {
+            return SWTheme.accentGreen
+        }
+        return snapshot.isRefundEntry ? SWTheme.accentBlue : SWTheme.accentOrange
     }
 
     private var refundAmountText: String {
-        refundAmount.currencyText(code: "CNY", fractionDigits: 2, locale: locale)
+        snapshot.refundAmount.currencyText(code: "CNY", fractionDigits: 2, locale: locale)
     }
 
     private var allTagNames: [String] {
-        entry.tagNames
+        snapshot.tagNames
     }
 
     private var visibleTags: [String] {
@@ -183,25 +239,25 @@ struct LedgerRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(entry.categoryColor.opacity(0.2))
+                    .fill(categoryColor.opacity(0.2))
                     .frame(width: 44, height: 44)
-                Image(systemName: entry.categorySymbol)
+                Image(systemName: snapshot.categorySymbol)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(entry.categoryColor)
+                    .foregroundStyle(categoryColor)
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.note)
+                Text(snapshot.note)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(SWTheme.primaryText)
 
                 HStack(spacing: 6) {
-                    Text(entry.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
+                    Text(snapshot.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
 
-                    if CurrencyCatalog.normalize(code: entry.currencyCode) != "CNY" {
-                        Text(L10n.string("entry.convertedInline", locale: locale, signedCNYAmount.signedCNYText(in: locale)))
+                    if CurrencyCatalog.normalize(code: snapshot.currencyCode) != "CNY" {
+                        Text(L10n.string("entry.convertedInline", locale: locale, snapshot.signedCNYAmount.signedCNYText(in: locale)))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(SWTheme.textSecondary)
                     }
@@ -234,7 +290,7 @@ struct LedgerRow: View {
                     }
                 }
 
-                if refundAmount > 0.001 {
+                if snapshot.refundAmount > 0.001 {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.uturn.backward.circle.fill")
                             .font(.caption2.weight(.bold))
@@ -255,7 +311,7 @@ struct LedgerRow: View {
 
             Text(signedDisplayAmountText)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(entry.amountTint)
+                .foregroundStyle(amountTint)
         }
         .padding(10)
         .background(
@@ -265,7 +321,7 @@ struct LedgerRow: View {
     }
 
     private func tagTint(for tagName: String) -> Color {
-        let tintHex = tagTintHexByName[tagName] ?? TagEmojiLibrary.colorHex(for: tagName)
+        let tintHex = snapshot.tagTintHexByName[tagName] ?? TagEmojiLibrary.colorHex(for: tagName)
         return Color.sw(UInt(tintHex))
     }
 }
@@ -288,6 +344,8 @@ struct SwipeableLedgerRow: View {
     @State private var tapSuppressedUntil = Date.distantPast
 
     private let tapSuppressionInterval: TimeInterval = 0.5
+    private let dragActivationDistance: CGFloat = 4
+    private let settleAnimation = Animation.spring(response: 0.26, dampingFraction: 0.82, blendDuration: 0.04)
 
     private var leadingWidth: CGFloat {
         showCopyAction ? 84 : 0
@@ -316,9 +374,6 @@ struct SwipeableLedgerRow: View {
                 .offset(x: offsetX)
                 .contentShape(Rectangle())
                 .allowsHitTesting(!isOpen && !isHorizontalDragging)
-                .onTapGesture {
-                    handleRowTap()
-                }
         }
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
@@ -326,10 +381,7 @@ struct SwipeableLedgerRow: View {
             resetImmediately()
         }
         .onTapGesture {
-            if isOpen {
-                suppressTap()
-                closeActions()
-            }
+            handleContainerTap()
         }
         .clipped()
     }
@@ -428,7 +480,7 @@ struct SwipeableLedgerRow: View {
 
     private func closeActions() {
         suppressTap()
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.74, blendDuration: 0.08)) {
+        withAnimation(settleAnimation) {
             offsetX = 0
             baseOffsetX = 0
         }
@@ -441,8 +493,13 @@ struct SwipeableLedgerRow: View {
         tapSuppressedUntil = .distantPast
     }
 
-    private func handleRowTap() {
-        guard !isOpen, !isHorizontalDragging else { return }
+    private func handleContainerTap() {
+        if isOpen {
+            closeActions()
+            return
+        }
+
+        guard !isHorizontalDragging else { return }
         guard Date() >= tapSuppressedUntil else { return }
         onTap()
     }
@@ -452,14 +509,13 @@ struct SwipeableLedgerRow: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: abs(baseOffsetX) > 0.5 ? 10 : 24)
+        DragGesture(minimumDistance: isOpen ? 2 : 18)
             .onChanged { value in
                 let translation = value.translation
                 if !isHorizontalDragging {
-                    let intentThreshold = abs(baseOffsetX) > 0.5 ? 10.0 : 24.0
-                    let directionRatio = abs(baseOffsetX) > 0.5 ? 1.2 : 2.4
-                    let isStrongHorizontalIntent =
-                        abs(translation.width) > max(intentThreshold, abs(translation.height) * directionRatio)
+                    let isStrongHorizontalIntent = isOpen
+                        ? isOpenRowHorizontalIntent(translation)
+                        : isClosedRowHorizontalIntent(translation)
 
                     if !isStrongHorizontalIntent {
                         return
@@ -471,29 +527,61 @@ struct SwipeableLedgerRow: View {
                 offsetX = clampedOffset(baseOffsetX + translation.width)
             }
             .onEnded { value in
-                guard isHorizontalDragging else { return }
+                guard isHorizontalDragging else {
+                    if isOpen || abs(value.translation.width) > dragActivationDistance {
+                        suppressTap()
+                    }
+                    return
+                }
                 defer {
                     suppressTap()
                     isHorizontalDragging = false
                 }
 
                 let predictedOffset = settledOffset(baseOffsetX + value.predictedEndTranslation.width)
-                let leadingThreshold = leadingWidth * 0.42
-                let trailingThreshold = -trailingWidth * 0.38
 
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.74, blendDuration: 0.08)) {
-                    if predictedOffset > leadingThreshold {
-                        offsetX = leadingWidth
-                        baseOffsetX = leadingWidth
-                    } else if predictedOffset < trailingThreshold {
-                        offsetX = -trailingWidth
-                        baseOffsetX = -trailingWidth
-                    } else {
-                        offsetX = 0
-                        baseOffsetX = 0
-                    }
+                withAnimation(settleAnimation) {
+                    settle(at: predictedOffset)
                 }
             }
+    }
+
+    private func isOpenRowHorizontalIntent(_ translation: CGSize) -> Bool {
+        let horizontalDistance = abs(translation.width)
+        return horizontalDistance > dragActivationDistance
+            && horizontalDistance > abs(translation.height) * 0.35
+    }
+
+    private func isClosedRowHorizontalIntent(_ translation: CGSize) -> Bool {
+        let horizontalDistance = abs(translation.width)
+        return horizontalDistance > max(18, abs(translation.height) * 2.2)
+    }
+
+    private func settle(at predictedOffset: CGFloat) {
+        if baseOffsetX > 0.5 {
+            let shouldStayOpen = predictedOffset > leadingWidth * 0.72
+            offsetX = shouldStayOpen ? leadingWidth : 0
+            baseOffsetX = offsetX
+            return
+        }
+
+        if baseOffsetX < -0.5 {
+            let shouldStayOpen = predictedOffset < -trailingWidth * 0.72
+            offsetX = shouldStayOpen ? -trailingWidth : 0
+            baseOffsetX = offsetX
+            return
+        }
+
+        if predictedOffset > leadingWidth * 0.42 {
+            offsetX = leadingWidth
+            baseOffsetX = leadingWidth
+        } else if predictedOffset < -trailingWidth * 0.38 {
+            offsetX = -trailingWidth
+            baseOffsetX = -trailingWidth
+        } else {
+            offsetX = 0
+            baseOffsetX = 0
+        }
     }
 
     private func actionLabel(title: String, symbol: String, tint: Color, width: CGFloat) -> some View {

@@ -9,6 +9,11 @@ enum EntryEditorOperation {
     case editRefund
 }
 
+private enum EntryEditorFocusedField: Hashable {
+    case amount
+    case note
+}
+
 @MainActor
 struct EntryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -17,6 +22,7 @@ struct EntryEditorSheet: View {
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @ObservedObject private var currencyStore = CurrencyStore.shared
     @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var allTags: [TagRecord]
+    @FocusState private var focusedField: EntryEditorFocusedField?
 
     let flow: FlowType
     let entry: LedgerEntry?
@@ -124,10 +130,7 @@ struct EntryEditorSheet: View {
     }
 
     private var normalizedAmount: Double? {
-        let normalizedText = amountText
-            .replacingOccurrences(of: ",", with: ".")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return Double(normalizedText)
+        AmountExpressionEvaluator.evaluate(amountText)
     }
 
     private var normalizedCurrencyCode: String {
@@ -342,10 +345,15 @@ struct EntryEditorSheet: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(saveButtonTitle) {
+                        commitAmountCalculationIfPossible()
                         save()
                     }
                     .fontWeight(.bold)
                     .disabled(!canSave)
+                }
+
+                ToolbarItem(placement: .keyboard) {
+                    keyboardAccessory
                 }
             }
             .appBackground()
@@ -389,6 +397,7 @@ struct EntryEditorSheet: View {
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(SWTheme.primaryText)
                     .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .amount)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 currencySelectorButton(allowsSelection: true)
@@ -601,6 +610,7 @@ struct EntryEditorSheet: View {
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundStyle(SWTheme.primaryText)
                     .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .amount)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 currencySelectorButton(allowsSelection: false)
@@ -669,6 +679,7 @@ struct EntryEditorSheet: View {
 
             TextField("例如：午餐简餐 / 月度工资", text: $note)
                 .textInputAutocapitalization(.never)
+                .focused($focusedField, equals: .note)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
@@ -829,6 +840,70 @@ struct EntryEditorSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var keyboardAccessory: some View {
+        if focusedField == .amount {
+            HStack(spacing: 10) {
+                ForEach(["+", "-", "×", "÷"], id: \.self) { symbol in
+                    Button(symbol) {
+                        appendAmountOperator(symbol)
+                    }
+                    .font(.headline.weight(.semibold))
+                }
+
+                Button("=") {
+                    resolveAmountExpression(feedbackOnFailure: true)
+                }
+                .font(.headline.weight(.bold))
+
+                Spacer(minLength: 8)
+
+                Button("完成".appLocalized(in: locale)) {
+                    commitAmountCalculationIfPossible()
+                    focusedField = nil
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+        } else if focusedField == .note {
+            HStack {
+                Spacer()
+                Button("完成".appLocalized(in: locale)) {
+                    focusedField = nil
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+        }
+    }
+
+    private func appendAmountOperator(_ symbol: String) {
+        var text = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        if let last = text.last, AmountExpressionEvaluator.isOperator(last) {
+            text.removeLast()
+        }
+
+        amountText = text + symbol
+        HapticService.selection()
+    }
+
+    private func commitAmountCalculationIfPossible() {
+        guard AmountExpressionEvaluator.containsOperator(amountText) else { return }
+        resolveAmountExpression(feedbackOnFailure: false)
+    }
+
+    private func resolveAmountExpression(feedbackOnFailure: Bool) {
+        guard let amount = AmountExpressionEvaluator.evaluate(amountText), amount > 0 else {
+            if feedbackOnFailure {
+                HapticService.warning()
+            }
+            return
+        }
+
+        amountText = Self.amountString(amount)
+        HapticService.selection()
+    }
+
     private func save() {
         guard
             let originalAmount = normalizedAmount, originalAmount > 0,
@@ -901,6 +976,125 @@ struct EntryEditorSheet: View {
         }
     }
 
+}
+
+private enum AmountExpressionEvaluator {
+    private static let operators: Set<Character> = ["+", "-", "*", "/", "×", "÷"]
+
+    static func containsOperator(_ text: String) -> Bool {
+        text.contains { isOperator($0) }
+    }
+
+    static func isOperator(_ character: Character) -> Bool {
+        operators.contains(character)
+    }
+
+    static func evaluate(_ text: String) -> Double? {
+        let normalizedText = text
+            .replacingOccurrences(of: ",", with: ".")
+            .replacingOccurrences(of: "×", with: "*")
+            .replacingOccurrences(of: "÷", with: "/")
+            .filter { !$0.isWhitespace }
+
+        guard !normalizedText.isEmpty else { return nil }
+
+        var parser = Parser(normalizedText)
+        guard let value = parser.parseExpression(), parser.isAtEnd, value.isFinite else {
+            return nil
+        }
+        return value
+    }
+
+    private struct Parser {
+        private let characters: [Character]
+        private var index = 0
+
+        init(_ text: String) {
+            characters = Array(text)
+        }
+
+        var isAtEnd: Bool {
+            index >= characters.count
+        }
+
+        mutating func parseExpression() -> Double? {
+            guard var value = parseTerm() else { return nil }
+
+            while let operation = peek(), operation == "+" || operation == "-" {
+                advance()
+                guard let rhs = parseTerm() else { return nil }
+                value = operation == "+" ? value + rhs : value - rhs
+            }
+
+            return value
+        }
+
+        private mutating func parseTerm() -> Double? {
+            guard var value = parseFactor() else { return nil }
+
+            while let operation = peek(), operation == "*" || operation == "/" {
+                advance()
+                guard let rhs = parseFactor() else { return nil }
+
+                if operation == "/" {
+                    guard rhs != 0 else { return nil }
+                    value /= rhs
+                } else {
+                    value *= rhs
+                }
+            }
+
+            return value
+        }
+
+        private mutating func parseFactor() -> Double? {
+            if match("+") {
+                return parseFactor()
+            }
+
+            if match("-") {
+                guard let value = parseFactor() else { return nil }
+                return -value
+            }
+
+            return parseNumber()
+        }
+
+        private mutating func parseNumber() -> Double? {
+            let start = index
+            var hasDigit = false
+            var hasDecimalSeparator = false
+
+            while let character = peek() {
+                if character.isWholeNumber {
+                    hasDigit = true
+                    advance()
+                } else if character == ".", !hasDecimalSeparator {
+                    hasDecimalSeparator = true
+                    advance()
+                } else {
+                    break
+                }
+            }
+
+            guard hasDigit else { return nil }
+            return Double(String(characters[start..<index]))
+        }
+
+        private mutating func match(_ expected: Character) -> Bool {
+            guard peek() == expected else { return false }
+            advance()
+            return true
+        }
+
+        private func peek() -> Character? {
+            isAtEnd ? nil : characters[index]
+        }
+
+        private mutating func advance() {
+            index += 1
+        }
+    }
 }
 
 private struct TagCloudLayout: Layout {
