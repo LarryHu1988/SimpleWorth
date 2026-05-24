@@ -285,9 +285,9 @@ struct SwipeableLedgerRow: View {
     @State private var offsetX: CGFloat = 0
     @State private var baseOffsetX: CGFloat = 0
     @State private var isHorizontalDragging = false
-    @State private var lastHorizontalDragEndedAt = Date.distantPast
+    @State private var tapSuppressedUntil = Date.distantPast
 
-    private let tapSuppressionInterval: TimeInterval = 0.28
+    private let tapSuppressionInterval: TimeInterval = 0.5
 
     private var leadingWidth: CGFloat {
         showCopyAction ? 84 : 0
@@ -327,7 +327,7 @@ struct SwipeableLedgerRow: View {
         }
         .onTapGesture {
             if isOpen {
-                lastHorizontalDragEndedAt = Date()
+                suppressTap()
                 closeActions()
             }
         }
@@ -427,6 +427,7 @@ struct SwipeableLedgerRow: View {
     }
 
     private func closeActions() {
+        suppressTap()
         withAnimation(.spring(response: 0.34, dampingFraction: 0.74, blendDuration: 0.08)) {
             offsetX = 0
             baseOffsetX = 0
@@ -437,13 +438,17 @@ struct SwipeableLedgerRow: View {
         offsetX = 0
         baseOffsetX = 0
         isHorizontalDragging = false
-        lastHorizontalDragEndedAt = .distantPast
+        tapSuppressedUntil = .distantPast
     }
 
     private func handleRowTap() {
         guard !isOpen, !isHorizontalDragging else { return }
-        guard Date().timeIntervalSince(lastHorizontalDragEndedAt) >= tapSuppressionInterval else { return }
+        guard Date() >= tapSuppressedUntil else { return }
         onTap()
+    }
+
+    private func suppressTap() {
+        tapSuppressedUntil = Date().addingTimeInterval(tapSuppressionInterval)
     }
 
     private var dragGesture: some Gesture {
@@ -460,6 +465,7 @@ struct SwipeableLedgerRow: View {
                         return
                     }
                     isHorizontalDragging = true
+                    suppressTap()
                 }
 
                 offsetX = clampedOffset(baseOffsetX + translation.width)
@@ -467,7 +473,7 @@ struct SwipeableLedgerRow: View {
             .onEnded { value in
                 guard isHorizontalDragging else { return }
                 defer {
-                    lastHorizontalDragEndedAt = Date()
+                    suppressTap()
                     isHorizontalDragging = false
                 }
 
