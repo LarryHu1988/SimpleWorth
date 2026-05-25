@@ -95,20 +95,26 @@ struct LedgerFlowView: View {
         }
     }
 
-    private var selectedPeriodTotal: Double {
-        totalAmount(inMonthOf: selectedPeriodDate)
-    }
-
-    private var previousPeriodTotal: Double {
-        let previousMonthDate = Calendar.current.date(byAdding: .month, value: -1, to: selectedPeriodDate) ?? selectedPeriodDate
-        return totalAmount(inMonthOf: previousMonthDate)
-    }
-
     private var selectedPeriodLabel: String {
         L10n.yearMonth(year: selectedYear, month: selectedMonth, locale: locale)
     }
 
-    private var compareText: String {
+    private var summaryCard: some View {
+        let refundAmounts = refundAmountBySourceEntryID
+        let selectedPeriodTotal = totalAmount(inMonthOf: selectedPeriodDate, refundAmounts: refundAmounts)
+        let previousMonthDate = Calendar.current.date(byAdding: .month, value: -1, to: selectedPeriodDate) ?? selectedPeriodDate
+        let previousPeriodTotal = totalAmount(inMonthOf: previousMonthDate, refundAmounts: refundAmounts)
+
+        return FlowSummaryCard(
+            flow: flow,
+            periodTitle: L10n.string("ledger.periodFlow", locale: locale, selectedPeriodLabel, flow.localizedTitle(in: locale)),
+            amount: selectedPeriodTotal,
+            compareText: compareText(selectedPeriodTotal: selectedPeriodTotal, previousPeriodTotal: previousPeriodTotal),
+            ringProgress: ringProgress(selectedPeriodTotal: selectedPeriodTotal, previousPeriodTotal: previousPeriodTotal)
+        )
+    }
+
+    private func compareText(selectedPeriodTotal: Double, previousPeriodTotal: Double) -> String {
         guard previousPeriodTotal > 0 else {
             return selectedPeriodTotal > 0
                 ? L10n.string("ledger.compare.new", locale: locale, selectedPeriodLabel, selectedPeriodTotal.cnyText(in: locale))
@@ -131,7 +137,7 @@ struct LedgerFlowView: View {
             : L10n.string("ledger.compare.incomeDown", locale: locale, ratioText)
     }
 
-    private var ringProgress: Double {
+    private func ringProgress(selectedPeriodTotal: Double, previousPeriodTotal: Double) -> Double {
         guard previousPeriodTotal > 0 else {
             return selectedPeriodTotal > 0 ? 1 : 0
         }
@@ -172,13 +178,7 @@ struct LedgerFlowView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 18) {
-                FlowSummaryCard(
-                    flow: flow,
-                    periodTitle: L10n.string("ledger.periodFlow", locale: locale, selectedPeriodLabel, flow.localizedTitle(in: locale)),
-                    amount: selectedPeriodTotal,
-                    compareText: compareText,
-                    ringProgress: ringProgress
-                )
+                summaryCard
 
                 categoryToggleCard
 
@@ -372,7 +372,9 @@ struct LedgerFlowView: View {
     }
 
     private var transactionCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let refundAmounts = refundAmountBySourceEntryID
+
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 SectionTitle(title: recentTitle, subtitle: recentSubtitle)
 
@@ -422,7 +424,7 @@ struct LedgerFlowView: View {
                         SwipeableLedgerRow(
                             entry: entry,
                             tagTintHexByName: tagTintHexByName,
-                            refundAmount: refundAmountBySourceEntryID[entry.id] ?? 0,
+                            refundAmount: refundAmounts[entry.id] ?? 0,
                             showCopyAction: !entry.isRefundEntry,
                             showRefundAction: flow == .expense,
                             onTap: {
@@ -476,13 +478,13 @@ struct LedgerFlowView: View {
         normalizeSelectionIfNeeded()
     }
 
-    private func totalAmount(inMonthOf date: Date) -> Double {
+    private func totalAmount(inMonthOf date: Date, refundAmounts: [UUID: Double]) -> Double {
         let range = monthRange(for: date)
         switch flow {
         case .expense:
             return entries
                 .filter { range.contains($0.createdAt) && !$0.isRefundEntry }
-                .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
+                .reduce(0) { $0 + adjustedExpenseAmount(for: $1, refundAmounts: refundAmounts) }
         case .income:
             return entries
                 .filter { range.contains($0.createdAt) }
@@ -509,9 +511,9 @@ struct LedgerFlowView: View {
         }
     }
 
-    private func adjustedExpenseAmount(for entry: LedgerEntry) -> Double {
+    private func adjustedExpenseAmount(for entry: LedgerEntry, refundAmounts: [UUID: Double]) -> Double {
         guard entry.flow == .expense, !entry.isRefundEntry else { return 0 }
-        return max(entry.amount - (refundAmountBySourceEntryID[entry.id] ?? 0), 0)
+        return max(entry.amount - (refundAmounts[entry.id] ?? 0), 0)
     }
 
     private func isNewerLedgerEntry(_ lhs: LedgerEntry, than rhs: LedgerEntry) -> Bool {

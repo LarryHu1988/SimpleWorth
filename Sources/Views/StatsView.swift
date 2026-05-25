@@ -54,10 +54,13 @@ struct StatsView: View {
     }
 
     private var selectedMonthEntries: [LedgerEntry] {
-        entries.filter {
-            let year = Calendar.current.component(.year, from: $0.createdAt)
-            let month = Calendar.current.component(.month, from: $0.createdAt)
-            return year == selectedYear && month == selectedMonth
+        let calendar = Calendar.current
+        let start = calendar.date(from: DateComponents(year: selectedYear, month: selectedMonth, day: 1)) ?? .now
+        let end = calendar.date(byAdding: .month, value: 1, to: start) ?? start
+        let range = DateInterval(start: start, end: end)
+
+        return entries.filter {
+            range.contains($0.createdAt)
         }
     }
 
@@ -73,9 +76,10 @@ struct StatsView: View {
     }
 
     private var totalExpense: Double {
-        selectedMonthEntries
+        let refundAmounts = expenseRefundAmountBySourceEntryID
+        return selectedMonthEntries
             .filter { $0.flow == .expense && !$0.isRefundEntry }
-            .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
+            .reduce(0) { $0 + adjustedExpenseAmount(for: $1, refundAmounts: refundAmounts) }
     }
 
     private var totalIncome: Double {
@@ -98,27 +102,30 @@ struct StatsView: View {
     }
 
     private var monthlyRows: [MonthlyTrendRow] {
-        let monthEntries = entries.filter {
-            Calendar.current.component(.year, from: $0.createdAt) == selectedYear
+        let calendar = Calendar.current
+        let refundAmounts = expenseRefundAmountBySourceEntryID
+        var expenses: [Int: Double] = [:]
+        var incomes: [Int: Double] = [:]
+
+        for entry in entries where calendar.component(.year, from: entry.createdAt) == selectedYear {
+            let month = calendar.component(.month, from: entry.createdAt)
+            if entry.flow == .expense, !entry.isRefundEntry {
+                expenses[month, default: 0] += adjustedExpenseAmount(for: entry, refundAmounts: refundAmounts)
+            }
+            incomes[month, default: 0] += entry.incomeContribution
         }
 
         return (1...12).map { month in
-            let rows = monthEntries.filter {
-                Calendar.current.component(.month, from: $0.createdAt) == month
-            }
-
-            let expense = rows
-                .filter { $0.flow == .expense && !$0.isRefundEntry }
-                .reduce(0) { $0 + adjustedExpenseAmount(for: $1) }
-
-            let income = rows
-                .reduce(0) { $0 + $1.incomeContribution }
-
-            return MonthlyTrendRow(month: month, expense: expense, income: income)
+            MonthlyTrendRow(
+                month: month,
+                expense: expenses[month, default: 0],
+                income: incomes[month, default: 0]
+            )
         }
     }
 
     private var selectedStats: [CategoryStat] {
+        let refundAmounts = expenseRefundAmountBySourceEntryID
         let filtered = selectedMonthEntries.filter { entry in
             entry.flow == selectedFlow && (selectedFlow == .income || !entry.isRefundEntry)
         }
@@ -132,7 +139,7 @@ struct StatsView: View {
 
             stats = grouped.compactMap { key, values -> CategoryStat? in
                 guard let first = values.first else { return nil }
-                let total = values.reduce(0) { $0 + statisticContribution(for: $1) }
+                let total = values.reduce(0) { $0 + statisticContribution(for: $1, refundAmounts: refundAmounts) }
                 return CategoryStat(
                     key: key,
                     name: first.categoryName,
@@ -148,7 +155,7 @@ struct StatsView: View {
 
             for entry in filtered {
                 let tagNames = entry.tagNames
-                let contribution = statisticContribution(for: entry)
+                let contribution = statisticContribution(for: entry, refundAmounts: refundAmounts)
 
                 if tagNames.isEmpty {
                     totals["__untagged__", default: 0] += contribution
@@ -202,18 +209,18 @@ struct StatsView: View {
             : "点击趋势图中的月份可以切换统计范围".appLocalized(in: locale)
     }
 
-    private func statisticContribution(for entry: LedgerEntry) -> Double {
+    private func statisticContribution(for entry: LedgerEntry, refundAmounts: [UUID: Double]) -> Double {
         switch selectedFlow {
         case .expense:
-            return adjustedExpenseAmount(for: entry)
+            return adjustedExpenseAmount(for: entry, refundAmounts: refundAmounts)
         case .income:
             return entry.incomeContribution
         }
     }
 
-    private func adjustedExpenseAmount(for entry: LedgerEntry) -> Double {
+    private func adjustedExpenseAmount(for entry: LedgerEntry, refundAmounts: [UUID: Double]) -> Double {
         guard entry.flow == .expense, !entry.isRefundEntry else { return 0 }
-        return max(entry.amount - (expenseRefundAmountBySourceEntryID[entry.id] ?? 0), 0)
+        return max(entry.amount - (refundAmounts[entry.id] ?? 0), 0)
     }
 
     private func percentageText(for amount: Double) -> String {
