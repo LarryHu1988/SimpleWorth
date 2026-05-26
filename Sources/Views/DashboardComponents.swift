@@ -327,12 +327,6 @@ private struct LedgerRowContent: View, Equatable {
 }
 
 struct SwipeableLedgerRow: View {
-    private enum InteractionIntent {
-        case undecided
-        case horizontalDrag
-        case verticalScroll
-    }
-
     @Environment(\.locale) private var locale
     let entry: LedgerEntry
     var tagTintHexByName: [String: Int] = [:]
@@ -346,12 +340,15 @@ struct SwipeableLedgerRow: View {
 
     @State private var offsetX: CGFloat = 0
     @State private var baseOffsetX: CGFloat = 0
-    @State private var interactionIntent: InteractionIntent = .undecided
-    @State private var isTrackingInteraction = false
-    @State private var interactionStartedOpen = false
+    @State private var isHorizontalDragging = false
+    @State private var isIgnoringVerticalDrag = false
+    @State private var dragStartedOpen = false
+    @State private var dragStartedOffsetX: CGFloat = 0
+    @State private var tapSuppressedUntil = Date.distantPast
 
-    private let tapMovementTolerance: CGFloat = 7
-    private let openDragActivationDistance: CGFloat = 2
+    private let tapSuppressionInterval: TimeInterval = 0.45
+    private let dragRecognitionDistance: CGFloat = 10
+    private let openDragActivationDistance: CGFloat = 4
     private let closedDragActivationDistance: CGFloat = 8
     private let closingTravelDistance: CGFloat = 6
     private let overscrollResistance: CGFloat = 0.4
@@ -377,10 +374,6 @@ struct SwipeableLedgerRow: View {
         abs(baseOffsetX) > 0.5 || abs(offsetX) > 0.5
     }
 
-    private var isHorizontalDragging: Bool {
-        interactionIntent == .horizontalDrag
-    }
-
     var body: some View {
         ZStack {
             actionBackground
@@ -391,9 +384,12 @@ struct SwipeableLedgerRow: View {
                 .allowsHitTesting(!isOpen && !isHorizontalDragging)
         }
         .contentShape(Rectangle())
-        .simultaneousGesture(interactionGesture)
+        .simultaneousGesture(horizontalDragGesture)
         .onDisappear {
             resetImmediately()
+        }
+        .onTapGesture {
+            handleContainerTap()
         }
         .clipped()
     }
@@ -491,6 +487,7 @@ struct SwipeableLedgerRow: View {
     }
 
     private func closeActions() {
+        suppressTap()
         withAnimation(returnAnimation) {
             offsetX = 0
             baseOffsetX = 0
@@ -500,67 +497,79 @@ struct SwipeableLedgerRow: View {
     private func resetImmediately() {
         offsetX = 0
         baseOffsetX = 0
-        resetInteractionTracking()
+        isHorizontalDragging = false
+        isIgnoringVerticalDrag = false
+        dragStartedOpen = false
+        dragStartedOffsetX = 0
+        tapSuppressedUntil = .distantPast
     }
 
-    private func handleTap() {
-        if interactionStartedOpen {
+    private func handleContainerTap() {
+        if isOpen {
             closeActions()
             return
         }
 
+        guard !isHorizontalDragging else { return }
+        guard Date() >= tapSuppressedUntil else { return }
         onTap()
     }
 
-    private func resetInteractionTracking() {
-        interactionIntent = .undecided
-        isTrackingInteraction = false
-        interactionStartedOpen = false
+    private func suppressTap() {
+        tapSuppressedUntil = Date().addingTimeInterval(tapSuppressionInterval)
     }
 
-    private var interactionGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+    private var horizontalDragGesture: some Gesture {
+        // Leave short vertical pans to the containing ScrollView before this row starts tracking.
+        DragGesture(minimumDistance: dragRecognitionDistance)
             .onChanged { value in
-                if !isTrackingInteraction {
-                    isTrackingInteraction = true
-                    interactionStartedOpen = isOpen
-                }
+                guard !isIgnoringVerticalDrag else { return }
 
-                let translation = value.translation
-                if interactionIntent == .undecided {
-                    if isVerticalIntent(translation) {
-                        interactionIntent = .verticalScroll
+                if !isHorizontalDragging {
+                    if isVerticalIntent(value.translation) {
+                        isIgnoringVerticalDrag = true
                         return
                     }
 
-                    let isHorizontalIntent = interactionStartedOpen
-                        ? isOpenRowHorizontalIntent(translation)
-                        : isClosedRowHorizontalIntent(translation)
+                    let startingOffset = baseOffsetX
+                    let startedOpen = abs(startingOffset) > 0.5
+                    let isHorizontalIntent = startedOpen
+                        ? isOpenRowHorizontalIntent(value.translation)
+                        : isClosedRowHorizontalIntent(value.translation)
 
-                    if isHorizontalIntent {
-                        interactionIntent = .horizontalDrag
-                    }
+                    guard isHorizontalIntent else { return }
+
+                    isHorizontalDragging = true
+                    dragStartedOpen = startedOpen
+                    dragStartedOffsetX = startingOffset
+                    suppressTap()
                 }
 
-                guard interactionIntent == .horizontalDrag else { return }
-                offsetX = interactiveOffset(for: translation.width)
+                offsetX = interactiveOffset(
+                    from: dragStartedOffsetX,
+                    startedOpen: dragStartedOpen,
+                    horizontalTranslation: value.translation.width
+                )
             }
             .onEnded { value in
                 defer {
-                    resetInteractionTracking()
+                    isHorizontalDragging = false
+                    isIgnoringVerticalDrag = false
+                    dragStartedOpen = false
+                    dragStartedOffsetX = 0
                 }
 
-                if interactionIntent == .undecided, isTapMovement(value.translation) {
-                    handleTap()
-                    return
-                }
+                guard isHorizontalDragging else { return }
 
-                guard interactionIntent == .horizontalDrag else { return }
-
-                let targetOffset = targetOffset(after: value)
+                suppressTap()
+                let targetOffset = targetOffset(
+                    after: value,
+                    startingOffset: dragStartedOffsetX,
+                    startedOpen: dragStartedOpen
+                )
                 let animation = targetOffset == 0 ? returnAnimation : revealAnimation
 
-                if abs(baseOffsetX - targetOffset) > 0.5 {
+                if abs(dragStartedOffsetX - targetOffset) > 0.5 {
                     HapticService.impact(style: .soft)
                 }
 
@@ -574,7 +583,7 @@ struct SwipeableLedgerRow: View {
     private func isOpenRowHorizontalIntent(_ translation: CGSize) -> Bool {
         let horizontalDistance = abs(translation.width)
         return horizontalDistance > openDragActivationDistance
-            && horizontalDistance > abs(translation.height) * 0.5
+            && horizontalDistance > abs(translation.height)
     }
 
     private func isClosedRowHorizontalIntent(_ translation: CGSize) -> Bool {
@@ -584,40 +593,41 @@ struct SwipeableLedgerRow: View {
     }
 
     private func isVerticalIntent(_ translation: CGSize) -> Bool {
-        let verticalDistance = abs(translation.height)
-        return verticalDistance > tapMovementTolerance
-            && verticalDistance > abs(translation.width) * 1.15
+        abs(translation.height) > abs(translation.width)
     }
 
-    private func isTapMovement(_ translation: CGSize) -> Bool {
-        abs(translation.width) <= tapMovementTolerance
-            && abs(translation.height) <= tapMovementTolerance
-    }
+    private func interactiveOffset(
+        from startingOffset: CGFloat,
+        startedOpen: Bool,
+        horizontalTranslation: CGFloat
+    ) -> CGFloat {
+        let proposedOffset = startingOffset + horizontalTranslation
 
-    private func interactiveOffset(for horizontalTranslation: CGFloat) -> CGFloat {
-        let proposedOffset = baseOffsetX + horizontalTranslation
-
-        if interactionStartedOpen, baseOffsetX > 0.5, horizontalTranslation < 0 {
+        if startedOpen, startingOffset > 0.5, horizontalTranslation < 0 {
             return max(proposedOffset, 0)
         }
 
-        if interactionStartedOpen, baseOffsetX < -0.5, horizontalTranslation > 0 {
+        if startedOpen, startingOffset < -0.5, horizontalTranslation > 0 {
             return min(proposedOffset, 0)
         }
 
         return clampedOffset(proposedOffset)
     }
 
-    private func targetOffset(after value: DragGesture.Value) -> CGFloat {
-        if interactionStartedOpen, baseOffsetX > 0.5 {
+    private func targetOffset(
+        after value: DragGesture.Value,
+        startingOffset: CGFloat,
+        startedOpen: Bool
+    ) -> CGFloat {
+        if startedOpen, startingOffset > 0.5 {
             return value.translation.width < -closingTravelDistance ? 0 : leadingWidth
         }
 
-        if interactionStartedOpen, baseOffsetX < -0.5 {
+        if startedOpen, startingOffset < -0.5 {
             return value.translation.width > closingTravelDistance ? 0 : -trailingWidth
         }
 
-        let predictedOffset = settledOffset(baseOffsetX + value.predictedEndTranslation.width)
+        let predictedOffset = settledOffset(startingOffset + value.predictedEndTranslation.width)
         if predictedOffset > leadingWidth * 0.36 {
             return leadingWidth
         }

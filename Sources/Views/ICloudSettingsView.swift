@@ -25,7 +25,7 @@ struct ICloudSettingsView: View {
     @State private var syncToggleFailureAlertMessage: String?
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.10"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.11"
         return "V\(version)"
     }
 
