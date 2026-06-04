@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SectionTitle: View {
     @Environment(\.locale) private var locale
@@ -341,16 +342,15 @@ struct SwipeableLedgerRow: View {
     @State private var offsetX: CGFloat = 0
     @State private var baseOffsetX: CGFloat = 0
     @State private var isHorizontalDragging = false
-    @State private var isIgnoringVerticalDrag = false
     @State private var dragStartedOpen = false
     @State private var dragStartedOffsetX: CGFloat = 0
     @State private var tapSuppressedUntil = Date.distantPast
 
     private let tapSuppressionInterval: TimeInterval = 0.45
-    private let dragRecognitionDistance: CGFloat = 10
     private let openDragActivationDistance: CGFloat = 4
     private let closedDragActivationDistance: CGFloat = 8
     private let closingTravelDistance: CGFloat = 6
+    private let velocityProjectionDuration: CGFloat = 0.16
     private let overscrollResistance: CGFloat = 0.4
     private let returnAnimation = Animation.spring(response: 0.32, dampingFraction: 0.68, blendDuration: 0.03)
     private let revealAnimation = Animation.spring(response: 0.36, dampingFraction: 0.62, blendDuration: 0.03)
@@ -384,7 +384,14 @@ struct SwipeableLedgerRow: View {
                 .allowsHitTesting(!isOpen && !isHorizontalDragging)
         }
         .contentShape(Rectangle())
-        .simultaneousGesture(horizontalDragGesture)
+        .background {
+            HorizontalPanGestureBridge(
+                shouldBegin: shouldBeginHorizontalPan,
+                onBegan: handleHorizontalPanBegan,
+                onChanged: handleHorizontalPanChanged,
+                onEnded: handleHorizontalPanEnded
+            )
+        }
         .onDisappear {
             resetImmediately()
         }
@@ -498,7 +505,6 @@ struct SwipeableLedgerRow: View {
         offsetX = 0
         baseOffsetX = 0
         isHorizontalDragging = false
-        isIgnoringVerticalDrag = false
         dragStartedOpen = false
         dragStartedOffsetX = 0
         tapSuppressedUntil = .distantPast
@@ -519,65 +525,57 @@ struct SwipeableLedgerRow: View {
         tapSuppressedUntil = Date().addingTimeInterval(tapSuppressionInterval)
     }
 
-    private var horizontalDragGesture: some Gesture {
-        // Leave short vertical pans to the containing ScrollView before this row starts tracking.
-        DragGesture(minimumDistance: dragRecognitionDistance)
-            .onChanged { value in
-                guard !isIgnoringVerticalDrag else { return }
+    private func shouldBeginHorizontalPan(_ translation: CGSize) -> Bool {
+        let startedOpen = abs(baseOffsetX) > 0.5
+        return startedOpen
+            ? isOpenRowHorizontalIntent(translation)
+            : isClosedRowHorizontalIntent(translation)
+    }
 
-                if !isHorizontalDragging {
-                    if isVerticalIntent(value.translation) {
-                        isIgnoringVerticalDrag = true
-                        return
-                    }
+    private func handleHorizontalPanBegan() {
+        let startingOffset = baseOffsetX
+        isHorizontalDragging = true
+        dragStartedOpen = abs(startingOffset) > 0.5
+        dragStartedOffsetX = startingOffset
+        suppressTap()
+    }
 
-                    let startingOffset = baseOffsetX
-                    let startedOpen = abs(startingOffset) > 0.5
-                    let isHorizontalIntent = startedOpen
-                        ? isOpenRowHorizontalIntent(value.translation)
-                        : isClosedRowHorizontalIntent(value.translation)
+    private func handleHorizontalPanChanged(_ horizontalTranslation: CGFloat) {
+        guard isHorizontalDragging else { return }
 
-                    guard isHorizontalIntent else { return }
+        offsetX = interactiveOffset(
+            from: dragStartedOffsetX,
+            startedOpen: dragStartedOpen,
+            horizontalTranslation: horizontalTranslation
+        )
+    }
 
-                    isHorizontalDragging = true
-                    dragStartedOpen = startedOpen
-                    dragStartedOffsetX = startingOffset
-                    suppressTap()
-                }
+    private func handleHorizontalPanEnded(horizontalTranslation: CGFloat, horizontalVelocity: CGFloat) {
+        defer {
+            isHorizontalDragging = false
+            dragStartedOpen = false
+            dragStartedOffsetX = 0
+        }
 
-                offsetX = interactiveOffset(
-                    from: dragStartedOffsetX,
-                    startedOpen: dragStartedOpen,
-                    horizontalTranslation: value.translation.width
-                )
-            }
-            .onEnded { value in
-                defer {
-                    isHorizontalDragging = false
-                    isIgnoringVerticalDrag = false
-                    dragStartedOpen = false
-                    dragStartedOffsetX = 0
-                }
+        guard isHorizontalDragging else { return }
 
-                guard isHorizontalDragging else { return }
+        suppressTap()
+        let targetOffset = targetOffset(
+            horizontalTranslation: horizontalTranslation,
+            horizontalVelocity: horizontalVelocity,
+            startingOffset: dragStartedOffsetX,
+            startedOpen: dragStartedOpen
+        )
+        let animation = targetOffset == 0 ? returnAnimation : revealAnimation
 
-                suppressTap()
-                let targetOffset = targetOffset(
-                    after: value,
-                    startingOffset: dragStartedOffsetX,
-                    startedOpen: dragStartedOpen
-                )
-                let animation = targetOffset == 0 ? returnAnimation : revealAnimation
+        if abs(dragStartedOffsetX - targetOffset) > 0.5 {
+            HapticService.impact(style: .soft)
+        }
 
-                if abs(dragStartedOffsetX - targetOffset) > 0.5 {
-                    HapticService.impact(style: .soft)
-                }
-
-                withAnimation(animation) {
-                    offsetX = targetOffset
-                    baseOffsetX = targetOffset
-                }
-            }
+        withAnimation(animation) {
+            offsetX = targetOffset
+            baseOffsetX = targetOffset
+        }
     }
 
     private func isOpenRowHorizontalIntent(_ translation: CGSize) -> Bool {
@@ -590,10 +588,6 @@ struct SwipeableLedgerRow: View {
         let horizontalDistance = abs(translation.width)
         return horizontalDistance > closedDragActivationDistance
             && horizontalDistance > abs(translation.height) * 1.35
-    }
-
-    private func isVerticalIntent(_ translation: CGSize) -> Bool {
-        abs(translation.height) > abs(translation.width)
     }
 
     private func interactiveOffset(
@@ -615,19 +609,21 @@ struct SwipeableLedgerRow: View {
     }
 
     private func targetOffset(
-        after value: DragGesture.Value,
+        horizontalTranslation: CGFloat,
+        horizontalVelocity: CGFloat,
         startingOffset: CGFloat,
         startedOpen: Bool
     ) -> CGFloat {
         if startedOpen, startingOffset > 0.5 {
-            return value.translation.width < -closingTravelDistance ? 0 : leadingWidth
+            return horizontalTranslation < -closingTravelDistance ? 0 : leadingWidth
         }
 
         if startedOpen, startingOffset < -0.5 {
-            return value.translation.width > closingTravelDistance ? 0 : -trailingWidth
+            return horizontalTranslation > closingTravelDistance ? 0 : -trailingWidth
         }
 
-        let predictedOffset = settledOffset(startingOffset + value.predictedEndTranslation.width)
+        let projectedTranslation = horizontalTranslation + horizontalVelocity * velocityProjectionDuration
+        let predictedOffset = settledOffset(startingOffset + projectedTranslation)
         if predictedOffset > leadingWidth * 0.36 {
             return leadingWidth
         }
@@ -657,6 +653,128 @@ struct SwipeableLedgerRow: View {
                         .stroke(Color.white.opacity(0.14), lineWidth: 1)
                 )
         )
+    }
+}
+
+private struct HorizontalPanGestureBridge: UIViewRepresentable {
+    var shouldBegin: (CGSize) -> Bool
+    var onBegan: () -> Void
+    var onChanged: (CGFloat) -> Void
+    var onEnded: (_ horizontalTranslation: CGFloat, _ horizontalVelocity: CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> InstallerView {
+        let view = InstallerView()
+        view.configure(coordinator: context.coordinator)
+        return view
+    }
+
+    func updateUIView(_ uiView: InstallerView, context: Context) {
+        context.coordinator.shouldBegin = shouldBegin
+        context.coordinator.onBegan = onBegan
+        context.coordinator.onChanged = onChanged
+        context.coordinator.onEnded = onEnded
+        uiView.installIfNeeded()
+    }
+
+    final class InstallerView: UIView {
+        private weak var installedView: UIView?
+        private var panRecognizer: UIPanGestureRecognizer?
+
+        func configure(coordinator: Coordinator) {
+            guard panRecognizer == nil else { return }
+
+            coordinator.sourceView = self
+            let recognizer = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
+            recognizer.delegate = coordinator
+            recognizer.cancelsTouchesInView = false
+            recognizer.delaysTouchesBegan = false
+            recognizer.delaysTouchesEnded = false
+            recognizer.maximumNumberOfTouches = 1
+            panRecognizer = recognizer
+            isUserInteractionEnabled = false
+        }
+
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            installIfNeeded()
+        }
+
+        func installIfNeeded() {
+            guard let panRecognizer else { return }
+            let targetView = superview
+            guard installedView !== targetView else { return }
+
+            installedView?.removeGestureRecognizer(panRecognizer)
+            targetView?.addGestureRecognizer(panRecognizer)
+            installedView = targetView
+        }
+
+        deinit {
+            if let panRecognizer {
+                installedView?.removeGestureRecognizer(panRecognizer)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var sourceView: UIView?
+        var shouldBegin: (CGSize) -> Bool = { _ in false }
+        var onBegan: () -> Void = {}
+        var onChanged: (CGFloat) -> Void = { _ in }
+        var onEnded: (_ horizontalTranslation: CGFloat, _ horizontalVelocity: CGFloat) -> Void = { _, _ in }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            let translation = recognizer.translation(in: recognizer.view)
+            let velocity = recognizer.velocity(in: recognizer.view)
+
+            switch recognizer.state {
+            case .began:
+                onBegan()
+                onChanged(translation.x)
+            case .changed:
+                onChanged(translation.x)
+            case .ended, .cancelled, .failed:
+                onEnded(translation.x, velocity.x)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer else {
+                return true
+            }
+            guard isTouchInsideSourceView(for: panRecognizer) else {
+                return false
+            }
+
+            let translation = panRecognizer.translation(in: panRecognizer.view)
+            return shouldBegin(CGSize(width: translation.x, height: translation.y))
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        private func isTouchInsideSourceView(for gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard
+                let sourceView,
+                let recognizerView = gestureRecognizer.view
+            else {
+                return false
+            }
+
+            let sourceFrame = sourceView.convert(sourceView.bounds, to: recognizerView)
+            guard !sourceFrame.isEmpty else { return false }
+            return sourceFrame.insetBy(dx: -4, dy: -4).contains(gestureRecognizer.location(in: recognizerView))
+        }
     }
 }
 
