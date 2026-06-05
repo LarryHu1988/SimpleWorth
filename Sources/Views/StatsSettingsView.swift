@@ -78,7 +78,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.12"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.13"
         return "V\(version)"
     }
 
@@ -1021,10 +1021,20 @@ private struct OtherAppsView: View {
     var body: some View {
         SettingsDetailContainer {
             SettingsSectionCard(title: "更多作品") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("当前公开作品以 SimpleWorth 为主，后续应用会优先发布在作者主页。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(OtherAppListing.all) { app in
+                        OtherAppLinkRow(app: app) {
+                            openURL(app.appStoreURL)
+                        }
+
+                        if app.id != OtherAppListing.all.last?.id {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 1)
+                                .padding(.leading, 64)
+                                .padding(.vertical, 8)
+                        }
+                    }
                 }
             }
 
@@ -1063,6 +1073,94 @@ private struct OtherAppsView: View {
         }
         .navigationTitle("其他 APP")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct OtherAppListing: Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let iconAssetName: String
+    let appStoreURL: URL
+    let accentColor: Color
+
+    static let all: [OtherAppListing] = [
+        OtherAppListing(
+            id: "keepfit",
+            title: "KeepFit - 管住嘴迈开腿",
+            description: "记录饮食、运动和热量差，帮你把管住嘴迈开腿落到每天。",
+            iconAssetName: "KeepFitIcon",
+            appStoreURL: URL(string: "https://apps.apple.com/app/id6759662867")!,
+            accentColor: SWTheme.accentGreen
+        ),
+        OtherAppListing(
+            id: "pdf-librarian",
+            title: "PDF Librarian",
+            description: "整理书籍和学术文献 PDF，检索元数据、写入字段并规范文件名。",
+            iconAssetName: "PDFLibrarianIcon",
+            appStoreURL: URL(string: "https://apps.apple.com/app/id6760351540?mt=12")!,
+            accentColor: SWTheme.accentBlue
+        )
+    ]
+}
+
+private struct OtherAppLinkRow: View {
+    @Environment(\.locale) private var locale
+
+    let app: OtherAppListing
+    let action: () -> Void
+
+    var body: some View {
+        SettingsPressableButton {
+            HapticService.selection()
+            action()
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                Image(app.iconAssetName)
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFill()
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                    )
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(app.title.appLocalized(in: locale))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SWTheme.primaryText)
+                        .lineLimit(2)
+
+                    Text(app.description.appLocalized(in: locale))
+                        .font(.caption)
+                        .foregroundStyle(SWTheme.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 5) {
+                        Image(systemName: "bag.fill")
+                            .font(.caption2.weight(.semibold))
+                        Text("前往 App Store".appLocalized(in: locale))
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(app.accentColor)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+            .padding(.vertical, 6)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            L10n.string("在 App Store 打开 %@", locale: locale, app.title.appLocalized(in: locale))
+        )
     }
 }
 
