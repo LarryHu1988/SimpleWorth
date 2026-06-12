@@ -525,11 +525,15 @@ struct SwipeableLedgerRow: View {
         tapSuppressedUntil = Date().addingTimeInterval(tapSuppressionInterval)
     }
 
-    private func shouldBeginHorizontalPan(_ translation: CGSize) -> Bool {
+    private func shouldBeginHorizontalPan(translation: CGSize, velocity: CGSize) -> Bool {
         let startedOpen = abs(baseOffsetX) > 0.5
-        return startedOpen
-            ? isOpenRowHorizontalIntent(translation)
-            : isClosedRowHorizontalIntent(translation)
+        if startedOpen {
+            return isOpenRowHorizontalIntent(translation)
+                || isHorizontalVelocityIntent(velocity, minimumVelocity: 28, axisBias: 1.0)
+        }
+
+        return isClosedRowHorizontalIntent(translation)
+            || isHorizontalVelocityIntent(velocity, minimumVelocity: 36, axisBias: 1.35)
     }
 
     private func handleHorizontalPanBegan() {
@@ -588,6 +592,16 @@ struct SwipeableLedgerRow: View {
         let horizontalDistance = abs(translation.width)
         return horizontalDistance > closedDragActivationDistance
             && horizontalDistance > abs(translation.height) * 1.35
+    }
+
+    private func isHorizontalVelocityIntent(
+        _ velocity: CGSize,
+        minimumVelocity: CGFloat,
+        axisBias: CGFloat
+    ) -> Bool {
+        let horizontalVelocity = abs(velocity.width)
+        return horizontalVelocity > minimumVelocity
+            && horizontalVelocity > abs(velocity.height) * axisBias
     }
 
     private func interactiveOffset(
@@ -657,7 +671,7 @@ struct SwipeableLedgerRow: View {
 }
 
 private struct HorizontalPanGestureBridge: UIViewRepresentable {
-    var shouldBegin: (CGSize) -> Bool
+    var shouldBegin: (_ translation: CGSize, _ velocity: CGSize) -> Bool
     var onBegan: () -> Void
     var onChanged: (CGFloat) -> Void
     var onEnded: (_ horizontalTranslation: CGFloat, _ horizontalVelocity: CGFloat) -> Void
@@ -703,9 +717,14 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
             installIfNeeded()
         }
 
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            installIfNeeded()
+        }
+
         func installIfNeeded() {
             guard let panRecognizer else { return }
-            let targetView = superview
+            let targetView = window ?? superview
             guard installedView !== targetView else { return }
 
             installedView?.removeGestureRecognizer(panRecognizer)
@@ -722,7 +741,7 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         weak var sourceView: UIView?
-        var shouldBegin: (CGSize) -> Bool = { _ in false }
+        var shouldBegin: (_ translation: CGSize, _ velocity: CGSize) -> Bool = { _, _ in false }
         var onBegan: () -> Void = {}
         var onChanged: (CGFloat) -> Void = { _ in }
         var onEnded: (_ horizontalTranslation: CGFloat, _ horizontalVelocity: CGFloat) -> Void = { _, _ in }
@@ -753,7 +772,11 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
             }
 
             let translation = panRecognizer.translation(in: panRecognizer.view)
-            return shouldBegin(CGSize(width: translation.x, height: translation.y))
+            let velocity = panRecognizer.velocity(in: panRecognizer.view)
+            return shouldBegin(
+                CGSize(width: translation.x, height: translation.y),
+                CGSize(width: velocity.x, height: velocity.y)
+            )
         }
 
         func gestureRecognizer(
