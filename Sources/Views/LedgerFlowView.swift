@@ -62,7 +62,7 @@ struct LedgerFlowView: View {
         let range = monthRange(for: selectedPeriodDate)
         return entries
             .filter { entry in
-                range.contains(entry.createdAt) && !(flow == .expense && entry.isRefundEntry)
+                range.containsHalfOpen(entry.createdAt) && !(flow == .expense && entry.isRefundEntry)
             }
             .sorted(by: isNewerLedgerEntry)
     }
@@ -483,11 +483,11 @@ struct LedgerFlowView: View {
         switch flow {
         case .expense:
             return entries
-                .filter { range.contains($0.createdAt) && !$0.isRefundEntry }
+                .filter { range.containsHalfOpen($0.createdAt) && !$0.isRefundEntry }
                 .reduce(0) { $0 + adjustedExpenseAmount(for: $1, refundAmounts: refundAmounts) }
         case .income:
             return entries
-                .filter { range.contains($0.createdAt) }
+                .filter { range.containsHalfOpen($0.createdAt) }
                 .reduce(0) { $0 + $1.incomeContribution }
         }
     }

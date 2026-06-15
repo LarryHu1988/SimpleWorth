@@ -232,10 +232,6 @@ private struct LedgerRowContent: View, Equatable {
         snapshot.tagNames
     }
 
-    private var visibleTags: [String] {
-        Array(allTagNames.prefix(2))
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -264,29 +260,10 @@ private struct LedgerRowContent: View, Equatable {
                     }
                 }
 
-                if !visibleTags.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(visibleTags, id: \.self) { tagName in
-                            HStack(spacing: 4) {
-                                Image(systemName: "tag.fill")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(tagTint(for: tagName))
-                                Text(tagName)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(SWTheme.primaryText.opacity(0.92))
-                            }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(Color.white.opacity(0.08))
-                                )
-                        }
-
-                        if allTagNames.count > visibleTags.count {
-                            Text("+\(allTagNames.count - visibleTags.count)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(SWTheme.textSecondary)
+                if !allTagNames.isEmpty {
+                    LedgerTagWrapLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                        ForEach(allTagNames, id: \.self) { tagName in
+                            tagChip(for: tagName)
                         }
                     }
                 }
@@ -324,6 +301,99 @@ private struct LedgerRowContent: View, Equatable {
     private func tagTint(for tagName: String) -> Color {
         let tintHex = snapshot.tagTintHexByName[tagName] ?? TagEmojiLibrary.colorHex(for: tagName)
         return Color.sw(UInt(tintHex))
+    }
+
+    private func tagChip(for tagName: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "tag.fill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(tagTint(for: tagName))
+            Text(tagName)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(SWTheme.primaryText.opacity(0.92))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+    }
+}
+
+private struct LedgerTagWrapLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        arrangedSubviews(in: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let arrangement = arrangedSubviews(in: bounds.width, subviews: subviews)
+
+        for item in arrangement.items {
+            subviews[item.index].place(
+                at: CGPoint(x: bounds.minX + item.origin.x, y: bounds.minY + item.origin.y),
+                proposal: ProposedViewSize(item.size)
+            )
+        }
+    }
+
+    private func arrangedSubviews(
+        in proposedWidth: CGFloat?,
+        subviews: Subviews
+    ) -> (items: [ArrangedTag], size: CGSize) {
+        let maxWidth = max(proposedWidth ?? .greatestFiniteMagnitude, 1)
+        var items: [ArrangedTag] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(
+                ProposedViewSize(width: maxWidth, height: nil)
+            )
+            let shouldWrap = currentX > 0 && currentX + size.width > maxWidth
+
+            if shouldWrap {
+                currentX = 0
+                currentY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            items.append(
+                ArrangedTag(
+                    index: index,
+                    origin: CGPoint(x: currentX, y: currentY),
+                    size: size
+                )
+            )
+
+            usedWidth = max(usedWidth, currentX + size.width)
+            currentX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        let height = items.isEmpty ? 0 : currentY + rowHeight
+        return (items, CGSize(width: min(usedWidth, maxWidth), height: height))
+    }
+
+    private struct ArrangedTag {
+        let index: Int
+        let origin: CGPoint
+        let size: CGSize
     }
 }
 

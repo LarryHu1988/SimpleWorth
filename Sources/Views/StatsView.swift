@@ -60,7 +60,7 @@ struct StatsView: View {
         let range = DateInterval(start: start, end: end)
 
         return entries.filter {
-            range.contains($0.createdAt)
+            range.containsHalfOpen($0.createdAt)
         }
     }
 

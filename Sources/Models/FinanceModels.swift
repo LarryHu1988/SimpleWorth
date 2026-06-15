@@ -595,6 +595,12 @@ extension Date {
     }
 }
 
+extension DateInterval {
+    func containsHalfOpen(_ date: Date) -> Bool {
+        date >= start && date < end
+    }
+}
+
 extension Double {
     func currencyText(code: String, fractionDigits: Int = 0) -> String {
         currencyText(code: code, fractionDigits: fractionDigits, locale: L10n.locale)
