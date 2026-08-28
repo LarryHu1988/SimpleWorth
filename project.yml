@@ -36,7 +36,7 @@ targets:
       properties:
         CFBundleDisplayName: 简值
         CFBundleShortVersionString: 0.7.15
-        CFBundleVersion: "24"
+        CFBundleVersion: "25"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIRequiresFullScreen: false
