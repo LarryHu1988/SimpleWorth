@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-enum FlowType: String, CaseIterable, Identifiable, Codable {
+enum FlowType: String, CaseIterable, Identifiable, Codable, Sendable {
     case expense = "支出"
     case income = "收入"
 

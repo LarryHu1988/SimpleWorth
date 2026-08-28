@@ -276,7 +276,7 @@ struct LedgerFlowView: View {
 
     private var categoryToggleCard: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
+            withAnimation(SWMotion.settle) {
                 showCategoryGrid.toggle()
             }
             HapticService.selection()
@@ -303,7 +303,7 @@ struct LedgerFlowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SWResponsiveButtonStyle())
         .fitnessCard()
     }
 

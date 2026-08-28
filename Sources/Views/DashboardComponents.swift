@@ -97,11 +97,14 @@ struct CategoryGridSection: View {
 
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(categories) { item in
-                    CategoryIconCell(item: item)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            onTapCategory?(item)
-                        }
+                    Button {
+                        HapticService.impact(style: .soft)
+                        onTapCategory?(item)
+                    } label: {
+                        CategoryIconCell(item: item)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SWResponsiveButtonStyle(pressedScale: 0.93))
                 }
             }
             .id(locale.identifier)
@@ -416,14 +419,14 @@ struct SwipeableLedgerRow: View {
     @State private var dragStartedOffsetX: CGFloat = 0
     @State private var tapSuppressedUntil = Date.distantPast
 
-    private let tapSuppressionInterval: TimeInterval = 0.45
+    private let tapSuppressionInterval: TimeInterval = 0.22
     private let openDragActivationDistance: CGFloat = 4
     private let closedDragActivationDistance: CGFloat = 8
     private let closingTravelDistance: CGFloat = 6
     private let velocityProjectionDuration: CGFloat = 0.16
     private let overscrollResistance: CGFloat = 0.4
-    private let returnAnimation = Animation.spring(response: 0.32, dampingFraction: 0.68, blendDuration: 0.03)
-    private let revealAnimation = Animation.spring(response: 0.36, dampingFraction: 0.62, blendDuration: 0.03)
+    private let returnAnimation = Animation.spring(response: 0.28, dampingFraction: 0.76, blendDuration: 0.04)
+    private let revealAnimation = Animation.spring(response: 0.34, dampingFraction: 0.68, blendDuration: 0.05)
 
     private var leadingWidth: CGFloat {
         showCopyAction ? 84 : 0
@@ -794,7 +797,7 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
 
         func installIfNeeded() {
             guard let panRecognizer else { return }
-            let targetView = window ?? superview
+            let targetView = superview
             guard installedView !== targetView else { return }
 
             installedView?.removeGestureRecognizer(panRecognizer)

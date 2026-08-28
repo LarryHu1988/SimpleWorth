@@ -354,7 +354,10 @@ private enum AppModelContainerFactory {
 
 private struct SeededRootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(SettingsKeys.themeMode) private var themeModeRaw = ThemeMode.system.rawValue
+    @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = false
+    @AppStorage(SettingsKeys.backupRetentionDays) private var backupRetentionDays = 15
     @State private var hasSeeded = false
 
     private var themeMode: ThemeMode {
@@ -363,15 +366,52 @@ private struct SeededRootView: View {
 
     var body: some View {
         MainTabView()
-            .task {
-                guard !hasSeeded else { return }
-                hasSeeded = true
-                SeedService.seedIfNeeded(context: modelContext)
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                if !hasSeeded {
+                    hasSeeded = true
+                    SeedService.seedIfNeeded(context: modelContext)
+                }
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, scenePhase == .active else { return }
+                await performAutomaticBackupIfNeeded()
             }
             .task(id: themeModeRaw) {
                 await MainActor.run {
                     AppAppearanceController.apply(themeMode: themeMode)
                 }
             }
+    }
+
+    private func performAutomaticBackupIfNeeded() async {
+        do {
+            let entries = try modelContext.fetch(FetchDescriptor<LedgerEntry>())
+            let tags = try modelContext.fetch(FetchDescriptor<TagRecord>())
+            let goals = try modelContext.fetch(FetchDescriptor<SavingsGoalRecord>())
+            let deposits = try modelContext.fetch(FetchDescriptor<VaultDepositRecord>())
+            let hasAnyUserData =
+                !entries.isEmpty ||
+                !tags.isEmpty ||
+                !goals.isEmpty ||
+                !deposits.isEmpty
+
+            guard hasAnyUserData else { return }
+
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.15"
+            let payload = LedgerBackupCoordinator.makePayload(
+                appVersion: "V\(version)",
+                entries: entries,
+                tags: tags,
+                goals: goals,
+                deposits: deposits
+            )
+            await AppAutomaticBackupCoordinator.runIfNeeded(
+                payload: payload,
+                mirrorToICloud: iCloudSyncEnabled,
+                retentionDays: backupRetentionDays
+            )
+        } catch {
+            // Backup maintenance should never interrupt the primary ledger flow.
+        }
     }
 }

@@ -113,6 +113,12 @@ enum SWTheme {
     )
 }
 
+enum SWMotion {
+    static let quick = Animation.spring(response: 0.22, dampingFraction: 0.86, blendDuration: 0.04)
+    static let fluid = Animation.spring(response: 0.46, dampingFraction: 0.68, blendDuration: 0.07)
+    static let settle = Animation.spring(response: 0.30, dampingFraction: 0.82, blendDuration: 0.05)
+}
+
 extension Color {
     static func dynamic(
         light: UInt,
@@ -169,37 +175,62 @@ private struct FlowingGlassBackground: View {
             SWTheme.appBackground
                 .ignoresSafeArea()
 
-            Ellipse()
-                .fill(SWTheme.accentBlue.opacity(colorScheme == .light ? 0.18 : 0.18))
-                .frame(width: 340, height: 280)
-                .blur(radius: 56)
-                .offset(x: 132, y: -272)
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            SWTheme.accentBlue.opacity(colorScheme == .light ? 0.10 : 0.12),
+                            Color.clear,
+                            SWTheme.accentGreen.opacity(colorScheme == .light ? 0.08 : 0.09)
+                        ],
+                        startPoint: .topTrailing,
+                        endPoint: .bottomLeading
+                    )
+                )
+                .ignoresSafeArea()
 
-            Ellipse()
-                .fill(SWTheme.accentGreen.opacity(colorScheme == .light ? 0.14 : 0.15))
-                .frame(width: 280, height: 240)
-                .blur(radius: 54)
-                .offset(x: -144, y: 286)
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            SWTheme.accentOrange.opacity(colorScheme == .light ? 0.055 : 0.065),
+                            Color.clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .ignoresSafeArea()
 
-            Ellipse()
-                .fill(SWTheme.accentOrange.opacity(colorScheme == .light ? 0.10 : 0.11))
-                .frame(width: 250, height: 190)
-                .blur(radius: 58)
-                .offset(x: -56, y: -64)
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(colorScheme == .light ? 0.30 : 0.08),
-                    Color.white.opacity(0.02),
-                    Color.clear
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .blendMode(.screen)
-            .blur(radius: 64)
-            .ignoresSafeArea()
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(colorScheme == .light ? 0.18 : 0.045),
+                            Color.white.opacity(0.02),
+                            Color.clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .blendMode(.screen)
+                .ignoresSafeArea()
         }
+    }
+}
+
+struct SWResponsiveButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var pressedScale: CGFloat = 0.965
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .opacity(configuration.isPressed ? 0.86 : 1)
+            .animation(reduceMotion ? nil : SWMotion.quick, value: configuration.isPressed)
     }
 }
 

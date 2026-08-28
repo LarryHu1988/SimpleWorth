@@ -2,6 +2,9 @@ import Foundation
 
 enum AppConfig {
     static let iCloudContainerIdentifier = "iCloud.com.larry.SimpleWorth"
+    static let privacyPolicyURL = URL(string: "https://larryhu.com/simpleworth/privacy/")!
+    static let supportWebsiteURL = URL(string: "https://larryhu.com/simpleworth/support/")!
+    static let exchangeRateProviderURL = URL(string: "https://www.exchangerate-api.com")!
 }
 
 enum SettingsKeys {

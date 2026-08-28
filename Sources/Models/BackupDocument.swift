@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct LedgerEntrySnapshot: Codable {
+struct LedgerEntrySnapshot: Codable, Sendable {
     let id: UUID
     let createdAt: Date
     let recordedAt: Date?
@@ -20,7 +20,7 @@ struct LedgerEntrySnapshot: Codable {
     let refundSourceEntryID: UUID?
 }
 
-struct TagSnapshot: Codable {
+struct TagSnapshot: Codable, Sendable {
     let id: UUID
     let name: String
     let emoji: String?
@@ -28,7 +28,7 @@ struct TagSnapshot: Codable {
     let createdAt: Date
 }
 
-struct SavingsGoalSnapshot: Codable {
+struct SavingsGoalSnapshot: Codable, Sendable {
     let id: UUID
     let createdAt: Date
     let name: String
@@ -39,7 +39,7 @@ struct SavingsGoalSnapshot: Codable {
     let tintHex: Int
 }
 
-struct VaultDepositSnapshot: Codable {
+struct VaultDepositSnapshot: Codable, Sendable {
     let id: UUID
     let date: Date
     let amount: Double
@@ -47,7 +47,7 @@ struct VaultDepositSnapshot: Codable {
     let goalID: UUID?
 }
 
-struct LedgerBackupPayload: Codable {
+struct LedgerBackupPayload: Codable, Sendable {
     let exportedAt: Date
     let appVersion: String
     let entries: [LedgerEntrySnapshot]

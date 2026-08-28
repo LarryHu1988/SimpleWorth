@@ -10,6 +10,7 @@ private struct CurrencyRateItem: Identifiable {
 @MainActor
 struct CurrencySettingsView: View {
     @Environment(\.locale) private var locale
+    @Environment(\.openURL) private var openURL
     @StateObject private var currencyStore: CurrencyStore
     @State private var searchText = ""
 
@@ -69,6 +70,7 @@ struct CurrencySettingsView: View {
                 baseCurrencyCard
                 searchCard
                 rateListCard
+                exchangeRateAttribution
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -216,6 +218,24 @@ struct CurrencySettingsView: View {
                 }
             }
         }
+    }
+
+    private var exchangeRateAttribution: some View {
+        Button {
+            openURL(AppConfig.exchangeRateProviderURL)
+        } label: {
+            HStack(spacing: 5) {
+                Text("汇率由 ExchangeRate-API 提供".appLocalized(in: locale))
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.bold))
+            }
+            .font(.caption)
+            .foregroundStyle(SWTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("在浏览器中打开服务商网站".appLocalized(in: locale))
     }
 
     private func applyBaseCurrency(_ code: String) {

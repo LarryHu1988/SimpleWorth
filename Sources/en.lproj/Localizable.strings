@@ -346,6 +346,7 @@
 "我在用这款记账 App：SimpleWorth（简值），推荐你试试。" = "I'm using this budgeting app, SimpleWorth. You should try it too.";
 "版本" = "Version";
 "联系与项目" = "Contact & Project";
+"联系与支持" = "Contact & Support";
 "联系邮箱" = "Email";
 "作者主页" = "Author Website";
 "数据与同步" = "Data & Sync";
@@ -353,8 +354,13 @@
 "开启 iCloud 同步后，相关数据会同步到你当前 Apple 账号的 iCloud 私有数据库。" = "After enabling iCloud Sync, related data is synced to the private iCloud database of your current Apple account.";
 "联网与系统能力" = "Network & System Services";
 "查看或刷新汇率时，App 会请求公开汇率接口以获取最新汇率。" = "When viewing or refreshing exchange rates, the app requests a public exchange-rate API for the latest data.";
+"查看或刷新汇率时，App 会请求 ExchangeRate-API 获取最新汇率；请求不会包含你的账单、标签或目标内容。" = "When viewing or refreshing rates, the app requests the latest data from ExchangeRate-API. The request never includes your entries, tags, or goals.";
 "意见反馈、好评鼓励与分享简值会调用系统邮件、评分与分享能力。" = "Feedback, ratings, and sharing SimpleWorth use the system Mail, rating, and share services.";
 "联系作者" = "Contact the Author";
+"查看完整隐私政策" = "View Full Privacy Policy";
+"技术支持" = "Support";
+"汇率由 ExchangeRate-API 提供" = "Rates by ExchangeRate-API";
+"在浏览器中打开服务商网站" = "Open the provider website in your browser";
 "更多作品" = "More Works";
 "当前公开作品以 SimpleWorth 为主，后续应用会优先发布在作者主页。" = "SimpleWorth is the main public app for now. Future apps will be posted on the author's website first.";
 "记录会同步更新目标进度" = "Deposits update goal progress automatically";

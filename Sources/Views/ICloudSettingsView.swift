@@ -21,6 +21,7 @@ struct ICloudSettingsView: View {
     @State private var backupActionFeedbackMessage: String?
     @State private var iCloudSyncEnabled = false
     @State private var isApplyingSyncToggle = false
+    @State private var isCreatingBackup = false
     @State private var syncToggleFailureMessage: String?
     @State private var syncToggleFailureAlertMessage: String?
 
@@ -143,7 +144,9 @@ struct ICloudSettingsView: View {
         )
         .navigationDestination(isPresented: $showBackupHistory) {
             ICloudBackupHistoryView(records: backupRecords) {
-                reloadBackupRecords()
+                Task {
+                    await reloadBackupRecords()
+                }
             }
         }
         .task {
@@ -152,7 +155,7 @@ struct ICloudSettingsView: View {
                 iCloudSyncEnabled = persistedICloudSyncEnabled
                 hasInitializedSyncToggleState = true
             }
-            refreshPageState()
+            await refreshPageState()
         }
         .task(id: debugAutoToggleInstruction) {
 #if DEBUG
@@ -366,6 +369,7 @@ struct ICloudSettingsView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isCreatingBackup)
     }
 
     private var latestBackupSummaryText: String {
@@ -396,16 +400,16 @@ struct ICloudSettingsView: View {
         return formatter.string(from: date)
     }
 
-    private func refreshPageState() {
-        reloadBackupRecords()
-        applyRetentionRule(retentionRule)
-        if hasAnyUserData {
-            ensureAutomaticBackupIfNeeded()
-        }
+    private func refreshPageState() async {
+        backupRecords = await BackupFileActor.shared.refresh(
+            automaticPayload: hasAnyUserData ? currentBackupPayload() : nil,
+            mirrorToICloud: persistedICloudSyncEnabled,
+            retentionDays: retentionRule.days
+        )
     }
 
-    private func reloadBackupRecords() {
-        backupRecords = LocalBackupStore.loadRecords()
+    private func reloadBackupRecords() async {
+        backupRecords = await BackupFileActor.shared.loadRecords()
     }
 
     private func createManualBackup() {
@@ -415,34 +419,25 @@ struct ICloudSettingsView: View {
             return
         }
 
-        do {
-            let payload = currentBackupPayload()
-            _ = try LocalBackupStore.createBackup(
-                payload: payload,
-                source: .manual,
-                mirrorToICloud: persistedICloudSyncEnabled
-            )
-            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
-            reloadBackupRecords()
-            backupActionFeedbackMessage = nil
-            HapticService.success()
-        } catch {
-            HapticService.warning()
-            backupActionFeedbackMessage = L10n.string("settings.exportFailed", locale: locale, error.localizedDescription)
-        }
-    }
+        let payload = currentBackupPayload()
+        let mirrorToICloud = persistedICloudSyncEnabled
+        let retentionDays = retentionRule.days
+        isCreatingBackup = true
 
-    private func ensureAutomaticBackupIfNeeded() {
-        do {
-            try LocalBackupStore.ensureAutomaticBackupIfNeeded(
-                payload: currentBackupPayload(),
-                shouldCreate: hasAnyUserData,
-                mirrorToICloud: persistedICloudSyncEnabled
-            )
-            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
-            reloadBackupRecords()
-        } catch {
-            // Keep the page usable even if local backup maintenance fails.
+        Task {
+            defer { isCreatingBackup = false }
+            do {
+                backupRecords = try await BackupFileActor.shared.createManualBackup(
+                    payload: payload,
+                    mirrorToICloud: mirrorToICloud,
+                    retentionDays: retentionDays
+                )
+                backupActionFeedbackMessage = nil
+                HapticService.success()
+            } catch {
+                HapticService.warning()
+                backupActionFeedbackMessage = L10n.string("settings.exportFailed", locale: locale, error.localizedDescription)
+            }
         }
     }
 
@@ -483,19 +478,19 @@ struct ICloudSettingsView: View {
         syncToggleFailureMessage = nil
         syncToggleFailureAlertMessage = nil
 
+        let payload = hasAnyUserData ? currentBackupPayload() : nil
+
         do {
             if isEnabled {
-                try LocalBackupStore.syncExistingLocalBackupsToICloud()
-                if hasAnyUserData {
-                    try LocalBackupStore.ensureAutomaticBackupIfNeeded(
-                        payload: currentBackupPayload(),
-                        shouldCreate: true,
-                        mirrorToICloud: true
-                    )
-                }
+                backupRecords = try await BackupFileActor.shared.enableICloudBackup(
+                    automaticPayload: payload,
+                    retentionDays: retentionRule.days
+                )
+            } else {
+                backupRecords = await BackupFileActor.shared.removeExpiredBackupsAndLoad(
+                    retentionDays: retentionRule.days
+                )
             }
-            LocalBackupStore.removeExpiredBackups(keepingLast: retentionRule.days)
-            reloadBackupRecords()
             HapticService.success()
         } catch {
             revertICloudToggle(afterFailedEnablementWith: iCloudEnableFailureMessage(reason: error.localizedDescription))
@@ -553,7 +548,7 @@ struct ICloudSettingsView: View {
             let status = try await CKContainer(identifier: AppConfig.iCloudContainerIdentifier).accountStatus()
             switch status {
             case .available:
-                guard FileManager.default.url(forUbiquityContainerIdentifier: AppConfig.iCloudContainerIdentifier) != nil else {
+                guard await BackupFileActor.shared.isICloudDriveAvailable() else {
                     return "当前设备未开启 iCloud Drive，暂时无法保存 iCloud 备份。".appLocalized(in: locale)
                 }
                 return nil
@@ -576,13 +571,16 @@ struct ICloudSettingsView: View {
     private func updateRetentionRule(_ newRule: BackupRetentionRule) {
         guard newRule != retentionRule else { return }
         backupRetentionDays = newRule.rawValue
-        applyRetentionRule(newRule)
+        Task {
+            await applyRetentionRule(newRule)
+        }
         HapticService.selection()
     }
 
-    private func applyRetentionRule(_ rule: BackupRetentionRule) {
-        LocalBackupStore.removeExpiredBackups(keepingLast: rule.days)
-        reloadBackupRecords()
+    private func applyRetentionRule(_ rule: BackupRetentionRule) async {
+        backupRecords = await BackupFileActor.shared.removeExpiredBackupsAndLoad(
+            retentionDays: rule.days
+        )
     }
 
 }
@@ -779,43 +777,46 @@ private struct ICloudBackupHistoryView: View {
     }
 
     private func restore(_ record: LocalBackupRecord) {
-        do {
-            let data = try Data(contentsOf: record.fileURL)
-            let payload = try LedgerBackupCodec.decodePayload(from: data)
-            try LedgerBackupCoordinator.replaceLocalData(
-                with: payload,
-                context: modelContext,
-                entries: entries,
-                tags: tags,
-                goals: goals,
-                deposits: deposits
-            )
-            HapticService.success()
-            noticeSheet = SettingsNoticePayload(
-                message: "备份恢复完成，当前数据已更新。".appLocalized(in: locale),
-                locale: locale
-            )
-        } catch {
-            HapticService.warning()
-            noticeSheet = SettingsNoticePayload(
-                message: L10n.string("settings.importFailed", locale: locale, error.localizedDescription),
-                locale: locale
-            )
+        Task {
+            do {
+                let payload = try await BackupFileActor.shared.payload(for: record)
+                try LedgerBackupCoordinator.replaceLocalData(
+                    with: payload,
+                    context: modelContext,
+                    entries: entries,
+                    tags: tags,
+                    goals: goals,
+                    deposits: deposits
+                )
+                HapticService.success()
+                noticeSheet = SettingsNoticePayload(
+                    message: "备份恢复完成，当前数据已更新。".appLocalized(in: locale),
+                    locale: locale
+                )
+            } catch {
+                HapticService.warning()
+                noticeSheet = SettingsNoticePayload(
+                    message: L10n.string("settings.importFailed", locale: locale, error.localizedDescription),
+                    locale: locale
+                )
+            }
         }
     }
 
     private func delete(_ record: LocalBackupRecord) {
-        do {
-            try LocalBackupStore.deleteBackup(record)
-            records.removeAll { $0.id == record.id }
-            onRecordsChanged()
-            HapticService.success()
-        } catch {
-            HapticService.warning()
-            noticeSheet = SettingsNoticePayload(
-                message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription),
-                locale: locale
-            )
+        Task {
+            do {
+                try await BackupFileActor.shared.deleteBackup(record)
+                records.removeAll { $0.id == record.id }
+                onRecordsChanged()
+                HapticService.success()
+            } catch {
+                HapticService.warning()
+                noticeSheet = SettingsNoticePayload(
+                    message: L10n.string("settings.exportFailed", locale: locale, error.localizedDescription),
+                    locale: locale
+                )
+            }
         }
     }
 }
@@ -942,7 +943,7 @@ private enum BackupRetentionRule: Int, CaseIterable, Identifiable {
     }
 }
 
-private enum BackupSource: String {
+private enum BackupSource: String, Sendable {
     case automatic
     case manual
 
@@ -973,7 +974,7 @@ private enum BackupSource: String {
     }
 }
 
-private enum BackupStorageLocation: String, CaseIterable, Hashable {
+private enum BackupStorageLocation: String, CaseIterable, Hashable, Sendable {
     case local
     case iCloud
 
@@ -996,7 +997,7 @@ private enum BackupStorageLocation: String, CaseIterable, Hashable {
     }
 }
 
-private struct LocalBackupRecord: Identifiable {
+private struct LocalBackupRecord: Identifiable, Sendable {
     let id: String
     let source: BackupSource
     let localFileURL: URL?
@@ -1287,6 +1288,101 @@ private enum LocalBackupStore {
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         }
         return directoryURL
+    }
+}
+
+private actor BackupFileActor {
+    static let shared = BackupFileActor()
+
+    func loadRecords() -> [LocalBackupRecord] {
+        LocalBackupStore.loadRecords()
+    }
+
+    func refresh(
+        automaticPayload: LedgerBackupPayload?,
+        mirrorToICloud: Bool,
+        retentionDays: Int
+    ) -> [LocalBackupRecord] {
+        if mirrorToICloud {
+            try? LocalBackupStore.syncExistingLocalBackupsToICloud()
+        }
+        if let automaticPayload {
+            try? LocalBackupStore.ensureAutomaticBackupIfNeeded(
+                payload: automaticPayload,
+                shouldCreate: true,
+                mirrorToICloud: mirrorToICloud
+            )
+        }
+        LocalBackupStore.removeExpiredBackups(keepingLast: normalizedRetentionDays(retentionDays))
+        return LocalBackupStore.loadRecords()
+    }
+
+    func createManualBackup(
+        payload: LedgerBackupPayload,
+        mirrorToICloud: Bool,
+        retentionDays: Int
+    ) throws -> [LocalBackupRecord] {
+        _ = try LocalBackupStore.createBackup(
+            payload: payload,
+            source: .manual,
+            mirrorToICloud: mirrorToICloud
+        )
+        LocalBackupStore.removeExpiredBackups(keepingLast: normalizedRetentionDays(retentionDays))
+        return LocalBackupStore.loadRecords()
+    }
+
+    func enableICloudBackup(
+        automaticPayload: LedgerBackupPayload?,
+        retentionDays: Int
+    ) throws -> [LocalBackupRecord] {
+        try LocalBackupStore.syncExistingLocalBackupsToICloud()
+        if let automaticPayload {
+            try LocalBackupStore.ensureAutomaticBackupIfNeeded(
+                payload: automaticPayload,
+                shouldCreate: true,
+                mirrorToICloud: true
+            )
+        }
+        LocalBackupStore.removeExpiredBackups(keepingLast: normalizedRetentionDays(retentionDays))
+        return LocalBackupStore.loadRecords()
+    }
+
+    func removeExpiredBackupsAndLoad(retentionDays: Int) -> [LocalBackupRecord] {
+        LocalBackupStore.removeExpiredBackups(keepingLast: normalizedRetentionDays(retentionDays))
+        return LocalBackupStore.loadRecords()
+    }
+
+    func isICloudDriveAvailable() -> Bool {
+        FileManager.default.url(
+            forUbiquityContainerIdentifier: AppConfig.iCloudContainerIdentifier
+        ) != nil
+    }
+
+    func payload(for record: LocalBackupRecord) throws -> LedgerBackupPayload {
+        let data = try Data(contentsOf: record.fileURL)
+        return try LedgerBackupCodec.decodePayload(from: data)
+    }
+
+    func deleteBackup(_ record: LocalBackupRecord) throws {
+        try LocalBackupStore.deleteBackup(record)
+    }
+
+    private func normalizedRetentionDays(_ days: Int) -> Int {
+        [7, 15, 30].contains(days) ? days : 15
+    }
+}
+
+enum AppAutomaticBackupCoordinator {
+    static func runIfNeeded(
+        payload: LedgerBackupPayload,
+        mirrorToICloud: Bool,
+        retentionDays: Int
+    ) async {
+        _ = await BackupFileActor.shared.refresh(
+            automaticPayload: payload,
+            mirrorToICloud: mirrorToICloud,
+            retentionDays: retentionDays
+        )
     }
 }
 

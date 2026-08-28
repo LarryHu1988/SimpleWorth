@@ -57,7 +57,6 @@ struct StatsSettingsView: View {
 
     @State private var noticeSheet: SettingsNoticePayload?
     @Binding private var navigationPath: [SettingsRoute]
-    private let repoURL = URL(string: "https://github.com/LarryHu1988/SimpleWorth")
     private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
 
@@ -315,11 +314,11 @@ struct StatsSettingsView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let repoURL {
+            if let authorWebsiteURL {
                 ShareSheet(
                     activityItems: [
                         "我在用这款记账 App：SimpleWorth（简值），推荐你试试。".appLocalized(in: uiLocale),
-                        repoURL
+                        authorWebsiteURL
                     ],
                     subject: "SimpleWorth 简值".appLocalized(in: uiLocale)
                 )
@@ -595,14 +594,17 @@ struct StatsSettingsView: View {
         case .feedback:
             FeedbackContactView(supportEmail: supportEmail)
         case .privacy:
-            PrivacyAgreementView(supportEmail: supportEmail)
+            PrivacyAgreementView(
+                supportEmail: supportEmail,
+                privacyPolicyURL: AppConfig.privacyPolicyURL
+            )
         case .about:
             AboutSimpleWorthView(appVersionText: appVersionText)
         case .otherApps:
             OtherAppsView(
                 supportEmail: supportEmail,
                 authorWebsiteURL: authorWebsiteURL,
-                repoURL: repoURL
+                supportWebsiteURL: AppConfig.supportWebsiteURL
             )
         }
     }
@@ -970,6 +972,7 @@ private struct PrivacyAgreementView: View {
     @Environment(\.openURL) private var openURL
 
     let supportEmail: String
+    let privacyPolicyURL: URL
 
     var body: some View {
         SettingsDetailContainer {
@@ -986,7 +989,7 @@ private struct PrivacyAgreementView: View {
 
             SettingsSectionCard(title: "联网与系统能力") {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("查看或刷新汇率时，App 会请求公开汇率接口以获取最新汇率。")
+                    Text("查看或刷新汇率时，App 会请求 ExchangeRate-API 获取最新汇率；请求不会包含你的账单、标签或目标内容。")
                         .font(.footnote)
                         .foregroundStyle(SWTheme.textSecondary)
                     Text("意见反馈、好评鼓励与分享简值会调用系统邮件、评分与分享能力。")
@@ -996,6 +999,16 @@ private struct PrivacyAgreementView: View {
             }
 
             SettingsSectionCard(title: "联系作者") {
+                SettingsDetailActionRow(
+                    title: "查看完整隐私政策",
+                    symbol: "hand.raised.fill",
+                    iconColor: SWTheme.accentGreen
+                ) {
+                    openURL(privacyPolicyURL)
+                }
+
+                SettingsRowDivider()
+
                 SettingsDetailActionRow(
                     title: "联系邮箱",
                     symbol: "envelope.fill",
@@ -1016,7 +1029,7 @@ private struct OtherAppsView: View {
 
     let supportEmail: String
     let authorWebsiteURL: URL?
-    let repoURL: URL?
+    let supportWebsiteURL: URL
 
     var body: some View {
         SettingsDetailContainer {
@@ -1038,7 +1051,7 @@ private struct OtherAppsView: View {
                 }
             }
 
-            SettingsSectionCard(title: "联系与项目") {
+            SettingsSectionCard(title: "联系与支持") {
                 SettingsDetailActionRow(
                     title: "联系邮箱",
                     symbol: "envelope.fill",
@@ -1062,12 +1075,11 @@ private struct OtherAppsView: View {
                 SettingsRowDivider()
 
                 SettingsDetailActionRow(
-                    title: "GitHub 仓库",
-                    symbol: "link",
+                    title: "技术支持",
+                    symbol: "questionmark.circle.fill",
                     iconColor: SWTheme.accentOrange
                 ) {
-                    guard let repoURL else { return }
-                    openURL(repoURL)
+                    openURL(supportWebsiteURL)
                 }
             }
         }
