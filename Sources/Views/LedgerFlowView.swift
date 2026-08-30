@@ -419,7 +419,7 @@ struct LedgerFlowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
             } else {
-                VStack(spacing: 10) {
+                LazyVStack(spacing: 10) {
                     ForEach(recentEntries) { entry in
                         SwipeableLedgerRow(
                             entry: entry,

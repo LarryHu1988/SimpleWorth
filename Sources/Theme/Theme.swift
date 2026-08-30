@@ -115,7 +115,7 @@ enum SWTheme {
 
 enum SWMotion {
     static let quick = Animation.spring(response: 0.22, dampingFraction: 0.86, blendDuration: 0.04)
-    static let fluid = Animation.spring(response: 0.46, dampingFraction: 0.68, blendDuration: 0.07)
+    static let fluid = Animation.spring(response: 0.42, dampingFraction: 0.72, blendDuration: 0.08)
     static let settle = Animation.spring(response: 0.30, dampingFraction: 0.82, blendDuration: 0.05)
 }
 

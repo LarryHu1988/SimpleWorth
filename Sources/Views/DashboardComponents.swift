@@ -797,7 +797,7 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
 
         func installIfNeeded() {
             guard let panRecognizer else { return }
-            let targetView = superview
+            let targetView = window ?? superview
             guard installedView !== targetView else { return }
 
             installedView?.removeGestureRecognizer(panRecognizer)

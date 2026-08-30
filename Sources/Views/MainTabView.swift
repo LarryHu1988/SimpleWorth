@@ -198,8 +198,8 @@ private struct GooeySelectionLayer: View, Animatable {
 
     var body: some View {
         Canvas { context, _ in
-            context.addFilter(.alphaThreshold(min: 0.46, color: tint.opacity(0.94)))
             context.addFilter(.blur(radius: 8))
+            context.addFilter(.alphaThreshold(min: 0.46, color: tint.opacity(0.94)))
 
             context.drawLayer { layer in
                 layer.fill(
