@@ -1,0 +1,33 @@
+name: RowGestureCheck
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  RowGestureCheck:
+    type: application
+    platform: iOS
+    sources: [Fixture.swift, ProductionRows.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.rowgestures
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  RowGestureTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [GestureTests.swift]
+    dependencies:
+      - target: RowGestureCheck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.rowgestures.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  RowGestureCheck:
+    build:
+      targets:
+        RowGestureCheck: all
+    test:
+      targets: [RowGestureTests]

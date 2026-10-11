@@ -836,12 +836,17 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
             }
         }
 
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldReceive touch: UITouch
+        ) -> Bool {
+            guard let sourceView, sourceView.window != nil else { return false }
+            return sourceView.bounds.insetBy(dx: -4, dy: -4).contains(touch.location(in: sourceView))
+        }
+
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard let panRecognizer = gestureRecognizer as? UIPanGestureRecognizer else {
                 return true
-            }
-            guard isTouchInsideSourceView(for: panRecognizer) else {
-                return false
             }
 
             let translation = panRecognizer.translation(in: panRecognizer.view)
@@ -856,20 +861,27 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            true
+            !isAncestorScrollPan(otherGestureRecognizer)
         }
 
-        private func isTouchInsideSourceView(for gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard
-                let sourceView,
-                let recognizerView = gestureRecognizer.view
-            else {
-                return false
-            }
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            // Let the row reject vertical intent before its scroll view starts moving.
+            isAncestorScrollPan(otherGestureRecognizer)
+        }
 
-            let sourceFrame = sourceView.convert(sourceView.bounds, to: recognizerView)
-            guard !sourceFrame.isEmpty else { return false }
-            return sourceFrame.insetBy(dx: -4, dy: -4).contains(gestureRecognizer.location(in: recognizerView))
+        private func isAncestorScrollPan(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let scrollView = gestureRecognizer.view as? UIScrollView,
+                  gestureRecognizer === scrollView.panGestureRecognizer else { return false }
+
+            var ancestor = sourceView?.superview
+            while let view = ancestor {
+                if view === scrollView { return true }
+                ancestor = view.superview
+            }
+            return false
         }
     }
 }
