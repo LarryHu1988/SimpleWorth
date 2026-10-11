@@ -119,6 +119,132 @@ enum SWMotion {
     static let settle = Animation.spring(response: 0.30, dampingFraction: 0.82, blendDuration: 0.05)
 }
 
+private struct SWChartPageActiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var swChartPageIsActive: Bool {
+        get { self[SWChartPageActiveKey.self] }
+        set { self[SWChartPageActiveKey.self] = newValue }
+    }
+}
+
+enum SWChartEntranceStyle {
+    case radial
+    case horizontal
+    case vertical
+}
+
+private struct SWChartEntranceRequest: Equatable {
+    let isActive: Bool
+    let isMotionLimited: Bool
+    let replay: AnyHashable
+}
+
+private struct SWChartEntranceModifier: ViewModifier {
+    @Environment(\.swChartPageIsActive) private var isActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isRevealed = false
+
+    let style: SWChartEntranceStyle
+    let replay: AnyHashable
+
+    func body(content: Content) -> some View {
+        let motionLimited = reduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled
+        let request = SWChartEntranceRequest(
+            isActive: isActive,
+            isMotionLimited: motionLimited,
+            replay: replay
+        )
+
+        content
+            .mask {
+                // Animate only the mask; chart data, axes and hit testing stay unchanged.
+                SWChartRevealShape(
+                    style: style,
+                    progress: !isActive || motionLimited || isRevealed ? 1 : 0
+                )
+                .animation(
+                    !isActive || motionLimited ? nil : .easeOut(duration: 0.62),
+                    value: isRevealed
+                )
+            }
+            .task(id: request) {
+                setRevealed(false)
+                guard isActive, !motionLimited else { return }
+                do {
+                    try await Task.sleep(for: .milliseconds(35))
+                    try Task.checkCancellation()
+                } catch {
+                    return
+                }
+                isRevealed = true
+            }
+            .onDisappear {
+                setRevealed(false)
+            }
+    }
+
+    private func setRevealed(_ value: Bool) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isRevealed = value
+        }
+    }
+}
+
+struct SWChartRevealShape: Shape {
+    let style: SWChartEntranceStyle
+    var progress: Double
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let fraction = min(max(progress, 0), 1)
+        guard fraction > 0 else { return Path() }
+        // Preserve round stroke caps and shadows beyond the plot's bounds.
+        let bounds = rect.insetBy(dx: -24, dy: -24)
+        guard fraction < 1 else { return Path(bounds) }
+
+        switch style {
+        case .horizontal:
+            return Path(CGRect(
+                x: bounds.minX, y: bounds.minY,
+                width: rect.width * fraction + 24, height: bounds.height
+            ))
+        case .vertical:
+            return Path(CGRect(
+                x: bounds.minX, y: rect.maxY - rect.height * fraction,
+                width: bounds.width, height: rect.height * fraction + 24
+            ))
+        case .radial:
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            var path = Path()
+            path.move(to: center)
+            path.addArc(
+                center: center,
+                radius: hypot(rect.width / 2, rect.height / 2) + 24,
+                startAngle: .degrees(-90),
+                endAngle: .degrees(-90 + 360 * fraction),
+                clockwise: false
+            )
+            path.closeSubpath()
+            return path
+        }
+    }
+}
+
+extension View {
+    func chartEntrance(_ style: SWChartEntranceStyle, replay: AnyHashable = 0) -> some View {
+        modifier(SWChartEntranceModifier(style: style, replay: replay))
+    }
+}
+
 extension Color {
     static func dynamic(
         light: UInt,

@@ -379,6 +379,9 @@ struct StatsView: View {
                     }
                 }
                 .chartLegend(.hidden)
+                .chartPlotStyle { plot in
+                    plot.chartEntrance(.vertical, replay: selectedYear)
+                }
                 .chartXScale(
                     domain: 1.0...13.0,
                     range: .plotDimension(startPadding: 10, endPadding: 10)
@@ -680,6 +683,9 @@ private struct StatsDistributionContent: View {
                 }
                 .transaction { transaction in
                     transaction.animation = nil
+                }
+                .chartPlotStyle { plot in
+                    plot.chartEntrance(.radial)
                 }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in

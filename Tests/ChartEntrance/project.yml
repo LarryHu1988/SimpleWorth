@@ -1,0 +1,33 @@
+name: ChartEntranceCheck
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  ChartEntranceCheck:
+    type: application
+    platform: iOS
+    sources: [Fixture.swift, ProductionEntrance.swift, ProductionRing.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.chartentrance
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  ChartEntranceTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [EntranceTests.swift]
+    dependencies:
+      - target: ChartEntranceCheck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.chartentrance.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ChartEntranceCheck:
+    build:
+      targets:
+        ChartEntranceCheck: all
+    test:
+      targets: [ChartEntranceTests]

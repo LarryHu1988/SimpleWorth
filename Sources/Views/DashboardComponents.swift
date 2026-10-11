@@ -34,6 +34,7 @@ struct ProgressRing: View {
                 )
                 .rotationEffect(.degrees(-90))
                 .shadow(color: tint.opacity(0.45), radius: 8)
+                .chartEntrance(.radial)
         }
     }
 }

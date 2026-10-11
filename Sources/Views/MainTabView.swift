@@ -12,21 +12,25 @@ struct MainTabView: View {
         TabView(selection: selectedTabBinding) {
             NavigationStack {
                 ExpenseView()
+                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .expense)
             }
             .tag(AppRuntimeController.MainTab.expense)
 
             NavigationStack {
                 IncomeView()
+                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .income)
             }
             .tag(AppRuntimeController.MainTab.income)
 
             NavigationStack {
                 VaultView()
+                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .vault)
             }
             .tag(AppRuntimeController.MainTab.vault)
 
             NavigationStack {
                 StatsView()
+                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .stats)
             }
             .tag(AppRuntimeController.MainTab.stats)
         }

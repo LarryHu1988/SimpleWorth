@@ -399,6 +399,7 @@ private struct GoalProgressCard: View {
                         Capsule(style: .continuous)
                             .fill(goal.tintColor.gradient)
                             .frame(width: proxy.size.width * goal.progress)
+                            .chartEntrance(.horizontal)
                     }
                 }
                 .frame(height: 8)
