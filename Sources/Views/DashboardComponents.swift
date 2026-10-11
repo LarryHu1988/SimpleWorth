@@ -23,18 +23,20 @@ struct ProgressRing: View {
             Circle()
                 .stroke(Color.white.opacity(0.14), lineWidth: lineWidth)
 
-            Circle()
-                .trim(from: 0, to: max(min(progress, 1), 0))
-                .stroke(
-                    AngularGradient(
-                        colors: [tint.opacity(0.6), tint, tint.opacity(0.75)],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .shadow(color: tint.opacity(0.45), radius: 8)
-                .chartEntrance(.radial)
+            SWChartEntrance { fraction, animation in
+                Circle()
+                    .trim(from: 0, to: max(min(progress, 1), 0) * fraction)
+                    .stroke(
+                        AngularGradient(
+                            colors: [tint.opacity(0.6), tint, tint.opacity(0.75)],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .shadow(color: tint.opacity(0.45), radius: 8)
+                    .animation(animation, value: fraction)
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ private struct ChartFixture: View {
     @State private var samples = ""
     @State private var taps = 0
     @State private var checkTask: Task<Void, Never>?
+    @State private var ringFrame = CGRect.zero
 
     var body: some View {
         VStack(spacing: 12) {
@@ -29,6 +30,11 @@ private struct ChartFixture: View {
             VStack(spacing: 18) {
                 ProgressRing(progress: 0.78, tint: .blue)
                     .frame(width: 94, height: 94)
+                    .onGeometryChange(for: CGRect.self) { proxy in
+                        proxy.frame(in: .global)
+                    } action: { frame in
+                        ringFrame = frame
+                    }
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.gray.opacity(0.1))
                     Capsule().fill(Color.green)
@@ -83,7 +89,7 @@ private struct ChartFixture: View {
                 let early = capture("early")
                 try await Task.sleep(for: .milliseconds(200))
                 let middle = capture("middle")
-                try await Task.sleep(for: .milliseconds(650))
+                try await Task.sleep(for: .milliseconds(900))
                 let final = capture("final")
                 samples = [early, middle, final].map { $0.map(String.init).joined(separator: ",") }
                     .joined(separator: ";")
@@ -104,6 +110,16 @@ private struct ChartFixture: View {
             .appendingPathComponent("\(stage).png")
         try? image.pngData()?.write(to: output)
         guard let cgImage = image.cgImage else { return [] }
+        // The left half of the starting round cap was clipped by the old radial mask.
+        let capRect = CGRect(
+            x: ringFrame.midX - 5, y: ringFrame.minY - 4,
+            width: 4, height: 8
+        ).applying(CGAffineTransform(scaleX: image.scale, y: image.scale))
+        guard let capImage = cgImage.cropping(to: capRect) else { return [] }
+        return colorCounts(in: cgImage) + [colorCounts(in: capImage)[0]]
+    }
+
+    private func colorCounts(in cgImage: CGImage) -> [Int] {
         var pixels = [UInt8](repeating: 0, count: cgImage.width * cgImage.height * 4)
         return pixels.withUnsafeMutableBytes { buffer in
             guard let context = CGContext(

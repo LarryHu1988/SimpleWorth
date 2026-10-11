@@ -12,7 +12,8 @@ including its non-animated selection transaction. No app data or release targets
 are changed.
 
 Checks cover progressive rendered pixels, replay on cached-page activation,
-rapid switching and cancellation, chart tap handling, and Reduce Motion showing
+rapid switching and cancellation, chart tap handling, round-cap visibility throughout
+the one-second ring entrance, and Reduce Motion showing
 complete charts immediately. The Reduce Motion test temporarily changes the
 simulator's setting and restores it on teardown. Early, middle and final PNGs are saved inside the
 fixture's simulator Documents directory; XCTest also retains a final screenshot.

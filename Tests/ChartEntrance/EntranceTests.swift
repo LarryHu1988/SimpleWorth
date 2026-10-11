@@ -22,9 +22,9 @@ final class EntranceTests: XCTestCase {
         }
         XCTAssertEqual(values.count, 3)
         for stage in values {
-            XCTAssertEqual(stage.count, 4)
+            XCTAssertEqual(stage.count, 5)
         }
-        for count in values.last ?? [] {
+        for count in (values.last ?? []).prefix(4) {
             XCTAssertGreaterThan(count, 1000)
         }
         return values
@@ -52,6 +52,14 @@ final class EntranceTests: XCTestCase {
         app.otherElements["bars"].tap()
         app.otherElements["donut"].tap()
         XCTAssertEqual(app.staticTexts["taps"].label, "taps=2")
+    }
+
+    func testRoundCapIsVisibleThroughoutEntrance() throws {
+        let values = try samples(after: "Replay")
+        let finalCap = Double(values[2][4])
+        XCTAssertGreaterThan(finalCap, 30)
+        XCTAssertEqual(Double(values[0][4]), finalCap, accuracy: finalCap * 0.15)
+        XCTAssertEqual(Double(values[1][4]), finalCap, accuracy: finalCap * 0.15)
     }
 
     private func motionSwitch(in settings: XCUIApplication) -> XCUIElement {

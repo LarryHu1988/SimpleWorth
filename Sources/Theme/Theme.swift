@@ -142,15 +142,15 @@ private struct SWChartEntranceRequest: Equatable {
     let replay: AnyHashable
 }
 
-private struct SWChartEntranceModifier: ViewModifier {
+struct SWChartEntrance<Content: View>: View {
     @Environment(\.swChartPageIsActive) private var isActive
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isRevealed = false
 
-    let style: SWChartEntranceStyle
-    let replay: AnyHashable
+    var replay: AnyHashable = 0
+    let content: (Double, Animation?) -> Content
 
-    func body(content: Content) -> some View {
+    var body: some View {
         let motionLimited = reduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled
         let request = SWChartEntranceRequest(
             isActive: isActive,
@@ -158,18 +158,10 @@ private struct SWChartEntranceModifier: ViewModifier {
             replay: replay
         )
 
-        content
-            .mask {
-                // Animate only the mask; chart data, axes and hit testing stay unchanged.
-                SWChartRevealShape(
-                    style: style,
-                    progress: !isActive || motionLimited || isRevealed ? 1 : 0
-                )
-                .animation(
-                    !isActive || motionLimited ? nil : .easeOut(duration: 0.80),
-                    value: isRevealed
-                )
-            }
+        content(
+            !isActive || motionLimited || isRevealed ? 1 : 0,
+            !isActive || motionLimited || !isRevealed ? nil : .easeOut(duration: 1.0)
+        )
             .task(id: request) {
                 setRevealed(false)
                 guard isActive, !motionLimited else { return }
@@ -191,6 +183,21 @@ private struct SWChartEntranceModifier: ViewModifier {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             isRevealed = value
+        }
+    }
+}
+
+private struct SWChartEntranceModifier: ViewModifier {
+    let style: SWChartEntranceStyle
+    let replay: AnyHashable
+
+    func body(content: Content) -> some View {
+        SWChartEntrance(replay: replay) { progress, animation in
+            content.mask {
+                // Keep chart data, axes and hit testing unchanged.
+                SWChartRevealShape(style: style, progress: progress)
+                    .animation(animation, value: progress)
+            }
         }
     }
 }
