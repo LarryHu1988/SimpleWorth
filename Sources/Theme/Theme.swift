@@ -166,7 +166,7 @@ private struct SWChartEntranceModifier: ViewModifier {
                     progress: !isActive || motionLimited || isRevealed ? 1 : 0
                 )
                 .animation(
-                    !isActive || motionLimited ? nil : .easeOut(duration: 0.62),
+                    !isActive || motionLimited ? nil : .easeOut(duration: 0.80),
                     value: isRevealed
                 )
             }

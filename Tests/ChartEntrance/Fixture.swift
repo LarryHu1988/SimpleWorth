@@ -83,7 +83,7 @@ private struct ChartFixture: View {
                 let early = capture("early")
                 try await Task.sleep(for: .milliseconds(200))
                 let middle = capture("middle")
-                try await Task.sleep(for: .milliseconds(500))
+                try await Task.sleep(for: .milliseconds(650))
                 let final = capture("final")
                 samples = [early, middle, final].map { $0.map(String.init).joined(separator: ",") }
                     .joined(separator: ";")
