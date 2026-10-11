@@ -199,8 +199,7 @@ struct LedgerFlowView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .navigationTitle(flow.localizedTitle(in: locale))
-        .navigationBarTitleDisplayMode(.large)
+        .fixedMainPageTitle(flow.localizedTitle(in: locale))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: SWTheme.toolbarControlSpacing) {

@@ -7,8 +7,8 @@ configs:
 settings:
   base:
     SWIFT_VERSION: 5.0
-    MARKETING_VERSION: 0.7.19
-    CURRENT_PROJECT_VERSION: "30"
+    MARKETING_VERSION: 0.7.20
+    CURRENT_PROJECT_VERSION: "31"
     IPHONEOS_DEPLOYMENT_TARGET: 17.0
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
@@ -37,8 +37,8 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: 简值
-        CFBundleShortVersionString: 0.7.19
-        CFBundleVersion: "30"
+        CFBundleShortVersionString: 0.7.20
+        CFBundleVersion: "31"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIRequiresFullScreen: false

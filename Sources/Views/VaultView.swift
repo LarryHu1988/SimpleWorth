@@ -68,8 +68,7 @@ struct VaultView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .navigationTitle("金库")
-        .navigationBarTitleDisplayMode(.large)
+        .fixedMainPageTitle("金库".appLocalized(in: locale))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: SWTheme.toolbarControlSpacing) {

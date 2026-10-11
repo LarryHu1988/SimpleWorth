@@ -291,6 +291,37 @@ extension UIColor {
     }
 }
 
+private struct MainPageTitleModifier: ViewModifier {
+    let title: String
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarLeading) { titleLabel }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarLeading) { titleLabel }
+                }
+            }
+    }
+
+    private var titleLabel: some View {
+        Text(title)
+            .font(.title2.weight(.bold))
+            .foregroundStyle(SWTheme.primaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("mainPageTitle")
+    }
+}
+
 private struct AppBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         ZStack {
@@ -425,6 +456,10 @@ private struct FitnessCardModifier: ViewModifier {
 }
 
 extension View {
+    func fixedMainPageTitle(_ title: String) -> some View {
+        modifier(MainPageTitleModifier(title: title))
+    }
+
     func appBackground() -> some View {
         modifier(AppBackgroundModifier())
     }

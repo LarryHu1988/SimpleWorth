@@ -397,7 +397,7 @@ private struct SeededRootView: View {
 
             guard hasAnyUserData else { return }
 
-            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.19"
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.20"
             let payload = LedgerBackupCoordinator.makePayload(
                 appVersion: "V\(version)",
                 entries: entries,

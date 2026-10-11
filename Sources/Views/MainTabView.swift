@@ -166,6 +166,7 @@ private struct LiquidGooeyTabBar: View {
         }
         .buttonStyle(SWResponsiveButtonStyle(pressedScale: 0.92))
         .accessibilityLabel(item.title.appLocalized(in: locale))
+        .accessibilityIdentifier("mainTab.\(item.tab)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

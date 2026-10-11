@@ -239,8 +239,7 @@ struct StatsView: View {
             .padding(.top, 10)
             .padding(.bottom, 28)
         }
-        .navigationTitle("统计")
-        .navigationBarTitleDisplayMode(.large)
+        .fixedMainPageTitle("统计".appLocalized(in: locale))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: SWTheme.toolbarControlSpacing) {
