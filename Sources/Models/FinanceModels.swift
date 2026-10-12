@@ -127,19 +127,22 @@ final class TagRecord {
     var emoji: String = TagEmojiLibrary.defaultEmoji
     var tintHex: Int = TagEmojiLibrary.defaultTintHex
     var createdAt: Date = Date.now
+    var sortOrder: Int = 0
 
     init(
         id: UUID = UUID(),
         name: String,
         emoji: String = TagEmojiLibrary.defaultEmoji,
         tintHex: Int = TagEmojiLibrary.defaultTintHex,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        sortOrder: Int = 0
     ) {
         self.id = id
         self.name = name
         self.emoji = TagEmojiLibrary.normalized(emoji)
         self.tintHex = tintHex
         self.createdAt = createdAt
+        self.sortOrder = sortOrder
     }
 
     var emojiValue: String {
@@ -152,6 +155,45 @@ final class TagRecord {
 
     var tintColor: Color {
         Color.sw(UInt(resolvedTintHex))
+    }
+}
+
+enum TagOrdering {
+    static func sorted(_ tags: [TagRecord]) -> [TagRecord] {
+        tags.sorted {
+            if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
+            if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
+    static func visible(_ tags: [TagRecord]) -> [TagRecord] {
+        var seen = Set<String>()
+        return sorted(tags).filter {
+            let name = $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !name.isEmpty && seen.insert(name.lowercased()).inserted
+        }
+    }
+
+    static func nextOrder(in tags: [TagRecord]) -> Int {
+        (tags.map(\.sortOrder).max() ?? -1) + 1
+    }
+
+    static func move(_ tags: [TagRecord], from offsets: IndexSet, to destination: Int, context: ModelContext) throws {
+        var reordered = visible(tags)
+        guard !offsets.isEmpty, offsets.allSatisfy({ reordered.indices.contains($0) }),
+              (0...reordered.count).contains(destination) else { return }
+        reordered.move(fromOffsets: offsets, toOffset: destination)
+        let visibleIDs = Set(reordered.map(\.id))
+        reordered += sorted(tags).filter { !visibleIDs.contains($0.id) }
+        let previous = reordered.map(\.sortOrder)
+        for (index, tag) in reordered.enumerated() { tag.sortOrder = index }
+        do {
+            try context.save()
+        } catch {
+            for (index, tag) in reordered.enumerated() { tag.sortOrder = previous[index] }
+            throw error
+        }
     }
 }
 
@@ -416,11 +458,17 @@ enum CategoryLibrary {
         .init(flow: .expense, name: "外卖", symbol: "takeoutbag.and.cup.and.straw.fill", colorHex: 0xFB7185),
         .init(flow: .expense, name: "咖啡", symbol: "cup.and.saucer.fill", colorHex: 0xFB923C),
         .init(flow: .expense, name: "零食", symbol: "birthday.cake.fill", colorHex: 0xFBBF24),
+        .init(flow: .expense, name: "饮品", symbol: "waterbottle.fill", colorHex: 0x2DD4BF),
+        .init(flow: .expense, name: "水果", symbol: "leaf.fill", colorHex: 0x84CC16),
         .init(flow: .expense, name: "买菜", symbol: "cart.fill", colorHex: 0x34D399),
         .init(flow: .expense, name: "超市", symbol: "basket.fill", colorHex: 0xA78BFA),
         .init(flow: .expense, name: "日用品", symbol: "bag.fill", colorHex: 0x38BDF8),
         .init(flow: .expense, name: "快递", symbol: "shippingbox.fill", colorHex: 0x60A5FA),
         .init(flow: .expense, name: "服饰", symbol: "tshirt.fill", colorHex: 0xF472B6),
+        .init(flow: .expense, name: "鞋靴", symbol: "shoe.fill", colorHex: 0xF59E0B),
+        .init(flow: .expense, name: "箱包", symbol: "bag.fill", colorHex: 0xC084FC),
+        .init(flow: .expense, name: "配饰珠宝", symbol: "crown.fill", colorHex: 0xE4B84A),
+        .init(flow: .expense, name: "洗衣清洁", symbol: "washer.fill", colorHex: 0x53C4D1),
         .init(flow: .expense, name: "美容理发", symbol: "scissors", colorHex: 0xE879F9),
         .init(flow: .expense, name: "化妆护肤", symbol: "sparkles", colorHex: 0xF0ABFC),
         .init(flow: .expense, name: "住房", symbol: "house.fill", colorHex: 0x60A5FA),
@@ -432,12 +480,17 @@ enum CategoryLibrary {
         .init(flow: .expense, name: "通讯", symbol: "wifi", colorHex: 0x22D3EE),
         .init(flow: .expense, name: "家政维修", symbol: "wrench.and.screwdriver.fill", colorHex: 0x94A3B8),
         .init(flow: .expense, name: "家具家电", symbol: "sofa.fill", colorHex: 0xA16207),
+        .init(flow: .expense, name: "家居家纺", symbol: "bed.double.fill", colorHex: 0x67C587),
+        .init(flow: .expense, name: "装修建材", symbol: "paintbrush.fill", colorHex: 0xF59E0B),
         .init(flow: .expense, name: "交通", symbol: "car.fill", colorHex: 0x818CF8),
         .init(flow: .expense, name: "打车", symbol: "location.fill", colorHex: 0x6366F1),
         .init(flow: .expense, name: "公交", symbol: "bus.fill", colorHex: 0x2DD4BF),
         .init(flow: .expense, name: "加油", symbol: "fuelpump.fill", colorHex: 0xFB7185),
+        .init(flow: .expense, name: "车辆充电", symbol: "bolt.car.fill", colorHex: 0x34D399),
+        .init(flow: .expense, name: "通行费", symbol: "road.lanes", colorHex: 0x64748B),
         .init(flow: .expense, name: "停车", symbol: "parkingsign.circle.fill", colorHex: 0x0EA5E9),
         .init(flow: .expense, name: "车辆保养", symbol: "wrench.fill", colorHex: 0x64748B),
+        .init(flow: .expense, name: "车辆购置", symbol: "car.side.fill", colorHex: 0x3B82F6),
         .init(flow: .expense, name: "旅行", symbol: "airplane", colorHex: 0x38BDF8),
         .init(flow: .expense, name: "酒店住宿", symbol: "bed.double.fill", colorHex: 0x0F766E),
         .init(flow: .expense, name: "机票火车", symbol: "train.side.front.car", colorHex: 0x0284C7),
@@ -449,18 +502,26 @@ enum CategoryLibrary {
         .init(flow: .expense, name: "娱乐", symbol: "sparkles", colorHex: 0xC084FC),
         .init(flow: .expense, name: "医疗", symbol: "stethoscope", colorHex: 0x10B981),
         .init(flow: .expense, name: "药品", symbol: "pills.fill", colorHex: 0x14B8A6),
+        .init(flow: .expense, name: "体检保健", symbol: "heart.text.clipboard.fill", colorHex: 0x67C587),
         .init(flow: .expense, name: "保险", symbol: "shield.fill", colorHex: 0x0EA5E9),
         .init(flow: .expense, name: "宠物", symbol: "pawprint.fill", colorHex: 0xF97316),
         .init(flow: .expense, name: "礼物", symbol: "gift.fill", colorHex: 0xE879F9),
+        .init(flow: .expense, name: "人情红包", symbol: "envelope.fill", colorHex: 0xF06A6A),
+        .init(flow: .expense, name: "赡养", symbol: "person.2.fill", colorHex: 0xE4B84A),
+        .init(flow: .expense, name: "公益捐赠", symbol: "heart.fill", colorHex: 0xE27AB0),
         .init(flow: .expense, name: "社交", symbol: "person.2.fill", colorHex: 0xEC4899),
         .init(flow: .expense, name: "健身", symbol: "figure.run", colorHex: 0x84CC16),
+        .init(flow: .expense, name: "运动户外", symbol: "figure.hiking", colorHex: 0x22C55E),
         .init(flow: .expense, name: "数码", symbol: "laptopcomputer", colorHex: 0x06B6D4),
+        .init(flow: .expense, name: "数码配件", symbol: "headphones", colorHex: 0x53C4D1),
+        .init(flow: .expense, name: "软件应用", symbol: "app.badge.fill", colorHex: 0x5B8DEF),
         .init(flow: .expense, name: "摄影", symbol: "camera.fill", colorHex: 0x3B82F6),
         .init(flow: .expense, name: "音乐", symbol: "music.note", colorHex: 0xEC4899),
         .init(flow: .expense, name: "教育", symbol: "graduationcap.fill", colorHex: 0x14B8A6),
         .init(flow: .expense, name: "办公", symbol: "briefcase.fill", colorHex: 0x64748B),
         .init(flow: .expense, name: "育儿", symbol: "figure.2.and.child.holdinghands", colorHex: 0xF59E0B),
         .init(flow: .expense, name: "税费", symbol: "doc.text.fill", colorHex: 0xEF4444),
+        .init(flow: .expense, name: "手续费", symbol: "creditcard.fill", colorHex: 0x94A3B8),
         .init(flow: .expense, name: "其他支出", symbol: "ellipsis.circle.fill", colorHex: 0x9CA3AF)
     ]
 
@@ -483,10 +544,15 @@ enum CategoryLibrary {
         .init(flow: .income, name: "租金", symbol: "house.fill", colorHex: 0x2DD4BF),
         .init(flow: .income, name: "二手", symbol: "repeat.circle.fill", colorHex: 0xF472B6),
         .init(flow: .income, name: "销售", symbol: "cart.badge.plus", colorHex: 0x14B8A6),
+        .init(flow: .income, name: "服务收入", symbol: "person.crop.circle.badge.checkmark", colorHex: 0x53C4D1),
         .init(flow: .income, name: "创作", symbol: "paintbrush.fill", colorHex: 0xE879F9),
         .init(flow: .income, name: "稿费", symbol: "signature", colorHex: 0xA3E635),
         .init(flow: .income, name: "咨询", symbol: "person.crop.circle.badge.checkmark", colorHex: 0x84CC16),
         .init(flow: .income, name: "红包", symbol: "gift.fill", colorHex: 0xFB7185),
+        .init(flow: .income, name: "礼金", symbol: "envelope.fill", colorHex: 0xE27AB0),
+        .init(flow: .income, name: "养老金", symbol: "person.fill", colorHex: 0x67C587),
+        .init(flow: .income, name: "退税", symbol: "doc.text.fill", colorHex: 0xF59E0B),
+        .init(flow: .income, name: "赔偿", symbol: "shield.fill", colorHex: 0x5B8DEF),
         .init(flow: .income, name: refundCategoryName, symbol: "arrow.uturn.backward.circle.fill", colorHex: 0x38BDF8),
         .init(flow: .income, name: "现金存入", symbol: "creditcard.fill", colorHex: 0x16A34A),
         .init(flow: .income, name: "其他收入", symbol: "ellipsis.circle.fill", colorHex: 0x9CA3AF)
@@ -496,6 +562,50 @@ enum CategoryLibrary {
         switch flow {
         case .expense: expenseCategories
         case .income: incomeCategories
+        }
+    }
+
+    private static let searchKeywords: [String: String] = [
+        "餐饮": "吃饭 吃飯 早餐 午餐 晚餐 dining meal restaurant 食事 レストラン",
+        "服饰": "衣服 服裝 服装 衬衫 襯衫 裤子 褲子 外套 clothing shirt pants coat 衣類 シャツ",
+        "鞋靴": "买鞋 買鞋 运动鞋 運動鞋 球鞋 皮鞋 凉鞋 涼鞋 拖鞋 靴子 shoes sneakers boots sandals 靴 スニーカー",
+        "箱包": "背包 手提包 旅行箱 行李箱 bags backpack luggage suitcase バッグ リュック",
+        "配饰珠宝": "首饰 首飾 项链 項鏈 戒指 手表 手錶 眼镜 眼鏡 jewelry accessories watch glasses アクセサリー 眼鏡",
+        "饮品": "奶茶 果汁 饮料 飲料 矿泉水 礦泉水 drinks tea juice water 飲料 ジュース",
+        "水果": "苹果 蘋果 香蕉 橙子 草莓 fruits apple banana 果物 フルーツ",
+        "日用品": "纸巾 紙巾 牙膏 洗发水 洗髮水 household essentials tissues toothpaste 日用品",
+        "家居家纺": "床单 床單 被子 枕头 枕頭 窗帘 窗簾 bedding linens pillow curtains 寝具 カーテン",
+        "装修建材": "装修 裝修 建材 油漆 地板 renovation paint flooring リフォーム 建材",
+        "洗衣清洁": "洗衣 洗鞋 干洗 乾洗 清洁 清潔 laundry dry cleaning クリーニング 洗濯",
+        "车辆充电": "电车 電車 充电 充電 ev charging 電気自動車 充電",
+        "通行费": "过路费 過路費 高速 路桥 路橋 toll highway 通行料金 高速道路",
+        "车辆购置": "买车 買車 汽车 汽車 自行车 自行車 电动车 電動車 vehicle bicycle car purchase 車購入 自転車",
+        "体检保健": "体检 體檢 保健 营养 營養 health checkup supplements 健康診断 サプリ",
+        "运动户外": "露营 露營 户外 戶外 体育 體育 球拍 健身器材 sports camping outdoor アウトドア スポーツ",
+        "数码": "手机 手機 电脑 電腦 平板 phone computer tablet スマホ パソコン",
+        "数码配件": "耳机 耳機 充电器 充電器 数据线 數據線 键盘 鍵盤 headphones charger cable keyboard イヤホン 充電器",
+        "软件应用": "软件 軟體 应用 應用 app software license ソフト アプリ",
+        "教育": "学费 學費 培训 培訓 课程 課程 tuition course training 学費 講座",
+        "育儿": "奶粉 尿布 玩具 育兒 baby diapers toys 育児 おもちゃ",
+        "人情红包": "婚礼 婚禮 随礼 隨禮 红包 紅包 礼金 禮金 wedding cash gifts ご祝儀 贈答",
+        "赡养": "赡养 贍養 父母 老人 家庭支持 parents family support 親 扶養",
+        "公益捐赠": "捐款 捐贈 慈善 donation charity 寄付",
+        "手续费": "银行 銀行 服务费 服務費 fees commission 手数料",
+        "二手": "卖鞋 賣鞋 卖衣服 賣衣服 闲置 閒置 出售 resale secondhand used 二手 中古 フリマ",
+        "销售": "卖东西 賣東西 商品 店铺 店鋪 生意 sales goods shop business 売上 販売",
+        "服务收入": "服务 服務 接单 接單 劳务 勞務 service freelance labor サービス 報酬",
+        "礼金": "赠与 贈與 结婚 結婚 gifts wedding gift money ご祝儀 贈与",
+        "养老金": "退休 退休金 pension retirement 年金",
+        "退税": "税款 稅款 tax refund 還付金",
+        "赔偿": "理赔 理賠 賠償 compensation insurance claim 補償 保険金"
+    ]
+
+    static func filtered(_ categories: [CategoryItem], matching query: String, locale: Locale) -> [CategoryItem] {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return categories }
+        return categories.filter {
+            let text = "\($0.name) \($0.localizedName(in: locale)) \(searchKeywords[$0.name] ?? "")"
+            return text.range(of: keyword, options: [.caseInsensitive, .diacriticInsensitive], locale: locale) != nil
         }
     }
 

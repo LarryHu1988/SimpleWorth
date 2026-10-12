@@ -21,7 +21,7 @@ struct EntryEditorSheet: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("settings.detailedTimeEnabled") private var detailedTimeEnabled = false
     @ObservedObject private var currencyStore = CurrencyStore.shared
-    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var allTags: [TagRecord]
+    @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var allTags: [TagRecord]
     @FocusState private var focusedField: EntryEditorFocusedField?
 
     let flow: FlowType
@@ -36,6 +36,7 @@ struct EntryEditorSheet: View {
     @State private var amountText: String
     @State private var date: Date
     @State private var selectedCategoryID: String
+    @State private var categorySearchText = ""
     @State private var selectedCurrencyCode: String
     @State private var selectedTagNames: [String]
     @State private var showCurrencyPicker = false
@@ -112,7 +113,17 @@ struct EntryEditorSheet: View {
     }
 
     private var categories: [CategoryItem] {
-        CategoryLibrary.categories(for: flow)
+        var result = CategoryLibrary.categories(for: flow)
+        if let entry, entry.flow == flow {
+            let savedCategory = CategoryItem(
+                flow: flow, name: entry.categoryName,
+                symbol: entry.categorySymbol, colorHex: entry.categoryColorHex
+            )
+            if !result.contains(where: { $0.id == savedCategory.id }) {
+                result.insert(savedCategory, at: 0)
+            }
+        }
+        return result
     }
 
     private var selectedCategory: CategoryItem {
@@ -121,12 +132,7 @@ struct EntryEditorSheet: View {
     }
 
     private var managedTags: [TagRecord] {
-        var seen = Set<String>()
-        return allTags.filter { tag in
-            let normalized = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else { return false }
-            return seen.insert(normalized.lowercased()).inserted
-        }
+        TagOrdering.visible(allTags)
     }
 
     private var normalizedAmount: Double? {
@@ -720,8 +726,10 @@ struct EntryEditorSheet: View {
         return VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "分类", subtitle: "快速选择图标分类")
 
+            CategorySearchField(text: $categorySearchText)
+
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(categories) { category in
+                ForEach(CategoryLibrary.filtered(categories, matching: categorySearchText, locale: locale)) { category in
                     Button {
                         selectedCategoryID = category.id
                     } label: {
@@ -739,8 +747,9 @@ struct EntryEditorSheet: View {
                             Text(category.localizedName(in: locale))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(SWTheme.primaryText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.65)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+                                .frame(height: 28, alignment: .top)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
@@ -759,9 +768,16 @@ struct EntryEditorSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("entry.category.\(category.name)")
+                    .accessibilityAddTraits(selectedCategoryID == category.id ? .isSelected : [])
                 }
             }
             .id(locale.identifier)
+            if CategoryLibrary.filtered(categories, matching: categorySearchText, locale: locale).isEmpty {
+                Text("未找到匹配分类".appLocalized(in: locale))
+                    .font(.subheadline)
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
         }
         .fitnessCard()
     }
@@ -818,6 +834,7 @@ struct EntryEditorSheet: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("entry.tag.\(tag.name)")
                     }
                 }
             }

@@ -88,6 +88,7 @@ struct CategoryGridSection: View {
     let subtitle: String
     let categories: [CategoryItem]
     var onTapCategory: ((CategoryItem) -> Void)? = nil
+    @State private var searchText = ""
 
     private let columns = Array(
         repeating: GridItem(.flexible(minimum: 44), spacing: 6),
@@ -98,8 +99,10 @@ struct CategoryGridSection: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: title, subtitle: subtitle)
 
+            CategorySearchField(text: $searchText)
+
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(categories) { item in
+                ForEach(CategoryLibrary.filtered(categories, matching: searchText, locale: locale)) { item in
                     Button {
                         HapticService.impact(style: .soft)
                         onTapCategory?(item)
@@ -111,8 +114,45 @@ struct CategoryGridSection: View {
                 }
             }
             .id(locale.identifier)
+            if CategoryLibrary.filtered(categories, matching: searchText, locale: locale).isEmpty {
+                Text("未找到匹配分类".appLocalized(in: locale))
+                    .font(.subheadline)
+                    .foregroundStyle(SWTheme.textSecondary)
+            }
         }
         .fitnessCard()
+    }
+}
+
+struct CategorySearchField: View {
+    @Environment(\.locale) private var locale
+    @Binding var text: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SWTheme.textSecondary)
+            TextField("搜索分类或物品".appLocalized(in: locale), text: $text)
+                .focused($isFocused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { isFocused = false }
+                .accessibilityIdentifier("category.search")
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SWTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索".appLocalized(in: locale))
+            }
+        }
+        .padding(12)
+        .background(SWTheme.primaryText.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -137,8 +177,9 @@ struct CategoryIconCell: View {
             Text(item.localizedName(in: locale))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(SWTheme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .frame(height: 28, alignment: .top)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 7)

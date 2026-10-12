@@ -15,7 +15,7 @@ private struct TagEntriesTarget: Identifiable {
 struct TagManagementView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
+    @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var tags: [TagRecord]
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
 
     @State private var newTagName = ""
@@ -28,12 +28,7 @@ struct TagManagementView: View {
     @FocusState private var isInputFocused: Bool
 
     private var visibleTags: [TagRecord] {
-        var seen = Set<String>()
-        return tags.filter { tag in
-            let normalized = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else { return false }
-            return seen.insert(normalized.lowercased()).inserted
-        }
+        TagOrdering.visible(tags)
     }
 
     private var tagTintHexByName: [String: Int] {
@@ -45,15 +40,17 @@ struct TagManagementView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 16) {
-                addTagCard
-                existingTagsCard
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 28)
+        List {
+            addTagCard
+                .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 16, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            existingTagsCard
+                .listRowBackground(Color.clear)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.editMode, .constant(.active))
         .navigationTitle("标签管理")
         .navigationBarTitleDisplayMode(.inline)
         .alert("提示", isPresented: $showNotice) {
@@ -154,7 +151,8 @@ struct TagManagementView: View {
     }
 
     private var existingTagsCard: some View {
-        SettingsSectionCard(title: "已有标签") {
+        let usageCounts = tagUsageCounts
+        return Section {
             if visibleTags.isEmpty {
                 Text("还没有标签，先添加一个常用标签吧。")
                     .font(.subheadline)
@@ -162,7 +160,7 @@ struct TagManagementView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
             } else {
-                ForEach(Array(visibleTags.enumerated()), id: \.element.id) { index, tag in
+                ForEach(visibleTags) { tag in
                     HStack(spacing: 12) {
                         Menu {
                             ForEach(TagEmojiLibrary.tintOptions, id: \.self) { tintHex in
@@ -186,8 +184,10 @@ struct TagManagementView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(tag.name)
                                 .foregroundStyle(SWTheme.primaryText)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                            Text(L10n.string("tag.usageCount", locale: locale, Int64(usageCount(for: tag.name))))
+                            Text(L10n.string("tag.usageCount", locale: locale, Int64(usageCounts[tag.name, default: 0])))
                                 .font(.caption)
                                 .foregroundStyle(SWTheme.textSecondary)
                         }
@@ -211,6 +211,7 @@ struct TagManagementView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("查看标签账目".appLocalized(in: locale))
 
                         Button {
                             editingTag = EditableTagTarget(id: tag.id, tag: tag)
@@ -225,6 +226,7 @@ struct TagManagementView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("编辑标签".appLocalized(in: locale))
 
                         Button {
                             pendingDeleteTag = tag
@@ -239,21 +241,36 @@ struct TagManagementView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("删除标签".appLocalized(in: locale))
                     }
                     .padding(.vertical, 4)
-
-                    if index < visibleTags.count - 1 {
-                        SettingsRowDivider()
-                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("tag.row.\(tag.name)")
                 }
+                .onMove(perform: moveTags)
             }
+        } header: {
+            Text("已有标签".appLocalized(in: locale))
+                .font(.headline)
+                .foregroundStyle(SWTheme.primaryText)
         }
     }
 
-    private func usageCount(for tagName: String) -> Int {
-        entries.reduce(0) { partialResult, entry in
-            partialResult + (entry.tagNames.contains(tagName) ? 1 : 0)
+    private func moveTags(from offsets: IndexSet, to destination: Int) {
+        do {
+            try TagOrdering.move(tags, from: offsets, to: destination, context: modelContext)
+            HapticService.selection()
+        } catch {
+            presentNotice(message: "标签排序保存失败，请重试。".appLocalized(in: locale))
         }
+    }
+
+    private var tagUsageCounts: [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in entries {
+            for name in Set(entry.tagNames) { counts[name, default: 0] += 1 }
+        }
+        return counts
     }
 
     private func entriesForTag(named tagName: String) -> [LedgerEntry] {
@@ -270,7 +287,9 @@ struct TagManagementView: View {
             return
         }
 
-        modelContext.insert(TagRecord(name: trimmedName, tintHex: selectedTintHex))
+        modelContext.insert(TagRecord(
+            name: trimmedName, tintHex: selectedTintHex, sortOrder: TagOrdering.nextOrder(in: tags)
+        ))
         try? modelContext.save()
 
         newTagName = ""

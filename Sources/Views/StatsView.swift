@@ -36,7 +36,7 @@ struct StatsView: View {
     @Environment(\.locale) private var locale
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
-    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
+    @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var tags: [TagRecord]
 
     @State private var selectedFlow: FlowType = .expense
     @State private var selectedDistributionMode: DistributionMode = .category

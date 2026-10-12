@@ -26,6 +26,7 @@ struct TagSnapshot: Codable, Sendable {
     let emoji: String?
     let tintHex: Int?
     let createdAt: Date
+    var sortOrder: Int? = nil
 }
 
 struct SavingsGoalSnapshot: Codable, Sendable {
@@ -122,13 +123,14 @@ enum LedgerBackupCoordinator {
                     refundSourceEntryID: $0.refundSourceEntryID
                 )
             },
-            tags: tags.map {
+            tags: TagOrdering.sorted(tags).enumerated().map { index, tag in
                 TagSnapshot(
-                    id: $0.id,
-                    name: $0.name,
-                    emoji: $0.emojiValue,
-                    tintHex: $0.resolvedTintHex,
-                    createdAt: $0.createdAt
+                    id: tag.id,
+                    name: tag.name,
+                    emoji: tag.emojiValue,
+                    tintHex: tag.resolvedTintHex,
+                    createdAt: tag.createdAt,
+                    sortOrder: index
                 )
             },
             goals: goals.map {
@@ -175,7 +177,8 @@ enum LedgerBackupCoordinator {
                     name: snapshot.name,
                     emoji: snapshot.emoji ?? TagEmojiLibrary.defaultEmoji,
                     tintHex: snapshot.tintHex ?? TagEmojiLibrary.colorHex(for: snapshot.name),
-                    createdAt: snapshot.createdAt
+                    createdAt: snapshot.createdAt,
+                    sortOrder: snapshot.sortOrder ?? 0
                 )
             )
         }

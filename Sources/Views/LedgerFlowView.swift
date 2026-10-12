@@ -10,7 +10,7 @@ struct LedgerFlowView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var allEntries: [LedgerEntry]
-    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var allTags: [TagRecord]
+    @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var allTags: [TagRecord]
 
     let flow: FlowType
 

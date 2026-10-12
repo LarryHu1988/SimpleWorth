@@ -1,0 +1,47 @@
+name: CategoriesTagsCheck
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 17.0
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  CategoriesTagsCheck:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        excludes: [Info.plist, SimpleWorth.entitlements]
+      - Fixture.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.categoriestags
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  ModelTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [ModelTests.swift]
+    dependencies:
+      - target: CategoriesTagsCheck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.categoriestags.models
+        GENERATE_INFOPLIST_FILE: YES
+  InteractionTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [InteractionTests.swift]
+    dependencies:
+      - target: CategoriesTagsCheck
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simpleworth.qa.categoriestags.ui
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  CategoriesTagsCheck:
+    build:
+      targets:
+        CategoriesTagsCheck: all
+    test:
+      targets: [ModelTests, InteractionTests]

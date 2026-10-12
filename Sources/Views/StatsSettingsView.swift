@@ -41,7 +41,7 @@ struct StatsSettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
-    @Query(sort: [SortDescriptor(\TagRecord.createdAt, order: .forward)]) private var tags: [TagRecord]
+    @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var tags: [TagRecord]
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .reverse)]) private var goals: [SavingsGoalRecord]
     @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)]) private var deposits: [VaultDepositRecord]
 
@@ -77,7 +77,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.20"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.21"
         return "V\(version)"
     }
 
@@ -709,7 +709,8 @@ struct StatsSettingsView: View {
 
                 let newTag = TagRecord(
                     name: trimmed,
-                    tintHex: TagEmojiLibrary.colorHex(for: trimmed)
+                    tintHex: TagEmojiLibrary.colorHex(for: trimmed),
+                    sortOrder: TagOrdering.nextOrder(in: Array(knownTagsByKey.values))
                 )
                 modelContext.insert(newTag)
                 knownTagsByKey[lookupKey] = newTag
