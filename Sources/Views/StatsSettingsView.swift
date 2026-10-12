@@ -27,11 +27,41 @@ enum SettingsRoute: Hashable {
 
 struct SettingsNavigationHost: View {
     @Binding var path: [SettingsRoute]
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         NavigationStack(path: $path) {
-            StatsSettingsView(navigationPath: $path)
+            StatsSettingsView(navigationPath: $path, onClose: onClose)
         }
+    }
+}
+
+struct SettingsPaneHost: UIViewControllerRepresentable {
+    @EnvironmentObject private var appRuntimeController: AppRuntimeController
+    @Environment(\.locale) private var locale
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var path: [SettingsRoute]
+    let onClose: () -> Void
+
+    func makeUIViewController(context: Context) -> UIHostingController<AnyView> {
+        // Keep the pane's navigation and toolbar preferences separate from the native tab bar.
+        let controller = UIHostingController(rootView: settingsRoot)
+        controller.view.backgroundColor = .clear
+        controller.view.clipsToBounds = true
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIHostingController<AnyView>, context: Context) {
+        controller.rootView = settingsRoot
+    }
+
+    private var settingsRoot: AnyView {
+        AnyView(SettingsNavigationHost(path: $path, onClose: onClose)
+            .environmentObject(appRuntimeController)
+            .environment(\.locale, locale)
+            .environment(\.horizontalSizeClass, .compact)
+            .modelContainer(appRuntimeController.container)
+            .preferredColorScheme(colorScheme))
     }
 }
 
@@ -57,11 +87,13 @@ struct StatsSettingsView: View {
 
     @State private var noticeSheet: SettingsNoticePayload?
     @Binding private var navigationPath: [SettingsRoute]
+    private let onClose: (() -> Void)?
     private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
 
-    init(navigationPath: Binding<[SettingsRoute]> = .constant([])) {
+    init(navigationPath: Binding<[SettingsRoute]> = .constant([]), onClose: (() -> Void)? = nil) {
         _navigationPath = navigationPath
+        self.onClose = onClose
     }
 
     private var selectedThemeMode: ThemeMode {
@@ -295,9 +327,10 @@ struct StatsSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("完成") {
-                    dismiss()
+                    if let onClose { onClose() } else { dismiss() }
                 }
                 .fontWeight(.semibold)
+                .accessibilityIdentifier("settings.done")
             }
         }
         .navigationDestination(for: SettingsRoute.self) { route in

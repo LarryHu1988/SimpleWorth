@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 enum EntryEditorOperation {
     case create
@@ -23,6 +24,7 @@ struct EntryEditorSheet: View {
     @ObservedObject private var currencyStore = CurrencyStore.shared
     @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var allTags: [TagRecord]
     @FocusState private var focusedField: EntryEditorFocusedField?
+    @State private var amountIsFocused = false
 
     let flow: FlowType
     let entry: LedgerEntry?
@@ -42,6 +44,11 @@ struct EntryEditorSheet: View {
     @State private var showCurrencyPicker = false
     @State private var editingRefundEntry: LedgerEntry?
     @State private var refundDetailRefreshID = UUID()
+    @State private var editorWidth: CGFloat = 0
+
+    private var usesInlineKeyboardAccessory: Bool {
+        editorWidth >= 500
+    }
 
     init(
         flow: FlowType,
@@ -314,31 +321,35 @@ struct EntryEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: 16) {
-                    if isCreatingRefundOperation {
-                        sourceAmountCard
-                        refundAmountCard
-                    } else if isEditingRefundOperation {
-                        refundAmountCard
-                    } else {
-                        amountCard
+            SWAdaptivePage(maximumWidth: 980) { isWide in
+                SWAdaptiveColumns(isWide: isWide) {
+                    VStack(spacing: 16) {
+                        if isCreatingRefundOperation {
+                            sourceAmountCard
+                            refundAmountCard
+                        } else if isEditingRefundOperation {
+                            refundAmountCard
+                        } else {
+                            amountCard
+                        }
+                        if shouldShowRefundDetail {
+                            refundDetailCard
+                                .id(refundDetailRefreshID)
+                        }
+                        noteCard
+                        dateCard
                     }
-                    if shouldShowRefundDetail {
-                        refundDetailCard
-                            .id(refundDetailRefreshID)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    VStack(spacing: 16) {
+                        tagCard
+                        if !isRefundForm {
+                            categoryCard
+                        }
                     }
-                    noteCard
-                    dateCard
-                    tagCard
-                    if !isRefundForm {
-                        categoryCard
-                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 26)
             }
+            .padding(.bottom, focusedField != .note || usesInlineKeyboardAccessory ? 0 : 56)
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -358,13 +369,26 @@ struct EntryEditorSheet: View {
                     .disabled(!canSave)
                 }
 
-                ToolbarItem(placement: .keyboard) {
-                    keyboardAccessory
-                }
             }
             .appBackground()
             .task {
                 await currencyStore.refreshRates(force: false)
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { editorWidth = $0 }
+        .onChange(of: amountIsFocused) { _, value in
+            if value { focusedField = nil }
+        }
+        .onChange(of: focusedField) { _, value in
+            if value == .note { amountIsFocused = false }
+        }
+        .overlay(alignment: .bottom) {
+            if focusedField == .note, !usesInlineKeyboardAccessory {
+                keyboardAccessory
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
             }
         }
         .presentationDetents([.large])
@@ -399,12 +423,7 @@ struct EntryEditorSheet: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
-                TextField("0", text: $amountText)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .keyboardType(.decimalPad)
-                    .focused($focusedField, equals: .amount)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                amountInput
 
                 currencySelectorButton(allowsSelection: true)
             }
@@ -612,12 +631,7 @@ struct EntryEditorSheet: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(SWTheme.primaryText.opacity(0.84))
 
-                TextField("0", text: $amountText)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .keyboardType(.decimalPad)
-                    .focused($focusedField, equals: .amount)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                amountInput
 
                 currencySelectorButton(allowsSelection: false)
             }
@@ -684,6 +698,7 @@ struct EntryEditorSheet: View {
             SectionTitle(title: "备注", subtitle: "账单描述")
 
             TextField("例如：午餐简餐 / 月度工资", text: $note)
+                .accessibilityIdentifier("entry.note")
                 .textInputAutocapitalization(.never)
                 .focused($focusedField, equals: .note)
                 .padding(.horizontal, 14)
@@ -693,6 +708,7 @@ struct EntryEditorSheet: View {
                         .fill(Color.white.opacity(0.04))
                 )
                 .foregroundStyle(SWTheme.primaryText)
+            inlineKeyboardAccessory(for: .note)
         }
         .fitnessCard()
     }
@@ -858,38 +874,41 @@ struct EntryEditorSheet: View {
     }
 
     @ViewBuilder
+    private func inlineKeyboardAccessory(for field: EntryEditorFocusedField) -> some View {
+        if usesInlineKeyboardAccessory, focusedField == field {
+            keyboardAccessory
+                .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
     private var keyboardAccessory: some View {
-        if focusedField == .amount {
-            HStack(spacing: 10) {
-                ForEach(["+", "-", "×", "÷"], id: \.self) { symbol in
-                    Button(symbol) {
-                        appendAmountOperator(symbol)
-                    }
-                    .font(.headline.weight(.semibold))
-                }
-
-                Button("=") {
-                    resolveAmountExpression(feedbackOnFailure: true)
-                }
-                .font(.headline.weight(.bold))
-
-                Spacer(minLength: 8)
-
-                Button("完成".appLocalized(in: locale)) {
-                    commitAmountCalculationIfPossible()
-                    focusedField = nil
-                }
-                .font(.subheadline.weight(.semibold))
-            }
-        } else if focusedField == .note {
+        if focusedField == .note {
             HStack {
                 Spacer()
-                Button("完成".appLocalized(in: locale)) {
+                Button {
                     focusedField = nil
+                } label: {
+                    Text("完成".appLocalized(in: locale))
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
-                .font(.subheadline.weight(.semibold))
             }
         }
+    }
+
+    private var amountInput: some View {
+        AmountInputField(
+            text: $amountText,
+            isFocused: $amountIsFocused,
+            doneTitle: "完成".appLocalized(in: locale),
+            onOperator: appendAmountOperator,
+            onEquals: { resolveAmountExpression(feedbackOnFailure: true) },
+            onDone: { commitAmountCalculationIfPossible(); amountIsFocused = false }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 44)
     }
 
     private func appendAmountOperator(_ symbol: String) {
@@ -993,6 +1012,110 @@ struct EntryEditorSheet: View {
         }
     }
 
+}
+
+// Keep calculation controls attached to the keyboard, including iPad floating keyboards.
+private struct AmountInputField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let doneTitle: String
+    let onOperator: (String) -> Void
+    let onEquals: () -> Void
+    let onDone: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.placeholder = "0"
+        field.keyboardType = .decimalPad
+        field.font = UIFont.systemFont(ofSize: 34, weight: .bold)
+            .withRoundedDesign()
+        field.accessibilityIdentifier = "entry.amount"
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        // A single accessory layout keeps Done visible in narrow scenes, without toolbar overflow.
+        let accessory = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 50))
+        accessory.autoresizingMask = [.flexibleWidth]
+        let backdrop = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        accessory.addSubview(backdrop)
+        let operators = ["+", "-", "×", "÷"].map { symbol in
+            let button = UIButton(type: .system)
+            button.setTitle(symbol, for: .normal)
+            button.titleLabel?.font = .systemFont(ofSize: 22, weight: .medium)
+            button.addTarget(context.coordinator, action: #selector(Coordinator.insertOperator(_:)), for: .touchUpInside)
+            button.accessibilityIdentifier = "amount.operator.\(symbol)"
+            return button
+        }
+        let equals = UIButton(type: .system)
+        equals.setTitle("=", for: .normal)
+        equals.titleLabel?.font = .systemFont(ofSize: 22, weight: .medium)
+        equals.addTarget(context.coordinator, action: #selector(Coordinator.calculate), for: .touchUpInside)
+        equals.accessibilityIdentifier = "amount.equals"
+        let done = UIButton(type: .system)
+        done.setTitle(doneTitle, for: .normal)
+        done.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        done.titleLabel?.adjustsFontSizeToFitWidth = true
+        done.titleLabel?.minimumScaleFactor = 0.8
+        done.addTarget(context.coordinator, action: #selector(Coordinator.finish), for: .touchUpInside)
+        done.accessibilityIdentifier = "amount.done"
+        context.coordinator.doneButton = done
+        let controls = UIStackView(arrangedSubviews: operators + [equals, done])
+        controls.axis = .horizontal
+        controls.distribution = .fillEqually
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        accessory.addSubview(controls)
+        NSLayoutConstraint.activate([
+            backdrop.leadingAnchor.constraint(equalTo: accessory.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: accessory.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: accessory.topAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: accessory.bottomAnchor),
+            controls.leadingAnchor.constraint(equalTo: accessory.leadingAnchor, constant: 8),
+            controls.trailingAnchor.constraint(equalTo: accessory.trailingAnchor, constant: -8),
+            controls.topAnchor.constraint(equalTo: accessory.topAnchor, constant: 3),
+            controls.bottomAnchor.constraint(equalTo: accessory.bottomAnchor, constant: -3)
+        ])
+        field.inputAccessoryView = accessory
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        field.textColor = UIColor(SWTheme.primaryText)
+        field.tintColor = UIColor(SWTheme.accentGreen)
+        field.inputAccessoryView?.tintColor = field.tintColor
+        context.coordinator.doneButton?.setTitle(doneTitle, for: .normal)
+        if !isFocused, field.isFirstResponder {
+            DispatchQueue.main.async { [weak field, weak coordinator = context.coordinator] in
+                guard coordinator?.parent.isFocused == false, field?.isFirstResponder == true else { return }
+                field?.resignFirstResponder()
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: AmountInputField
+        weak var doneButton: UIButton?
+        init(_ parent: AmountInputField) { self.parent = parent }
+        @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+        func textFieldDidBeginEditing(_ field: UITextField) { parent.isFocused = true }
+        func textFieldDidEndEditing(_ field: UITextField) { parent.isFocused = false }
+        @objc func insertOperator(_ button: UIButton) {
+            if let symbol = button.currentTitle { parent.onOperator(symbol) }
+        }
+        @objc func calculate() { parent.onEquals() }
+        @objc func finish() { parent.onDone() }
+    }
+}
+
+private extension UIFont {
+    func withRoundedDesign() -> UIFont {
+        guard let descriptor = fontDescriptor.withDesign(.rounded) else { return self }
+        return UIFont(descriptor: descriptor, size: pointSize)
+    }
 }
 
 private enum AmountExpressionEvaluator {

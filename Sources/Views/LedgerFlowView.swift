@@ -11,6 +11,7 @@ struct LedgerFlowView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var allEntries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var allTags: [TagRecord]
+    @State private var distributionState = StatsPanelState()
 
     let flow: FlowType
 
@@ -24,6 +25,7 @@ struct LedgerFlowView: View {
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var showCategoryGrid = false
     @State private var showRecentEntries = true
+    @State private var hasInitializedPeriod = false
 
     private var categories: [CategoryItem] {
         CategoryLibrary.categories(for: flow)
@@ -176,12 +178,10 @@ struct LedgerFlowView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 18) {
+        SWWorkspacePage {
+            VStack(spacing: 18) {
                 summaryCard
-
                 categoryToggleCard
-
                 if showCategoryGrid {
                     CategoryGridSection(
                         title: categoryTitle,
@@ -192,28 +192,26 @@ struct LedgerFlowView: View {
                         }
                     )
                 }
-
                 transactionCard
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        } secondary: {
+            StatsView(section: .distribution, flow: flow, year: $selectedYear, month: $selectedMonth,
+                      state: distributionState)
         }
         .fixedMainPageTitle(flow.localizedTitle(in: locale))
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: SWTheme.toolbarControlSpacing) {
-                    yearMenu
-                    monthMenu
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                yearMenu
+                monthMenu
 
-                    Button {
-                        presentCreateSheet(categoryID: nil)
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(flow.accent)
-                    }
-                    .accessibilityLabel(L10n.string("ledger.addFlow", locale: locale, flow.localizedTitle(in: locale)))
+                Button {
+                    presentCreateSheet(categoryID: nil)
+                } label: {
+                    Label(L10n.string("ledger.addFlow", locale: locale, flow.localizedTitle(in: locale)), systemImage: "plus.circle.fill")
+                        .foregroundStyle(flow.accent)
                 }
+                .accessibilityLabel(L10n.string("ledger.addFlow", locale: locale, flow.localizedTitle(in: locale)))
             }
         }
         .sheet(isPresented: $showCreateSheet, onDismiss: {
@@ -245,8 +243,11 @@ struct LedgerFlowView: View {
             normalizeSelectionIfNeeded()
         }
         .onAppear {
-            resetToCurrentPeriod()
-            showCategoryGrid = false
+            if !hasInitializedPeriod {
+                hasInitializedPeriod = true
+                resetToCurrentPeriod()
+                showCategoryGrid = false
+            }
         }
         .alert(
             "确认删除账单",
@@ -336,6 +337,7 @@ struct LedgerFlowView: View {
             )
         }
         .accessibilityLabel("选择年度")
+        .accessibilityIdentifier("period.year")
     }
 
     private var monthMenu: some View {
@@ -368,6 +370,8 @@ struct LedgerFlowView: View {
             )
         }
         .accessibilityLabel("选择月份")
+        .accessibilityValue(L10n.month(selectedMonth, locale: locale))
+        .accessibilityIdentifier("period.month")
     }
 
     private var transactionCard: some View {
@@ -440,8 +444,10 @@ struct LedgerFlowView: View {
                                 pendingDeleteEntry = entry
                             }
                         )
+                        .id(entry.id)
                     }
                 }
+                .scrollTargetLayout()
             }
         }
         .fitnessCard()

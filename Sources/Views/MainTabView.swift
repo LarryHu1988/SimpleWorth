@@ -3,42 +3,77 @@ import UIKit
 
 struct MainTabView: View {
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
-
-    init() {
-        UITabBar.appearance().isHidden = true
-    }
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.locale) private var locale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.swWorkspaceOverride) private var workspaceOverride
+    @State private var hasDeviceHinge = false
 
     var body: some View {
-        TabView(selection: selectedTabBinding) {
-            NavigationStack {
-                ExpenseView()
-                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .expense)
-            }
-            .tag(AppRuntimeController.MainTab.expense)
+        GeometryReader { geometry in
+            let usesSystemNavigation = prefersSystemNavigation(in: geometry)
+            let usesWorkspace = workspaceOverride ?? SWAdaptiveLayout.usesWorkspace(
+                size: geometry.size, isInnerDisplay: hasInnerDivision(in: geometry), dynamicTypeSize: dynamicTypeSize
+            )
+            TabView(selection: selectedTabBinding) {
+                NavigationStack {
+                    ExpenseView()
+                        .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .expense)
+                        .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
+                }
+                .tabItem { Label("支出".appLocalized(in: locale), systemImage: "minus.circle.fill") }
+                .tag(AppRuntimeController.MainTab.expense)
 
-            NavigationStack {
-                IncomeView()
-                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .income)
-            }
-            .tag(AppRuntimeController.MainTab.income)
+                NavigationStack {
+                    IncomeView()
+                        .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .income)
+                        .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
+                }
+                .tabItem { Label("收入".appLocalized(in: locale), systemImage: "plus.circle.fill") }
+                .tag(AppRuntimeController.MainTab.income)
 
-            NavigationStack {
-                VaultView()
-                    .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .vault)
-            }
-            .tag(AppRuntimeController.MainTab.vault)
+                NavigationStack {
+                    VaultView()
+                        .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .vault)
+                        .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
+                }
+                .tabItem { Label("金库".appLocalized(in: locale), systemImage: "lock.shield.fill") }
+                .tag(AppRuntimeController.MainTab.vault)
 
-            NavigationStack {
                 StatsView()
                     .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .stats)
+                    .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
+                .tabItem { Label("统计".appLocalized(in: locale), systemImage: "chart.bar.xaxis") }
+                .tag(AppRuntimeController.MainTab.stats)
             }
-            .tag(AppRuntimeController.MainTab.stats)
+            .tint(SWTheme.accentGreen)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !usesSystemNavigation {
+                    LiquidGooeyTabBar(selection: selectedTabBinding)
+                }
+            }
+            .environment(\.swUsesSystemNavigation, usesSystemNavigation)
+            .environment(\.swUsesWorkspace, usesWorkspace)
+            .onChange(of: usesWorkspace, initial: true) { _, value in
+                appRuntimeController.usesWorkspace = value
+            }
         }
-        .tint(SWTheme.accentGreen)
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            LiquidGooeyTabBar(selection: selectedTabBinding)
+        .modifier(SWFoldableObserver { hasDeviceHinge = $0 })
+    }
+
+    private func hasInnerDivision(in geometry: GeometryProxy) -> Bool {
+        if #available(iOS 27.1, *) {
+            return !geometry.reservedRegions(kind: .division, options: .includeInactive).isEmpty
         }
+        return false
+    }
+
+    private func prefersSystemNavigation(in geometry: GeometryProxy) -> Bool {
+        if hasDeviceHinge || hasInnerDivision(in: geometry) {
+            return true
+        }
+        return (horizontalSizeClass == .regular && geometry.size.width >= 600)
+            || geometry.safeAreaInsets.leading >= 32 || geometry.safeAreaInsets.trailing >= 32
     }
 
     private var selectedTabBinding: Binding<AppRuntimeController.MainTab> {
@@ -46,6 +81,19 @@ struct MainTabView: View {
             get: { appRuntimeController.selectedMainTab },
             set: { appRuntimeController.selectedMainTab = $0 }
         )
+    }
+}
+
+private struct SWFoldableObserver: ViewModifier {
+    let onChange: (Bool) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.onHingeChange { _, context in onChange(context.hinge != nil) }
+        } else {
+            content
+        }
     }
 }
 

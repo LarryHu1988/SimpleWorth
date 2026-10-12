@@ -9,18 +9,28 @@ private struct GoalEditTarget: Identifiable {
 struct VaultView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.swUsesWorkspace) private var usesWorkspace
+    @State private var overviewState = StatsPanelState()
 
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .forward)])
     private var goals: [SavingsGoalRecord]
 
     @Query(sort: [SortDescriptor(\VaultDepositRecord.date, order: .reverse)])
     private var deposits: [VaultDepositRecord]
+    @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)])
+    private var ledgerEntries: [LedgerEntry]
 
     @State private var showCreateGoalSheet = false
     @State private var showDepositSheet = false
     @State private var editingGoal: GoalEditTarget?
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
+    @State private var hasInitializedPeriod = false
+    @State private var selectedGoalID: UUID?
+
+    private var selectedGoal: SavingsGoalRecord? {
+        goals.first { $0.id == selectedGoalID }
+    }
 
     private var totalCurrent: Double {
         goals.reduce(0) { $0 + $1.currentAmount }
@@ -37,7 +47,8 @@ struct VaultView: View {
 
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: .now)
-        let years = Set(deposits.map { Calendar.current.component(.year, from: $0.date) } + [currentYear])
+        let years = Set(deposits.map { Calendar.current.component(.year, from: $0.date) }
+                        + ledgerEntries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
         return years.sorted(by: >)
     }
 
@@ -53,47 +64,46 @@ struct VaultView: View {
         L10n.yearMonth(year: selectedYear, month: selectedMonth, locale: locale)
     }
 
-    private var recentDeposits: [VaultDepositRecord] {
-        Array(selectedPeriodDeposits.prefix(20))
-    }
-
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 18) {
+        SWWorkspacePage {
+            VStack(spacing: 18) {
                 vaultOverview
-                goalsCard
-                depositsCard
+                goalsCard(isWide: usesWorkspace)
+                if usesWorkspace, let selectedGoal {
+                    GoalProgressCard(goal: selectedGoal)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("vault.selectedGoal")
+                }
+                depositsCard(goal: usesWorkspace ? selectedGoal : nil)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        } secondary: {
+            StatsView(section: .overview, year: $selectedYear, month: $selectedMonth, state: overviewState)
         }
         .fixedMainPageTitle("金库".appLocalized(in: locale))
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: SWTheme.toolbarControlSpacing) {
-                    yearMenu
-                    monthMenu
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                yearMenu
+                monthMenu
 
-                    Menu {
-                        Button {
-                            showCreateGoalSheet = true
-                        } label: {
-                            Label("新增目标", systemImage: "target")
-                        }
-
-                        Button {
-                            showDepositSheet = true
-                        } label: {
-                            Label("记录存入", systemImage: "arrow.down.circle")
-                        }
-                        .disabled(goals.isEmpty)
+                Menu {
+                    Button {
+                        showCreateGoalSheet = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(SWTheme.accentBlue)
+                        Label("新增目标", systemImage: "target")
                     }
-                    .accessibilityLabel("新增")
+
+                    Button {
+                        showDepositSheet = true
+                    } label: {
+                        Label("记录存入", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(goals.isEmpty)
+                } label: {
+                    Label("新增".appLocalized(in: locale), systemImage: "plus.circle.fill")
+                        .foregroundStyle(SWTheme.accentBlue)
                 }
+                .accessibilityLabel("新增")
             }
         }
         .sheet(isPresented: $showCreateGoalSheet) {
@@ -109,7 +119,10 @@ struct VaultView: View {
             normalizeSelectionIfNeeded()
         }
         .onAppear {
-            resetToCurrentPeriod()
+            if !hasInitializedPeriod {
+                hasInitializedPeriod = true
+                resetToCurrentPeriod()
+            }
         }
         .appBackground()
     }
@@ -144,6 +157,7 @@ struct VaultView: View {
             )
         }
         .accessibilityLabel("选择年度")
+        .accessibilityIdentifier("period.year")
     }
 
     private var monthMenu: some View {
@@ -176,6 +190,8 @@ struct VaultView: View {
             )
         }
         .accessibilityLabel("选择月份")
+        .accessibilityValue(L10n.month(selectedMonth, locale: locale))
+        .accessibilityIdentifier("period.month")
     }
 
     private var vaultOverview: some View {
@@ -214,7 +230,7 @@ struct VaultView: View {
         .fitnessCard()
     }
 
-    private var goalsCard: some View {
+    private func goalsCard(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "小目标", subtitle: "点按可编辑，左滑可删除")
 
@@ -226,33 +242,48 @@ struct VaultView: View {
                 )
             } else {
                 ForEach(goals) { goal in
-                    GoalProgressCard(goal: goal)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            editingGoal = GoalEditTarget(id: goal.id, goal: goal)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                delete(goal)
-                            } label: {
-                                Label("删除", systemImage: "trash.fill")
-                            }
-
-                            Button {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        GoalProgressCard(goal: goal)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
                                 editingGoal = GoalEditTarget(id: goal.id, goal: goal)
-                            } label: {
-                                Label("编辑", systemImage: "pencil")
                             }
-                            .tint(SWTheme.accentBlue)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(goal)
+                                } label: {
+                                    Label("删除", systemImage: "trash.fill")
+                                }
+
+                                Button {
+                                    editingGoal = GoalEditTarget(id: goal.id, goal: goal)
+                                } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                .tint(SWTheme.accentBlue)
+                            }
+                        if isWide {
+                            Button {
+                                selectedGoalID = selectedGoalID == goal.id ? nil : goal.id
+                                HapticService.selection()
+                            } label: {
+                                Label("存入记录".appLocalized(in: locale), systemImage: selectedGoalID == goal.id ? "checkmark.circle.fill" : "list.bullet")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(goal.tintColor)
+                            .accessibilityIdentifier("vault.select.\(goal.id)")
                         }
+                    }
                 }
             }
         }
         .fitnessCard()
     }
 
-    private var depositsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func depositsCard(goal: SavingsGoalRecord?) -> some View {
+        let recentDeposits = Array(selectedPeriodDeposits.filter { goal == nil || $0.goal?.id == goal?.id }.prefix(20))
+        return VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "最近存入", subtitle: "记录会同步更新目标进度")
 
             if recentDeposits.isEmpty {

@@ -67,8 +67,9 @@ private struct AppRootView: View {
 
     private var settingsSheetPresentedBinding: Binding<Bool> {
         Binding(
-            get: { appRuntimeController.isStatsSettingsPresented },
+            get: { appRuntimeController.isStatsSettingsPresented && !appRuntimeController.usesWorkspace },
             set: { newValue in
+                guard !appRuntimeController.usesWorkspace else { return }
                 appRuntimeController.isStatsSettingsPresented = newValue
                 if !newValue {
                     appRuntimeController.statsSettingsPath.removeAll()
@@ -141,6 +142,7 @@ final class AppRuntimeController: ObservableObject {
     let container: ModelContainer
     @Published var selectedMainTab: MainTab = .expense
     @Published var isStatsSettingsPresented = false
+    @Published var usesWorkspace = false
     @Published var statsSettingsPath: [SettingsRoute] = []
 
     init(defaults: UserDefaults = .standard) {

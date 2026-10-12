@@ -10,7 +10,7 @@ private struct MonthlyTrendRow: Identifiable {
     var id: Int { month }
 }
 
-private enum DistributionMode: String, CaseIterable, Identifiable {
+enum DistributionMode: String, CaseIterable, Identifiable {
     case category = "分类"
     case tag = "标签"
 
@@ -25,28 +25,76 @@ private enum DistributionMode: String, CaseIterable, Identifiable {
     }
 }
 
-private struct StatsDrilldownTarget: Identifiable {
+fileprivate struct StatsDrilldownTarget: Identifiable {
     let id: String
     let mode: DistributionMode
     let flow: FlowType
     let stat: CategoryStat
 }
 
+enum StatsSection {
+    case full
+    case overview
+    case distribution
+}
+
+@MainActor
+final class StatsPanelState: ObservableObject {
+    @Published var selectedFlow: FlowType = .expense
+    @Published var selectedDistributionMode: DistributionMode = .category
+    @Published var selectedYear = Calendar.current.component(.year, from: .now)
+    @Published var selectedMonth = Calendar.current.component(.month, from: .now)
+    @Published var chartScrollStartMonth = max(1.0, Double(Calendar.current.component(.month, from: .now)) - 5)
+    let selection = StatsSelectionState()
+    @Published fileprivate var drilldownTarget: StatsDrilldownTarget?
+    var hasInitializedPeriod = false
+}
+
+@MainActor
+final class StatsSelectionState: ObservableObject {
+    @Published var selectedStatID: String?
+}
+
 struct StatsView: View {
     @Environment(\.locale) private var locale
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
+    @Environment(\.swUsesWorkspace) private var usesWorkspace
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var tags: [TagRecord]
 
-    @State private var selectedFlow: FlowType = .expense
-    @State private var selectedDistributionMode: DistributionMode = .category
-    @State private var selectedYear = Calendar.current.component(.year, from: .now)
-    @State private var selectedMonth = Calendar.current.component(.month, from: .now)
-    @State private var chartScrollStartMonth = max(
-        1.0,
-        Double(Calendar.current.component(.month, from: .now)) + 0.5 - 5.5
-    )
-    @State private var drilldownTarget: StatsDrilldownTarget?
+    @StateObject private var panelState: StatsPanelState
+    private let section: StatsSection
+    private let fixedFlow: FlowType?
+    private let periodYear: Binding<Int>?
+    private let periodMonth: Binding<Int>?
+
+    init(section: StatsSection = .full, flow: FlowType? = nil,
+         year: Binding<Int>? = nil, month: Binding<Int>? = nil, state: StatsPanelState? = nil) {
+        self.section = section
+        fixedFlow = flow
+        periodYear = year
+        periodMonth = month
+        _panelState = StateObject(wrappedValue: state ?? StatsPanelState())
+    }
+
+    private var selectedFlow: FlowType { fixedFlow ?? panelState.selectedFlow }
+    private var selectedDistributionMode: DistributionMode { panelState.selectedDistributionMode }
+    private var selectedYear: Int {
+        get { periodYear?.wrappedValue ?? panelState.selectedYear }
+        nonmutating set {
+            if let periodYear { periodYear.wrappedValue = newValue } else { panelState.selectedYear = newValue }
+        }
+    }
+    private var selectedMonth: Int {
+        get { periodMonth?.wrappedValue ?? panelState.selectedMonth }
+        nonmutating set {
+            if let periodMonth { periodMonth.wrappedValue = newValue } else { panelState.selectedMonth = newValue }
+        }
+    }
+    private var chartScrollStartMonth: Double {
+        get { panelState.chartScrollStartMonth }
+        nonmutating set { panelState.chartScrollStartMonth = newValue }
+    }
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: .now)
         let years = Set(entries.map { Calendar.current.component(.year, from: $0.createdAt) } + [currentYear])
@@ -229,34 +277,7 @@ struct StatsView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 18) {
-                overviewCard
-                monthlyChartCard
-                distributionCard
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
-        }
-        .fixedMainPageTitle("统计".appLocalized(in: locale))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: SWTheme.toolbarControlSpacing) {
-                    yearMenu
-
-                    Button {
-                        appRuntimeController.selectedMainTab = .stats
-                        appRuntimeController.isStatsSettingsPresented = true
-                        HapticService.impact()
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundStyle(SWTheme.accentBlue)
-                    }
-                    .accessibilityLabel("设置")
-                }
-            }
-        }
+        pageContent
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
             syncScrollWithSelection()
@@ -265,10 +286,14 @@ struct StatsView: View {
             syncScrollWithSelection()
         }
         .onAppear {
-            resetToCurrentPeriod()
+            if !panelState.hasInitializedPeriod {
+                panelState.hasInitializedPeriod = true
+                if periodYear == nil { resetToCurrentPeriod() }
+            }
             syncScrollWithSelection()
         }
-        .sheet(item: $drilldownTarget) { target in
+        .onChange(of: distributionSelectionKey) { _, _ in panelState.selection.selectedStatID = nil }
+        .sheet(item: $panelState.drilldownTarget) { target in
             let targetEntries = drilldownEntries(for: target)
             StatsDrilldownSheet(
                 title: target.mode == .category ? "分类明细" : "标签明细",
@@ -286,7 +311,101 @@ struct StatsView: View {
                 tagTintHexByName: tagTintHexByName
             )
         }
-        .appBackground()
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch section {
+        case .overview:
+            overviewContent
+        case .distribution:
+            distributionCard
+        case .full:
+            if usesWorkspace {
+                fullWorkspacePage
+                    .safeAreaInset(edge: .top, spacing: 0) { workspaceHeader }
+                    .appBackground()
+            } else {
+                NavigationStack {
+                    fullWorkspacePage
+                        .fixedMainPageTitle("统计".appLocalized(in: locale))
+                        .toolbar {
+                            ToolbarItemGroup(placement: .topBarTrailing) {
+                                yearMenu
+                                settingsButton
+                            }
+                        }
+                        .appBackground()
+                }
+            }
+        }
+    }
+
+    private var fullWorkspacePage: some View {
+        SWWorkspacePage(showSecondaryInCompact: true,
+                            secondaryScrolls: !appRuntimeController.isStatsSettingsPresented) {
+                overviewContent
+            } secondary: {
+                if usesWorkspace, appRuntimeController.isStatsSettingsPresented {
+                    SettingsPaneHost(path: settingsPath) {
+                        appRuntimeController.isStatsSettingsPresented = false
+                        appRuntimeController.statsSettingsPath.removeAll()
+                    }
+                } else {
+                    distributionCard
+                }
+            }
+    }
+
+    private var workspaceHeader: some View {
+        HStack(spacing: 16) {
+            Text("统计".appLocalized(in: locale))
+                .font(.title2.weight(.bold))
+                .foregroundStyle(SWTheme.primaryText)
+                .accessibilityIdentifier("mainPageTitle")
+            Spacer()
+            yearMenu
+            settingsButton.labelStyle(.iconOnly)
+                .frame(width: 44, height: 44)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial)
+    }
+
+    private var settingsButton: some View {
+        Button {
+            appRuntimeController.selectedMainTab = .stats
+            appRuntimeController.isStatsSettingsPresented = true
+            HapticService.impact()
+        } label: {
+            Label("设置".appLocalized(in: locale), systemImage: "gearshape.fill")
+                .foregroundStyle(SWTheme.accentBlue)
+        }
+        .accessibilityLabel("设置")
+        .accessibilityIdentifier("stats.settings")
+    }
+
+    private var overviewContent: some View {
+        VStack(spacing: 18) {
+            overviewCard
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("stats.overview")
+            monthlyChartCard
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("stats.trend")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("stats.overview.panel")
+    }
+
+    private var settingsPath: Binding<[SettingsRoute]> {
+        Binding(get: { appRuntimeController.statsSettingsPath },
+                set: { appRuntimeController.statsSettingsPath = $0 })
+    }
+
+    private var distributionSelectionKey: String {
+        "\(selectedYear)-\(selectedMonth)-\(selectedFlow.id)-\(selectedDistributionMode.id)"
     }
 
     private var yearMenu: some View {
@@ -320,6 +439,7 @@ struct StatsView: View {
             )
         }
         .accessibilityLabel("选择年度")
+        .accessibilityIdentifier("period.year")
     }
 
     private var overviewCard: some View {
@@ -387,7 +507,7 @@ struct StatsView: View {
                 )
                 .chartScrollableAxes(.horizontal)
                 .chartXVisibleDomain(length: 6)
-                .chartScrollPosition(x: $chartScrollStartMonth)
+                .chartScrollPosition(x: $panelState.chartScrollStartMonth)
                 .chartYAxis {
                     AxisMarks(position: .leading) { _ in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
@@ -429,7 +549,6 @@ struct StatsView: View {
     private var distributionCard: some View {
         let stats = selectedStats
         let total = selectedTotal
-        let selectionResetKey = "\(selectedYear)-\(selectedMonth)-\(selectedFlow.id)-\(selectedDistributionMode.id)"
 
         return VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -438,14 +557,16 @@ struct StatsView: View {
                 monthMenu
             }
 
-            Picker("类型", selection: $selectedFlow) {
-                ForEach(FlowType.allCases) { flow in
-                    Text(flow.localizedTitle(in: locale)).tag(flow)
+            if fixedFlow == nil {
+                Picker("类型", selection: $panelState.selectedFlow) {
+                    ForEach(FlowType.allCases) { flow in
+                        Text(flow.localizedTitle(in: locale)).tag(flow)
+                    }
                 }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
 
-            Picker("维度", selection: $selectedDistributionMode) {
+            Picker("维度", selection: $panelState.selectedDistributionMode) {
                 ForEach(DistributionMode.allCases) { mode in
                     Text(mode.localizedTitle(in: locale)).tag(mode)
                 }
@@ -464,19 +585,22 @@ struct StatsView: View {
                     total: total,
                     flow: selectedFlow,
                     mode: selectedDistributionMode,
-                    locale: locale
+                    locale: locale,
+                    selection: panelState.selection
                 ) { item in
-                    drilldownTarget = StatsDrilldownTarget(
+                    panelState.drilldownTarget = StatsDrilldownTarget(
                         id: "\(selectedFlow.id)-\(selectedDistributionMode.id)-\(item.id)",
                         mode: selectedDistributionMode,
                         flow: selectedFlow,
                         stat: item
                     )
                 }
-                .id(selectionResetKey)
             }
         }
         .fitnessCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("stats.distribution.panel")
+        .accessibilityValue(selectedFlow.storageValue)
     }
 
     private var monthMenu: some View {
@@ -510,6 +634,8 @@ struct StatsView: View {
             )
         }
         .accessibilityLabel("选择月份")
+        .accessibilityValue(L10n.month(selectedMonth, locale: locale))
+        .accessibilityIdentifier("period.month")
     }
 
     private func normalizeSelectionIfNeeded() {
@@ -642,14 +768,19 @@ struct StatsView: View {
 }
 
 private struct StatsDistributionContent: View {
+    @Environment(\.swWideLayout) private var isWide
     let stats: [CategoryStat]
     let total: Double
     let flow: FlowType
     let mode: DistributionMode
     let locale: Locale
+    @ObservedObject var selection: StatsSelectionState
     let onDrilldown: (CategoryStat) -> Void
 
-    @State private var selectedStatID: String?
+    private var selectedStatID: String? {
+        get { selection.selectedStatID }
+        nonmutating set { selection.selectedStatID = newValue }
+    }
 
     private var effectiveSelectedStatID: String? {
         guard let selectedStatID, stats.contains(where: { $0.id == selectedStatID }) else { return nil }
@@ -666,7 +797,7 @@ private struct StatsDistributionContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        SWAdaptiveColumns(isWide: isWide) {
             ZStack {
                 Chart(stats) { item in
                     let isHighlighted = effectiveSelectedStatID == item.id
@@ -703,6 +834,9 @@ private struct StatsDistributionContent: View {
 
                 centerLabel
             }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("stats.distribution.chart")
 
             VStack(spacing: 10) {
                 ForEach(stats) { item in
@@ -713,8 +847,13 @@ private struct StatsDistributionContent: View {
                         row(for: item, isSelected: effectiveSelectedStatID == item.id)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("stats.distribution.\(item.name)")
+                    .accessibilityAddTraits(effectiveSelectedStatID == item.id ? .isSelected : [])
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("stats.distribution.rows")
         }
     }
 

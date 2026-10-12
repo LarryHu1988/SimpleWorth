@@ -55,7 +55,9 @@ final class HeaderTests: XCTestCase {
             for _ in 0..<3 { scroll.swipeDown() }
             XCTAssertEqual(title.frame.minY, initialFrame.minY, accuracy: 1)
             XCTAssertEqual(title.frame.midY, controls[0].frame.midY, accuracy: 4)
-            controls[0].tap()
+            let yearPicker = app.buttons["period.year"]
+            XCTAssertTrue(yearPicker.isHittable)
+            yearPicker.tap()
             attach(app, name: "\(language)-page\(index)-date-menu")
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
         }

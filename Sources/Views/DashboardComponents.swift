@@ -464,6 +464,7 @@ struct SwipeableLedgerRow: View {
     @State private var tapSuppressedUntil = Date.distantPast
 
     private let tapSuppressionInterval: TimeInterval = 0.22
+    @State private var measuredRowWidth: CGFloat = 0
     private let openDragActivationDistance: CGFloat = 4
     private let closedDragActivationDistance: CGFloat = 8
     private let closingTravelDistance: CGFloat = 6
@@ -493,7 +494,9 @@ struct SwipeableLedgerRow: View {
 
     var body: some View {
         ZStack {
-            actionBackground
+            if isOpen || isHorizontalDragging {
+                actionBackground
+            }
 
             LedgerRow(entry: entry, tagTintHexByName: tagTintHexByName, refundAmount: refundAmount)
                 .offset(x: offsetX)
@@ -511,6 +514,13 @@ struct SwipeableLedgerRow: View {
         }
         .onDisappear {
             resetImmediately()
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            if measuredRowWidth > 0, abs(width - measuredRowWidth) > 1 {
+                resetImmediately()
+                suppressTap()
+            }
+            measuredRowWidth = width
         }
         .onTapGesture {
             handleContainerTap()
@@ -538,6 +548,7 @@ struct SwipeableLedgerRow: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .allowsHitTesting(abs(offsetX) > 0.5)
+        .accessibilityHidden(!isOpen)
     }
 
     private var leadingActionPane: some View {
@@ -814,6 +825,17 @@ private struct HorizontalPanGestureBridge: UIViewRepresentable {
     final class InstallerView: UIView {
         private weak var installedView: UIView?
         private var panRecognizer: UIPanGestureRecognizer?
+        private var previousWidth: CGFloat = 0
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            if previousWidth > 0, abs(bounds.width - previousWidth) > 1,
+               let panRecognizer, panRecognizer.state == .began || panRecognizer.state == .changed {
+                panRecognizer.isEnabled = false
+                panRecognizer.isEnabled = true
+            }
+            previousWidth = bounds.width
+        }
 
         func configure(coordinator: Coordinator) {
             guard panRecognizer == nil else { return }

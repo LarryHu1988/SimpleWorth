@@ -292,16 +292,19 @@ extension UIColor {
 }
 
 private struct MainPageTitleModifier: ViewModifier {
+    @Environment(\.swUsesSystemNavigation) private var usesSystemNavigation
     let title: String
 
     func body(content: Content) -> some View {
         content
-            .navigationTitle("")
+            .navigationTitle(usesSystemNavigation ? title : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                if #available(iOS 26.0, *) {
+                if usesSystemNavigation {
+                    ToolbarItem(placement: .principal) { titleLabel }
+                } else if #available(iOS 26.0, *) {
                     ToolbarItem(placement: .topBarLeading) { titleLabel }
                         .sharedBackgroundVisibility(.hidden)
                 } else {
@@ -319,6 +322,202 @@ private struct MainPageTitleModifier: ViewModifier {
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("mainPageTitle")
+    }
+}
+
+private struct SWSystemNavigationKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct SWWideLayoutKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct SWWorkspaceKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct SWWorkspaceOverrideKey: EnvironmentKey {
+    static let defaultValue: Bool? = nil
+}
+
+extension EnvironmentValues {
+    var swUsesSystemNavigation: Bool {
+        get { self[SWSystemNavigationKey.self] }
+        set { self[SWSystemNavigationKey.self] = newValue }
+    }
+
+    var swWideLayout: Bool {
+        get { self[SWWideLayoutKey.self] }
+        set { self[SWWideLayoutKey.self] = newValue }
+    }
+
+    var swUsesWorkspace: Bool {
+        get { self[SWWorkspaceKey.self] }
+        set { self[SWWorkspaceKey.self] = newValue }
+    }
+
+    var swWorkspaceOverride: Bool? {
+        get { self[SWWorkspaceOverrideKey.self] }
+        set { self[SWWorkspaceOverrideKey.self] = newValue }
+    }
+}
+
+enum SWAdaptiveLayout {
+    static func usesWorkspace(size: CGSize, isInnerDisplay: Bool, dynamicTypeSize: DynamicTypeSize) -> Bool {
+        isInnerDisplay && size.width > size.height && size.width >= 760 && !dynamicTypeSize.isAccessibilitySize
+    }
+
+    static func usesColumns(width: CGFloat, dynamicTypeSize: DynamicTypeSize) -> Bool {
+        width >= 600 && !dynamicTypeSize.isAccessibilitySize
+    }
+}
+
+struct SWWorkspacePage<Primary: View, Secondary: View>: View {
+    @Environment(\.swUsesWorkspace) private var usesWorkspace
+    @State private var primaryAnchor: UUID?
+    @State private var secondaryAnchor: UUID?
+    var showSecondaryInCompact = false
+    var secondaryScrolls = true
+    @ViewBuilder var primary: () -> Primary
+    @ViewBuilder var secondary: () -> Secondary
+
+    var body: some View {
+        GeometryReader { _ in
+            if usesWorkspace {
+                SWAdaptiveColumns(isWide: true, fillsHeight: true) {
+                    ScrollView(showsIndicators: false) {
+                        primary().padding(.vertical, 10)
+                    }
+                    .scrollPosition(id: $primaryAnchor)
+                    .accessibilityIdentifier("adaptive.page")
+                    .accessibilityValue("wide")
+                    secondaryPane
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 16)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 18) {
+                        primary()
+                        if showSecondaryInCompact { secondary() }
+                    }
+                    .frame(maxWidth: 620, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
+                }
+                .scrollPosition(id: $primaryAnchor)
+                .accessibilityIdentifier("adaptive.page")
+                .accessibilityValue("compact")
+            }
+        }
+        .environment(\.swWideLayout, false)
+    }
+
+    @ViewBuilder
+    private var secondaryPane: some View {
+        if secondaryScrolls {
+            ScrollView(showsIndicators: false) {
+                secondary().padding(.vertical, 10).padding(.bottom, 28)
+            }
+            .scrollPosition(id: $secondaryAnchor)
+            .accessibilityIdentifier("workspace.secondary")
+        } else {
+            secondary()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .accessibilityIdentifier("workspace.secondary")
+        }
+    }
+}
+
+struct SWAdaptiveColumns<Content: View>: View {
+    @State private var divisionGap: CGRect?
+    let isWide: Bool
+    var fillsHeight = false
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        layout { content() }
+            .onGeometryChange(for: CGRect?.self) { geometry in
+                guard isWide else { return nil }
+                if #available(iOS 27.1, *) {
+                    for region in geometry.reservedRegions(kind: .division) where region.isActive {
+                        guard region.frame.height > region.frame.width else { continue }
+                        let start = region.frame.minX - region.margins.leading - 10
+                        let end = region.frame.maxX + region.margins.trailing + 10
+                        guard start >= 160, geometry.size.width - end >= 160 else { continue }
+                        // Only the horizontal gap affects this layout; scrolling must not relayout it.
+                        return CGRect(x: start, y: 0, width: end - start, height: 1)
+                    }
+                }
+                return nil
+            } action: { divisionGap = $0 }
+    }
+
+    private var layout: AnyLayout {
+        if isWide, let divisionGap {
+            return AnyLayout(SWDivisionColumnsLayout(gap: divisionGap, fillsHeight: fillsHeight))
+        }
+        return isWide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 18))
+    }
+}
+
+private struct SWDivisionColumnsLayout: Layout {
+    let gap: CGRect
+    let fillsHeight: Bool
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? gap.maxX + 160
+        let sizes = measuredSizes(width: width, height: fillsHeight ? proposal.height : nil, subviews: subviews)
+        return CGSize(width: width, height: (fillsHeight ? proposal.height : nil) ?? sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = measuredSizes(width: bounds.width, height: fillsHeight ? bounds.height : nil, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let x = index == 0 ? bounds.minX : bounds.minX + gap.maxX
+            subview.place(at: CGPoint(x: x, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: sizes[index].width, height: fillsHeight ? bounds.height : nil))
+        }
+    }
+
+    private func measuredSizes(width: CGFloat, height: CGFloat?, subviews: Subviews) -> [CGSize] {
+        subviews.enumerated().map { index, subview in
+            let columnWidth = index == 0 ? gap.minX : max(0, width - gap.maxX)
+            let size = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: height))
+            return CGSize(width: columnWidth, height: size.height)
+        }
+    }
+}
+
+struct SWAdaptivePage<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var scrollAnchor: UUID?
+    var maximumWidth: CGFloat = 1120
+    @ViewBuilder var content: (Bool) -> Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            let contentWidth = min(maximumWidth, max(0, geometry.size.width - 32))
+            let isWide = SWAdaptiveLayout.usesColumns(width: contentWidth, dynamicTypeSize: dynamicTypeSize)
+            ScrollView(showsIndicators: false) {
+                content(isWide)
+                    .frame(maxWidth: maximumWidth, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
+            }
+            .scrollPosition(id: $scrollAnchor)
+            .environment(\.swWideLayout, isWide)
+            .accessibilityIdentifier("adaptive.page")
+            .accessibilityValue(isWide ? "wide" : "compact")
+        }
     }
 }
 
