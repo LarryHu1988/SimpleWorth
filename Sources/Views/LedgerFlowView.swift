@@ -26,6 +26,9 @@ struct LedgerFlowView: View {
     @State private var showCategoryGrid = false
     @State private var showRecentEntries = true
     @State private var hasInitializedPeriod = false
+    @State private var summaryScrollID = UUID()
+    @State private var categoryToggleScrollID = UUID()
+    @State private var categoryGridScrollID = UUID()
 
     private var categories: [CategoryItem] {
         CategoryLibrary.categories(for: flow)
@@ -176,18 +179,23 @@ struct LedgerFlowView: View {
     var body: some View {
         SWWorkspacePage {
             VStack(spacing: 18) {
-                summaryCard
-                categoryToggleCard
-                if showCategoryGrid {
-                    CategoryGridSection(
-                        title: categoryTitle,
-                        subtitle: categorySubtitle,
-                        categories: categories,
-                        onTapCategory: { category in
-                            presentCreateSheet(categoryID: category.id)
-                        }
-                    )
+                // Anchor the visible header instead of a ledger row pushed down by expansion.
+                VStack(spacing: 18) {
+                    summaryCard.id(summaryScrollID)
+                    categoryToggleCard.id(categoryToggleScrollID)
+                    if showCategoryGrid {
+                        CategoryGridSection(
+                            title: categoryTitle,
+                            subtitle: categorySubtitle,
+                            categories: categories,
+                            onTapCategory: { category in
+                                presentCreateSheet(categoryID: category.id)
+                            }
+                        )
+                        .id(categoryGridScrollID)
+                    }
                 }
+                .scrollTargetLayout()
                 transactionCard
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -301,6 +309,7 @@ struct LedgerFlowView: View {
         }
         .buttonStyle(SWResponsiveButtonStyle())
         .fitnessCard()
+        .accessibilityIdentifier("ledger.categoryToggle.\(flow.storageValue)")
     }
 
     private var yearMenu: some View {

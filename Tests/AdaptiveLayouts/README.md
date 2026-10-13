@@ -256,3 +256,50 @@ acceptance, the version was still 0.8.0 (33), without a commit, push, archive or
 upload. The subsequently requested release increments it to 0.8.1 (34).
 Previous live fold/Split View results above remain historical evidence; this
 pass reruns synthetic width continuity, not physical pose transitions.
+
+## In-place category expansion
+
+Run the phone case with the real root and the workspace case on a wide iPad:
+
+```sh
+bash Tests/AdaptiveLayouts/run.sh PHONE_SIMULATOR_UUID \
+  -only-testing:ResizeTests/ScrollingTests/testCategoryExpansionStaysInPlaceOnPhone
+
+bash Tests/AdaptiveLayouts/run.sh IPAD_SIMULATOR_UUID \
+  -only-testing:ResizeTests/ScrollingTests/testCategoryExpansionStaysInPlaceInWorkspace
+```
+
+On 2026-10-13, the pre-fix iPhone 17 Pro case reproduced the reported jump after
+a short scroll: expanding expense categories moved the toggle from y=179.5 to
+y=-1348.8 (SimpleWorth-adaptive.3gPXaa/Results.xcresult). Only ledger rows had
+registered scroll targets; SwiftUI retained one of those rows as the content
+above it expanded. Apple's
+[scroll-position documentation](https://developer.apple.com/documentation/swiftui/view/scrollposition%28id%3Aanchor%3A%29)
+describes identity-based position retention.
+
+The ledger header now has stable UUID targets for its summary, category toggle
+and category grid. Its target layout is a sibling of the existing ledger-row
+target layout, so the individual row targets remain available after scrolling
+past the header. No forced scroll-to-top, content-offset mutation or delayed
+scroll correction is added. Expense and income share the same fix; categories,
+search, entry presets, animations and ledger actions are unchanged.
+
+Phone cases check repeated expansion/collapse at the top and after a short
+scroll, with at most four points of toggle movement, a visible search field and
+no accidental editor. Both iPhone 17 Pro
+(SimpleWorth-adaptive.XVUslr/Results.xcresult) and iPhone SE
+(SimpleWorth-adaptive.sZteAv/Results.xcresult) passed this case and all four page
+end-clearance checks without skips or runtime warnings. The workspace case also
+checks that the right chart's frame does not move while the left categories
+expand. These are isolated simulator checks, not a new live Duo fold acceptance
+or TestFlight upload.
+
+The workspace case and nine existing resize/workspace cases passed together
+(SimpleWorth-adaptive.DCI5gK/Results.xcresult), with no skips or runtime warnings.
+This includes independent scrolling, shared periods, exposed-row closure,
+chart/goal selections, real-root settings migration and amount-input controls.
+The main project passed an unsigned Release build
+(/tmp/SimpleWorth-Category-Expansion-Release.log) and git diff --check. At this
+acceptance point the fix was local only; TestFlight was still 0.8.1 (34), without
+this category-expansion fix. The subsequent release request increments the
+version to 0.8.2 (35).

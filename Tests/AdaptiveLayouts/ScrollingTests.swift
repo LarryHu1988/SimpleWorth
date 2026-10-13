@@ -1,6 +1,39 @@
 import XCTest
 
 final class ScrollingTests: XCTestCase {
+    func testCategoryExpansionStaysInPlaceOnPhone() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        guard app.buttons["mainTab.expense"].waitForExistence(timeout: 20) else {
+            throw XCTSkip("Run category expansion on a phone with the custom bottom tab bar.")
+        }
+        for flow in ["expense", "income"] {
+            app.buttons["mainTab.\(flow)"].tap()
+            assertCategoryExpansion(app, flow: flow)
+        }
+    }
+
+    func testCategoryExpansionStaysInPlaceInWorkspace() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        guard app.frame.width >= 760 else { throw XCTSkip("Run workspace expansion on a wide iPad.") }
+        XCTAssertTrue(app.buttons["qa.wide"].waitForExistence(timeout: 15))
+        for flow in ["expense", "income"] {
+            app.buttons["qa.compact"].tap()
+            app.buttons["mainTab.\(flow)"].tap()
+            app.buttons["qa.wide"].tap()
+            let secondary = app.scrollViews["workspace.secondary"].firstMatch
+            let chart = secondary.otherElements["stats.distribution.chart"]
+            XCTAssertTrue(chart.exists)
+            let originalChartFrame = chart.frame
+            assertCategoryExpansion(app, flow: flow)
+            XCTAssertEqual(chart.frame, originalChartFrame, "Expansion must not scroll the right pane")
+        }
+    }
+
     func testTaggedRowsReflowAcrossWorkspaceWidths() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -92,6 +125,33 @@ final class ScrollingTests: XCTestCase {
             XCTAssertLessThanOrEqual(last.frame.maxY, tabBar.frame.minY - 8,
                                      "The complete final item must clear the tab bar on \(page)")
             XCTAssertGreaterThanOrEqual(last.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        }
+    }
+
+    private func assertCategoryExpansion(_ app: XCUIApplication, flow: String) {
+        let toggle = app.buttons["ledger.categoryToggle.\(flow)"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        for attempt in 0..<2 {
+            if attempt == 1 {
+                let scroll = app.scrollViews["adaptive.page"].firstMatch
+                let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+                let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48))
+                start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+            }
+            XCTAssertTrue(toggle.isHittable)
+            let originalY = toggle.frame.minY
+            attach(app, "category-\(flow)-\(attempt)-collapsed")
+            toggle.tap()
+            attach(app, "category-\(flow)-\(attempt)-expanded")
+            XCTAssertTrue(toggle.isHittable, "Expansion must not scroll the toggle out of view")
+            XCTAssertEqual(toggle.frame.minY, originalY, accuracy: 4,
+                           "Expand categories below the toggle without moving the viewport")
+            XCTAssertTrue(app.textFields["category.search"].isHittable)
+            toggle.tap()
+            XCTAssertEqual(toggle.frame.minY, originalY, accuracy: 4,
+                           "Collapse categories without moving the viewport")
+            XCTAssertFalse(app.textFields["category.search"].exists)
+            XCTAssertFalse(app.textFields["entry.amount"].exists)
         }
     }
 
