@@ -303,3 +303,32 @@ The main project passed an unsigned Release build
 acceptance point the fix was local only; TestFlight was still 0.8.1 (34), without
 this category-expansion fix. The subsequent release request increments the
 version to 0.8.2 (35).
+
+## Main-page category grid without search
+
+The next local change removes the search field, query state, filtering and
+no-match message from the shared expense/income main-page category grid. It
+iterates the complete category library directly. Category selection still opens
+the matching entry editor. The separate editor category search and currency
+search are unchanged.
+
+The in-place expansion cases now assert that no category search field exists
+on either main page and that the first category is visible after expansion,
+while retaining the toggle-position and right-pane checks. The new
+testCategoryGridKeepsLastCategoryAndEntryAction case scrolls to the final
+expense/income category and opens/cancels each matching entry editor. It does
+not save records into the fixture or production store.
+
+On 2026-10-13, three iPhone SE cases passed
+(SimpleWorth-adaptive.B669KQ/Results.xcresult): in-place expansion without search,
+last-category entry actions, and full final-item clearance on all four pages.
+The workspace expansion case passed on iPad Pro
+(SimpleWorth-adaptive.RUWGca/Results.xcresult), preserving the right chart frame.
+Both results had no skips or runtime warnings. Earlier expansion results above
+describe the previous version with a search field; they are not the current
+no-search acceptance. These checks are simulator evidence, not a new Duo fold
+round trip or TestFlight upload.
+The main project passed an unsigned Release build
+(/tmp/SimpleWorth-Category-NoSearch-Release.log) and git diff --check. This change
+was local at 0.8.2 (35), without a commit, version bump or upload. The subsequent
+release request increments the version to 0.8.3 (36).

@@ -34,6 +34,37 @@ final class ScrollingTests: XCTestCase {
         }
     }
 
+    func testCategoryGridKeepsLastCategoryAndEntryAction() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        guard app.buttons["mainTab.expense"].waitForExistence(timeout: 20) else {
+            throw XCTSkip("Run category entry actions on a phone with the custom bottom tab bar.")
+        }
+        let tabBar = app.otherElements["mainTab.bar"]
+        for (flow, lastName, title) in [("expense", "其他支出", "新增支出"), ("income", "其他收入", "新增收入")] {
+            app.buttons["mainTab.\(flow)"].tap()
+            app.buttons["ledger.categoryToggle.\(flow)"].tap()
+            XCTAssertFalse(app.textFields["category.search"].exists)
+            let last = app.buttons["ledger.category.\(flow).\(lastName)"]
+            let scroll = app.scrollViews["adaptive.page"].firstMatch
+            for _ in 0..<12 {
+                if last.isHittable && last.frame.maxY < tabBar.frame.minY - 8 { break }
+                let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+                let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+                start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+            }
+            XCTAssertTrue(last.isHittable, "Keep the final category reachable on \(flow)")
+            attach(app, "category-\(flow)-last")
+            last.tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.textFields["entry.amount"].exists)
+            app.buttons["取消"].firstMatch.tap()
+            XCTAssertFalse(app.textFields["entry.amount"].exists)
+        }
+    }
+
     func testTaggedRowsReflowAcrossWorkspaceWidths() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -146,11 +177,14 @@ final class ScrollingTests: XCTestCase {
             XCTAssertTrue(toggle.isHittable, "Expansion must not scroll the toggle out of view")
             XCTAssertEqual(toggle.frame.minY, originalY, accuracy: 4,
                            "Expand categories below the toggle without moving the viewport")
-            XCTAssertTrue(app.textFields["category.search"].isHittable)
+            XCTAssertFalse(app.textFields["category.search"].exists)
+            let firstName = flow == "expense" ? "餐饮" : "工资"
+            XCTAssertTrue(app.buttons["ledger.category.\(flow).\(firstName)"].isHittable)
             toggle.tap()
             XCTAssertEqual(toggle.frame.minY, originalY, accuracy: 4,
                            "Collapse categories without moving the viewport")
             XCTAssertFalse(app.textFields["category.search"].exists)
+            XCTAssertFalse(app.buttons["ledger.category.\(flow).\(firstName)"].exists)
             XCTAssertFalse(app.textFields["entry.amount"].exists)
         }
     }

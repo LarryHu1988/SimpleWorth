@@ -88,7 +88,6 @@ struct CategoryGridSection: View {
     let subtitle: String
     let categories: [CategoryItem]
     var onTapCategory: ((CategoryItem) -> Void)? = nil
-    @State private var searchText = ""
 
     private let columns = Array(
         repeating: GridItem(.flexible(minimum: 44), spacing: 6),
@@ -99,10 +98,8 @@ struct CategoryGridSection: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: title, subtitle: subtitle)
 
-            CategorySearchField(text: $searchText)
-
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(CategoryLibrary.filtered(categories, matching: searchText, locale: locale)) { item in
+                ForEach(categories) { item in
                     Button {
                         HapticService.impact(style: .soft)
                         onTapCategory?(item)
@@ -111,14 +108,10 @@ struct CategoryGridSection: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(SWResponsiveButtonStyle(pressedScale: 0.93))
+                    .accessibilityIdentifier("ledger.category.\(item.flow.storageValue).\(item.name)")
                 }
             }
             .id(locale.identifier)
-            if CategoryLibrary.filtered(categories, matching: searchText, locale: locale).isEmpty {
-                Text("未找到匹配分类".appLocalized(in: locale))
-                    .font(.subheadline)
-                    .foregroundStyle(SWTheme.textSecondary)
-            }
         }
         .fitnessCard()
     }
