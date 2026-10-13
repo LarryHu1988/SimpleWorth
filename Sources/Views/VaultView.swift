@@ -326,6 +326,8 @@ struct VaultView: View {
                             .foregroundStyle(SWTheme.accentGreen)
                     }
                     .padding(.vertical, 6)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("vault.deposit.\(item.id)")
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             delete(item)

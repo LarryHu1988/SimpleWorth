@@ -193,3 +193,66 @@ upload was performed during acceptance.
 
 Apple describes the Device Hub home-indicator drag/drop procedure in
 [Prepare your app for iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111461/).
+
+## Phone scrolling regression
+
+Run the real-root end-clearance and long multi-tag ledger cases on a phone:
+
+```sh
+bash Tests/AdaptiveLayouts/run.sh PHONE_SIMULATOR_UUID \
+  -only-testing:ResizeTests/ScrollingTests/testAllPhonePageEndsClearTheTabBar \
+  -only-testing:ResizeTests/ScrollingTests/testLongTaggedLedgerScrollsWithoutEditing
+```
+
+Run tag wrapping across compact/wide/compact widths on a wide iPad:
+
+```sh
+bash Tests/AdaptiveLayouts/run.sh IPAD_SIMULATOR_UUID \
+  -only-testing:ResizeTests/ScrollingTests/testTaggedRowsReflowAcrossWorkspaceWidths
+```
+
+QA_SCROLL_ROWS=300 seeds 300 expense and 300 income records with four tags in
+the isolated QA store only. Returning to the default fixture restores 25 records
+per flow. Neither mode changes production data. The width case requires a wide
+iPad; the end-clearance case requires the phone's custom bottom navigation.
+
+On 2026-10-13, before the fix, the end-clearance case reproduced a 24.5-point
+overlap on iPhone SE: the last expense row ended at y=623 while the navigation
+bar began at y=598.5 (SimpleWorth-adaptive.ZGdktY/Results.xcresult). Main pages
+now reserve the measured floating bar height in addition to their normal bottom
+spacing. Native navigation and presented editors do not receive this extra
+clearance. All four phone pages are checked using the complete final row bounds,
+not just a visible label or its hittability.
+
+Scroll-position updates now invalidate only their scroll-view wrapper, keeping
+the page's data builders out of visible-row updates. Each ledger list shares one
+filtered/sorted record set and tag-color lookup per render. Tag wrapping caches
+its measurement/placement arrangement, and initial row-width tracking no longer
+triggers a second row render. Actual width changes still close exposed actions
+and suppress accidental editing. Existing copy/refund/delete, vertical scrolling,
+elastic horizontal gestures, haptics and chart animations are retained.
+
+The latest production code passed four iPhone 17 Pro cases, including both new
+phone scrolling cases and native settings/amount input
+(SimpleWorth-adaptive.CvYGOD/Results.xcresult). Eleven general iPad cases passed
+(SimpleWorth-adaptive.noCJjq/Results.xcresult), as did the multi-tag width case
+(SimpleWorth-adaptive.mqi6L4/Results.xcresult) and all three ledger-gesture cases
+(SimpleWorth-row-gestures.9vgNSn/Results.xcresult). Each result had no skips or
+runtime warnings. The earlier SE check passed end clearance and native amount
+input (SimpleWorth-adaptive.UcjgJX/Results.xcresult); its scroll-position owner was
+subsequently refined, so the iPhone 17 Pro and general results are the later code
+evidence.
+
+The final iPhone SE rerun also passed all four page ends with the refined
+scroll-position owner and final test guards, without skips or runtime warnings
+(SimpleWorth-adaptive.2GKxcB/Results.xcresult).
+
+The long-ledger test collects scroll-deceleration duration only. It does not
+measure display FPS or hitch counts and is not evidence of a quantified frame
+rate improvement. Real-device smoothness still needs a new TestFlight build.
+The main project also passed an unsigned Release build
+(/tmp/SimpleWorth-Scroll-Release-Validation.log). At the end of this local fix
+acceptance, the version was still 0.8.0 (33), without a commit, push, archive or
+upload. The subsequently requested release increments it to 0.8.1 (34).
+Previous live fold/Split View results above remain historical evidence; this
+pass reruns synthetic width continuity, not physical pose transitions.

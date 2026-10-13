@@ -69,10 +69,6 @@ struct LedgerFlowView: View {
             .sorted(by: isNewerLedgerEntry)
     }
 
-    private var recentEntries: [LedgerEntry] {
-        selectedPeriodEntries
-    }
-
     private var refundAmountBySourceEntryID: [UUID: Double] {
         var result: [UUID: Double] = [:]
 
@@ -161,10 +157,10 @@ struct LedgerFlowView: View {
         flow == .expense ? "最近支出".appLocalized(in: locale) : "最近收入".appLocalized(in: locale)
     }
 
-    private var recentSubtitle: String {
+    private func recentSubtitle(count: Int) -> String {
         flow == .expense
-            ? L10n.string("ledger.recentSubtitle.expense", locale: locale, Int64(selectedPeriodEntries.count))
-            : L10n.string("ledger.recentSubtitle.income", locale: locale, Int64(selectedPeriodEntries.count))
+            ? L10n.string("ledger.recentSubtitle.expense", locale: locale, Int64(count))
+            : L10n.string("ledger.recentSubtitle.income", locale: locale, Int64(count))
     }
 
     private var emptyTitle: String {
@@ -376,14 +372,16 @@ struct LedgerFlowView: View {
 
     private var transactionCard: some View {
         let refundAmounts = refundAmountBySourceEntryID
+        let periodEntries = selectedPeriodEntries
+        let tagTints = tagTintHexByName
 
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                SectionTitle(title: recentTitle, subtitle: recentSubtitle)
+                SectionTitle(title: recentTitle, subtitle: recentSubtitle(count: periodEntries.count))
 
                 Spacer(minLength: 8)
 
-                if !selectedPeriodEntries.isEmpty {
+                if !periodEntries.isEmpty {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) {
                             showRecentEntries.toggle()
@@ -409,24 +407,24 @@ struct LedgerFlowView: View {
                 }
             }
 
-            if recentEntries.isEmpty {
+            if periodEntries.isEmpty {
                 EmptyStateCard(
                     title: emptyTitle,
                     subtitle: emptySubtitle,
                     symbol: flow == .expense ? "tray.fill" : "banknote.fill"
                 )
             } else if !showRecentEntries {
-                Text(L10n.string("ledger.recentCollapsed", locale: locale, Int64(selectedPeriodEntries.count)))
+                Text(L10n.string("ledger.recentCollapsed", locale: locale, Int64(periodEntries.count)))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(SWTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(recentEntries) { entry in
+                    ForEach(periodEntries) { entry in
                         SwipeableLedgerRow(
                             entry: entry,
-                            tagTintHexByName: tagTintHexByName,
+                            tagTintHexByName: tagTints,
                             refundAmount: refundAmounts[entry.id] ?? 0,
                             showCopyAction: !entry.isRefundEntry,
                             showRefundAction: flow == .expense,

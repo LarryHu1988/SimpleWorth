@@ -341,6 +341,10 @@ private struct SWWorkspaceOverrideKey: EnvironmentKey {
     static let defaultValue: Bool? = nil
 }
 
+private struct SWMainPageBottomClearanceKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
 extension EnvironmentValues {
     var swUsesSystemNavigation: Bool {
         get { self[SWSystemNavigationKey.self] }
@@ -361,6 +365,11 @@ extension EnvironmentValues {
         get { self[SWWorkspaceOverrideKey.self] }
         set { self[SWWorkspaceOverrideKey.self] = newValue }
     }
+
+    var swMainPageBottomClearance: CGFloat {
+        get { self[SWMainPageBottomClearanceKey.self] }
+        set { self[SWMainPageBottomClearanceKey.self] = newValue }
+    }
 }
 
 enum SWAdaptiveLayout {
@@ -375,8 +384,9 @@ enum SWAdaptiveLayout {
 
 struct SWWorkspacePage<Primary: View, Secondary: View>: View {
     @Environment(\.swUsesWorkspace) private var usesWorkspace
-    @State private var primaryAnchor: UUID?
-    @State private var secondaryAnchor: UUID?
+    @Environment(\.swMainPageBottomClearance) private var bottomClearance
+    @State private var primaryPosition = SWScrollPosition()
+    @State private var secondaryPosition = SWScrollPosition()
     var showSecondaryInCompact = false
     var secondaryScrolls = true
     @ViewBuilder var primary: () -> Primary
@@ -386,10 +396,9 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
         GeometryReader { _ in
             if usesWorkspace {
                 SWAdaptiveColumns(isWide: true, fillsHeight: true) {
-                    ScrollView(showsIndicators: false) {
-                        primary().padding(.vertical, 10)
+                    SWAnchoredScrollView(position: primaryPosition) {
+                        primary().padding(.vertical, 10).padding(.bottom, bottomClearance)
                     }
-                    .scrollPosition(id: $primaryAnchor)
                     .accessibilityIdentifier("adaptive.page")
                     .accessibilityValue("wide")
                     secondaryPane
@@ -397,7 +406,7 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 16)
             } else {
-                ScrollView(showsIndicators: false) {
+                SWAnchoredScrollView(position: primaryPosition) {
                     VStack(spacing: 18) {
                         primary()
                         if showSecondaryInCompact { secondary() }
@@ -406,9 +415,8 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
                     .frame(maxWidth: .infinity, alignment: .top)
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
-                    .padding(.bottom, 28)
+                    .padding(.bottom, 28 + bottomClearance)
                 }
-                .scrollPosition(id: $primaryAnchor)
                 .accessibilityIdentifier("adaptive.page")
                 .accessibilityValue("compact")
             }
@@ -419,10 +427,9 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
     @ViewBuilder
     private var secondaryPane: some View {
         if secondaryScrolls {
-            ScrollView(showsIndicators: false) {
-                secondary().padding(.vertical, 10).padding(.bottom, 28)
+            SWAnchoredScrollView(position: secondaryPosition) {
+                secondary().padding(.vertical, 10).padding(.bottom, 28 + bottomClearance)
             }
-            .scrollPosition(id: $secondaryAnchor)
             .accessibilityIdentifier("workspace.secondary")
         } else {
             secondary()
@@ -430,6 +437,26 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
                 .clipped()
                 .accessibilityIdentifier("workspace.secondary")
         }
+    }
+}
+
+private final class SWScrollPosition: ObservableObject {
+    @Published var id: UUID?
+}
+
+private struct SWAnchoredScrollView<Content: View>: View {
+    @ObservedObject var position: SWScrollPosition
+    let content: Content
+
+    init(position: SWScrollPosition, @ViewBuilder content: () -> Content) {
+        self.position = position
+        self.content = content()
+    }
+
+    var body: some View {
+        // Updating the visible row must not rebuild the page's data or every row.
+        ScrollView(showsIndicators: false) { content }
+            .scrollPosition(id: $position.id)
     }
 }
 

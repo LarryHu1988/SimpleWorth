@@ -8,6 +8,7 @@ struct MainTabView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.swWorkspaceOverride) private var workspaceOverride
     @State private var hasDeviceHinge = false
+    @State private var floatingTabBarHeight: CGFloat = 73
 
     var body: some View {
         GeometryReader { geometry in
@@ -50,10 +51,12 @@ struct MainTabView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !usesSystemNavigation {
                     LiquidGooeyTabBar(selection: selectedTabBinding)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { floatingTabBarHeight = $0 }
                 }
             }
             .environment(\.swUsesSystemNavigation, usesSystemNavigation)
             .environment(\.swUsesWorkspace, usesWorkspace)
+            .environment(\.swMainPageBottomClearance, usesSystemNavigation ? 0 : floatingTabBarHeight)
             .onChange(of: usesWorkspace, initial: true) { _, value in
                 appRuntimeController.usesWorkspace = value
             }
@@ -182,6 +185,8 @@ private struct LiquidGooeyTabBar: View {
         .padding(.horizontal, 12)
         .padding(.top, 5)
         .padding(.bottom, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mainTab.bar")
     }
 
     private func tabButton(

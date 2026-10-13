@@ -31,7 +31,7 @@ targets:
   ResizeTests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [ResizeTests.swift, NativeDeviceTests.swift, WorkspaceTests.swift, LiveTransitionTests.swift]
+    sources: [ResizeTests.swift, NativeDeviceTests.swift, WorkspaceTests.swift, LiveTransitionTests.swift, ScrollingTests.swift]
     dependencies:
       - target: AdaptiveLayoutCheck
     settings:

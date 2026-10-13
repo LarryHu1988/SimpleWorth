@@ -10,27 +10,34 @@ struct AdaptiveLayoutCheckApp: App {
         UserDefaults.standard.set("zh-Hans", forKey: SettingsKeys.appLanguage)
         let controller = AppRuntimeController()
         let context = controller.container.mainContext
-        if (try? context.fetchCount(FetchDescriptor<LedgerEntry>())) == 0 {
+        let rowCount = min(max(Int(ProcessInfo.processInfo.environment["QA_SCROLL_ROWS"] ?? "25") ?? 25, 25), 300)
+        let previousRowCount = UserDefaults.standard.object(forKey: "qa.fixture.rowCount") as? Int ?? 25
+        if (try? context.fetchCount(FetchDescriptor<LedgerEntry>())) == 0 || previousRowCount != rowCount {
+            for entry in (try? context.fetch(FetchDescriptor<LedgerEntry>())) ?? [] { context.delete(entry) }
             for flow in FlowType.allCases {
-                for index in 0..<25 {
+                for index in 0..<rowCount {
                     let name = flow == .expense ? (index < 18 ? "鞋靴" : "餐饮") : "工资"
                     let category = CategoryLibrary.category(named: name, flow: flow)!
                     context.insert(LedgerEntry(
                         createdAt: Date.now.addingTimeInterval(-Double(index)), amount: 100,
-                        note: "QA \(flow.storageValue) \(index)", flow: flow, category: category
+                        note: "QA \(flow.storageValue) \(index)", flow: flow, category: category,
+                        tagNames: rowCount > 25 ? ["QA tag", "生活", "待核对", "长标签换行验证"] : []
                     ))
                 }
             }
-            for index in 0..<4 {
-                let goal = SavingsGoalRecord(
-                    name: "QA goal \(index)", symbol: "target", currentAmount: 100,
-                    targetAmount: 400, tintHex: 0x308BDD
-                )
-                context.insert(goal)
-                context.insert(VaultDepositRecord(amount: 100, note: "QA deposit \(index)", goal: goal))
+            if (try? context.fetchCount(FetchDescriptor<SavingsGoalRecord>())) == 0 {
+                for index in 0..<4 {
+                    let goal = SavingsGoalRecord(
+                        name: "QA goal \(index)", symbol: "target", currentAmount: 100,
+                        targetAmount: 400, tintHex: 0x308BDD
+                    )
+                    context.insert(goal)
+                    context.insert(VaultDepositRecord(amount: 100, note: "QA deposit \(index)", goal: goal))
+                }
             }
-            context.insert(TagRecord(name: "QA tag"))
+            if (try? context.fetchCount(FetchDescriptor<TagRecord>())) == 0 { context.insert(TagRecord(name: "QA tag")) }
             try? context.save()
+            UserDefaults.standard.set(rowCount, forKey: "qa.fixture.rowCount")
         }
         _controller = StateObject(wrappedValue: controller)
     }

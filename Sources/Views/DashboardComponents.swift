@@ -373,21 +373,30 @@ private struct LedgerTagWrapLayout: Layout {
     let horizontalSpacing: CGFloat
     let verticalSpacing: CGFloat
 
+    struct Cache {
+        var width: CGFloat?
+        var arrangement: (items: [ArrangedTag], size: CGSize)?
+    }
+
+    func makeCache(subviews: Subviews) -> Cache { Cache() }
+
+    func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = Cache() }
+
     func sizeThatFits(
         proposal: ProposedViewSize,
         subviews: Subviews,
-        cache: inout ()
+        cache: inout Cache
     ) -> CGSize {
-        arrangedSubviews(in: proposal.width, subviews: subviews).size
+        arrangement(in: proposal.width, subviews: subviews, cache: &cache).size
     }
 
     func placeSubviews(
         in bounds: CGRect,
         proposal: ProposedViewSize,
         subviews: Subviews,
-        cache: inout ()
+        cache: inout Cache
     ) {
-        let arrangement = arrangedSubviews(in: bounds.width, subviews: subviews)
+        let arrangement = arrangement(in: bounds.width, subviews: subviews, cache: &cache)
 
         for item in arrangement.items {
             subviews[item.index].place(
@@ -395,6 +404,15 @@ private struct LedgerTagWrapLayout: Layout {
                 proposal: ProposedViewSize(item.size)
             )
         }
+    }
+
+    private func arrangement(in width: CGFloat?, subviews: Subviews, cache: inout Cache)
+        -> (items: [ArrangedTag], size: CGSize) {
+        if cache.width == width, let arrangement = cache.arrangement { return arrangement }
+        let arrangement = arrangedSubviews(in: width, subviews: subviews)
+        cache.width = width
+        cache.arrangement = arrangement
+        return arrangement
     }
 
     private func arrangedSubviews(
@@ -437,7 +455,7 @@ private struct LedgerTagWrapLayout: Layout {
         return (items, CGSize(width: min(usedWidth, maxWidth), height: height))
     }
 
-    private struct ArrangedTag {
+    struct ArrangedTag {
         let index: Int
         let origin: CGPoint
         let size: CGSize
@@ -464,7 +482,7 @@ struct SwipeableLedgerRow: View {
     @State private var tapSuppressedUntil = Date.distantPast
 
     private let tapSuppressionInterval: TimeInterval = 0.22
-    @State private var measuredRowWidth: CGFloat = 0
+    @State private var rowGeometry = RowGeometry()
     private let openDragActivationDistance: CGFloat = 4
     private let closedDragActivationDistance: CGFloat = 8
     private let closingTravelDistance: CGFloat = 6
@@ -516,16 +534,22 @@ struct SwipeableLedgerRow: View {
             resetImmediately()
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-            if measuredRowWidth > 0, abs(width - measuredRowWidth) > 1 {
+            if rowGeometry.width > 0, abs(width - rowGeometry.width) > 1 {
                 resetImmediately()
                 suppressTap()
             }
-            measuredRowWidth = width
+            rowGeometry.width = width
         }
         .onTapGesture {
             handleContainerTap()
         }
         .clipped()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ledger.row.\(entry.id)")
+    }
+
+    private final class RowGeometry {
+        var width: CGFloat = 0
     }
 
     private var actionBackground: some View {
