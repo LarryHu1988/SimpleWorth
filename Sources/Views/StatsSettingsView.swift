@@ -46,6 +46,8 @@ struct SettingsPaneHost: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIHostingController<AnyView> {
         // Keep the pane's navigation and toolbar preferences separate from the native tab bar.
         let controller = UIHostingController(rootView: settingsRoot)
+        // The workspace already reserves the device rail around this embedded pane.
+        controller.safeAreaRegions = .keyboard
         controller.view.backgroundColor = .clear
         controller.view.clipsToBounds = true
         return controller
@@ -60,12 +62,17 @@ struct SettingsPaneHost: UIViewControllerRepresentable {
             .environmentObject(appRuntimeController)
             .environment(\.locale, locale)
             .environment(\.horizontalSizeClass, .compact)
+            .environment(\.swSettingsIsEmbedded, true)
+            .environment(\.swSettingsPageHorizontalPadding, 24)
             .modelContainer(appRuntimeController.container)
-            .preferredColorScheme(colorScheme))
+            .preferredColorScheme(colorScheme)
+            .ignoresSafeArea(.container))
     }
 }
 
 struct StatsSettingsView: View {
+    @Environment(\.swSettingsPageHorizontalPadding) private var pageHorizontalPadding
+    @Environment(\.swSettingsIsEmbedded) private var isEmbedded
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
     @Environment(\.modelContext) private var modelContext
@@ -136,167 +143,173 @@ struct StatsSettingsView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: SettingsLayout.pageSectionSpacing) {
-                    statsHeaderCard
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: SettingsLayout.pageSectionSpacing) {
+                        statsHeaderCard
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("settings.summary")
 
-                    SettingsSectionCard(title: "个人偏好") {
-                        languageInlineRow
+                        SettingsSectionCard(title: "个人偏好") {
+                            languageInlineRow
 
-                        SettingsRowDivider()
+                            SettingsRowDivider()
 
-                        themeModeInlineRow
+                            themeModeInlineRow
 
-                        SettingsRowDivider()
+                            SettingsRowDivider()
 
-                        settingToggleRow(
-                            title: "震动反馈",
-                            symbol: "iphone.radiowaves.left.and.right",
-                            iconColor: SWTheme.accentPink,
-                            isOn: $hapticsEnabled
-                        )
-                        .onChange(of: hapticsEnabled) { _, newValue in
-                            if newValue { HapticService.impact() }
-                        }
-                    }
-
-                    SettingsSectionCard(title: "账单设置") {
-                        settingsRouteRow(
-                            title: "货币选择",
-                            symbol: "dollarsign.circle.fill",
-                            iconColor: SWTheme.accentGreen,
-                            route: .currency
-                        )
-
-                        SettingsRowDivider()
-
-                        settingsRouteRow(
-                            title: "标签管理",
-                            symbol: "tag.fill",
-                            iconColor: SWTheme.accentBlue,
-                            route: .tags
-                        )
-
-                        SettingsRowDivider()
-
-                        settingToggleRow(
-                            title: "详细时间",
-                            symbol: "clock.badge.checkmark.fill",
-                            iconColor: SWTheme.accentOrange,
-                            isOn: $detailedTimeEnabled,
-                            infoText: "开启后，新增/编辑账单可精确到分钟；关闭后仅精确到天。",
-                            isInfoPresented: $showDetailedTimeInfo
-                        )
-                        .onChange(of: detailedTimeEnabled) { _, _ in
-                            HapticService.impact()
-                        }
-                    }
-
-                    SettingsSectionCard(title: "数据安全") {
-                        settingsRouteRow(
-                            title: "iCloud 同步",
-                            symbol: "icloud.fill",
-                            iconColor: SWTheme.accentBlue,
-                            route: .iCloud
-                        )
-
-                        SettingsRowDivider()
-
-                        settingsActionRow(
-                            title: "账单导出",
-                            symbol: "square.and.arrow.up.on.square",
-                            iconColor: SWTheme.accentGreen
-                        ) {
-                            exportBackup()
+                            settingToggleRow(
+                                title: "震动反馈",
+                                symbol: "iphone.radiowaves.left.and.right",
+                                iconColor: SWTheme.accentPink,
+                                isOn: $hapticsEnabled
+                            )
+                            .onChange(of: hapticsEnabled) { _, newValue in
+                                if newValue { HapticService.impact() }
+                            }
                         }
 
-                        SettingsRowDivider()
+                        SettingsSectionCard(title: "账单设置") {
+                            settingsRouteRow(
+                                title: "货币选择",
+                                symbol: "dollarsign.circle.fill",
+                                iconColor: SWTheme.accentGreen,
+                                route: .currency
+                            )
 
-                        settingsRouteRow(
-                            title: "账单导入",
-                            symbol: "square.and.arrow.down.on.square",
-                            iconColor: SWTheme.accentOrange,
-                            route: .billImport
-                        )
-                    }
+                            SettingsRowDivider()
 
-                    SettingsSectionCard(title: "良性互动") {
-                        settingsRouteRow(
-                            title: "意见反馈",
-                            symbol: "envelope.fill",
-                            iconColor: SWTheme.accentBlue,
-                            route: .feedback
-                        )
+                            settingsRouteRow(
+                                title: "标签管理",
+                                symbol: "tag.fill",
+                                iconColor: SWTheme.accentBlue,
+                                route: .tags
+                            )
 
-                        SettingsRowDivider()
+                            SettingsRowDivider()
 
-                        settingsActionRow(
-                            title: "好评鼓励",
-                            symbol: "hand.thumbsup.fill",
-                            iconColor: SWTheme.accentGreen
-                        ) {
-                            requestReview()
-                            HapticService.impact()
+                            settingToggleRow(
+                                title: "详细时间",
+                                symbol: "clock.badge.checkmark.fill",
+                                iconColor: SWTheme.accentOrange,
+                                isOn: $detailedTimeEnabled,
+                                infoText: "开启后，新增/编辑账单可精确到分钟；关闭后仅精确到天。",
+                                isInfoPresented: $showDetailedTimeInfo
+                            )
+                            .onChange(of: detailedTimeEnabled) { _, _ in
+                                HapticService.impact()
+                            }
                         }
 
-                        SettingsRowDivider()
+                        SettingsSectionCard(title: "数据安全") {
+                            settingsRouteRow(
+                                title: "iCloud 同步",
+                                symbol: "icloud.fill",
+                                iconColor: SWTheme.accentBlue,
+                                route: .iCloud
+                            )
 
-                        settingsActionRow(
-                            title: "分享简值",
-                            symbol: "square.and.arrow.up",
-                            iconColor: SWTheme.accentPink
-                        ) {
-                            showShareSheet = true
-                            HapticService.impact()
+                            SettingsRowDivider()
+
+                            settingsActionRow(
+                                title: "账单导出",
+                                symbol: "square.and.arrow.up.on.square",
+                                iconColor: SWTheme.accentGreen
+                            ) {
+                                exportBackup()
+                            }
+
+                            SettingsRowDivider()
+
+                            settingsRouteRow(
+                                title: "账单导入",
+                                symbol: "square.and.arrow.down.on.square",
+                                iconColor: SWTheme.accentOrange,
+                                route: .billImport
+                            )
+                        }
+
+                        SettingsSectionCard(title: "良性互动") {
+                            settingsRouteRow(
+                                title: "意见反馈",
+                                symbol: "envelope.fill",
+                                iconColor: SWTheme.accentBlue,
+                                route: .feedback
+                            )
+
+                            SettingsRowDivider()
+
+                            settingsActionRow(
+                                title: "好评鼓励",
+                                symbol: "hand.thumbsup.fill",
+                                iconColor: SWTheme.accentGreen
+                            ) {
+                                requestReview()
+                                HapticService.impact()
+                            }
+
+                            SettingsRowDivider()
+
+                            settingsActionRow(
+                                title: "分享简值",
+                                symbol: "square.and.arrow.up",
+                                iconColor: SWTheme.accentPink
+                            ) {
+                                showShareSheet = true
+                                HapticService.impact()
+                            }
+                        }
+
+                        SettingsSectionCard(title: "了解一下") {
+                            settingsRouteRow(
+                                title: "隐私协议",
+                                symbol: "hand.raised.fill",
+                                iconColor: SWTheme.accentBlue,
+                                route: .privacy
+                            )
+
+                            SettingsRowDivider()
+
+                            settingsRouteRow(
+                                title: "关于简值",
+                                symbol: "info.circle.fill",
+                                iconColor: SWTheme.accentOrange,
+                                route: .about
+                            )
+
+                            SettingsRowDivider()
+
+                            settingsRouteRow(
+                                title: "其他 APP",
+                                symbol: "square.grid.2x2.fill",
+                                iconColor: SWTheme.accentGreen,
+                                route: .otherApps
+                            )
                         }
                     }
-
-                    SettingsSectionCard(title: "了解一下") {
-                        settingsRouteRow(
-                            title: "隐私协议",
-                            symbol: "hand.raised.fill",
-                            iconColor: SWTheme.accentBlue,
-                            route: .privacy
-                        )
-
-                        SettingsRowDivider()
-
-                        settingsRouteRow(
-                            title: "关于简值",
-                            symbol: "info.circle.fill",
-                            iconColor: SWTheme.accentOrange,
-                            route: .about
-                        )
-
-                        SettingsRowDivider()
-
-                        settingsRouteRow(
-                            title: "其他 APP",
-                            symbol: "square.grid.2x2.fill",
-                            iconColor: SWTheme.accentGreen,
-                            route: .otherApps
-                        )
-                    }
+                    .frame(width: max(0, geometry.size.width - pageHorizontalPadding * 2))
+                    .padding(.horizontal, pageHorizontalPadding)
+                    .padding(.top, 14)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 28)
-            }
-            .zIndex(0)
+                .zIndex(0)
 
-            if showDetailedTimeInfo {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeOut(duration: 0.16)) {
-                            showDetailedTimeInfo = false
+                if showDetailedTimeInfo {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeOut(duration: 0.16)) {
+                                showDetailedTimeInfo = false
+                            }
                         }
-                    }
-                    .zIndex(1)
+                        .zIndex(1)
+                }
             }
         }
+        .ignoresSafeArea(.container, edges: isEmbedded ? .horizontal : [])
         .coordinateSpace(name: SettingsInfoBubbleFrameKey.coordinateSpaceName)
         .onPreferenceChange(SettingsInfoBubbleFrameKey.self) { newValue in
             detailedTimeInfoButtonFrame = newValue
@@ -324,17 +337,45 @@ struct StatsSettingsView: View {
         }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(isEmbedded ? .hidden : .visible, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if isEmbedded {
+                HStack {
+                    Text("设置".appLocalized(in: uiLocale))
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        if let onClose { onClose() } else { dismiss() }
+                    } label: {
+                        Text("完成".appLocalized(in: uiLocale))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(SWTheme.accentGreen)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.done")
+                }
+                .frame(minHeight: 44)
+                .padding(.horizontal, pageHorizontalPadding)
+                .ignoresSafeArea(.container, edges: .horizontal)
+                .background(.ultraThinMaterial)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("完成") {
-                    if let onClose { onClose() } else { dismiss() }
+                if !isEmbedded {
+                    Button("完成") {
+                        if let onClose { onClose() } else { dismiss() }
+                    }
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("settings.done")
                 }
-                .fontWeight(.semibold)
-                .accessibilityIdentifier("settings.done")
             }
         }
         .navigationDestination(for: SettingsRoute.self) { route in
             destinationView(for: route)
+                .toolbar(.visible, for: .navigationBar)
         }
         .task {
             if shouldShowDetailedTimeInfoOnDebugLaunch, !showDetailedTimeInfo {
@@ -379,7 +420,7 @@ struct StatsSettingsView: View {
     }
 
     private var statsHeaderCard: some View {
-        HStack(spacing: 12) {
+        SWAdaptivePairLayout {
             SettingsMetricCard(title: "记账总天数", value: "\(totalLedgerDays)", tint: SWTheme.accentBlue)
             SettingsMetricCard(title: "记账总笔数", value: "\(totalEntryCount)", tint: SWTheme.accentGreen)
         }
@@ -445,55 +486,15 @@ struct StatsSettingsView: View {
     }
 
     private var languageInlineRow: some View {
-        HStack(spacing: SettingsLayout.rowSpacing) {
-            Image(systemName: "globe")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SWTheme.accentGreen)
-                .frame(width: SettingsLayout.rowIconWidth)
-
-            Text("语言选择")
-                .font(SettingsLayout.titleFont)
-                .foregroundStyle(SWTheme.primaryText)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 6) {
-                ForEach(AppLanguage.allCases) { language in
-                    Button {
-                        appLanguageRaw = language.rawValue
-                        HapticService.selection()
-                    } label: {
-                        Text(language.shortLabel)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(
-                                language == selectedAppLanguage
-                                    ? SWTheme.primaryText
-                                    : SWTheme.textSecondary
-                            )
-                            .lineLimit(1)
-                            .padding(.horizontal, 8)
-                            .frame(height: SettingsLayout.inlineControlSize)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(
-                                        language == selectedAppLanguage
-                                            ? Color.white.opacity(0.22)
-                                            : Color.white.opacity(0.08)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(
-                                                language == selectedAppLanguage
-                                                    ? Color.white.opacity(0.48)
-                                                    : Color.white.opacity(0.12),
-                                                lineWidth: 1
-                                            )
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(language.displayName)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: SettingsLayout.rowSpacing) {
+                languageRowLabel
+                Spacer(minLength: 8)
+                languageControls
+            }
+            VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+                languageRowLabel
+                languageControls.frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .frame(
@@ -503,6 +504,62 @@ struct StatsSettingsView: View {
         )
         .contentShape(Rectangle())
         .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+
+    private var languageRowLabel: some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Image(systemName: "globe")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SWTheme.accentGreen)
+                .frame(width: SettingsLayout.rowIconWidth)
+
+            Text("语言选择")
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var languageControls: some View {
+        HStack(spacing: 6) {
+            ForEach(AppLanguage.allCases) { language in
+                Button {
+                    appLanguageRaw = language.rawValue
+                    HapticService.selection()
+                } label: {
+                    Text(language.shortLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(
+                            language == selectedAppLanguage
+                                ? SWTheme.primaryText
+                                : SWTheme.textSecondary
+                        )
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .frame(height: SettingsLayout.inlineControlSize)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    language == selectedAppLanguage
+                                        ? Color.white.opacity(0.22)
+                                        : Color.white.opacity(0.08)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(
+                                            language == selectedAppLanguage
+                                                ? Color.white.opacity(0.48)
+                                                : Color.white.opacity(0.12),
+                                            lineWidth: 1
+                                        )
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(language.displayName)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func settingsActionRow(
@@ -953,6 +1010,9 @@ private struct SettingsMetricCard: View {
             Text(value)
                 .font(SettingsLayout.cardValueFont)
                 .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)

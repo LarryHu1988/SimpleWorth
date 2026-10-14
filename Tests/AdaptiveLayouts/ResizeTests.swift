@@ -53,21 +53,24 @@ final class ResizeTests: XCTestCase {
 
     func testFourPagesKeepPeriodAcrossLiveResize() {
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
         XCTAssertTrue(app.buttons["mainTab.expense"].waitForExistence(timeout: 15))
         for name in ["expense", "income", "vault", "stats"] {
             app.buttons["qa.compact"].tap()
-            app.buttons["mainTab.\(name)"].tap()
+            tapPhoneTab(name, in: app)
             let month = app.buttons["period.month"].firstMatch
             XCTAssertTrue(month.waitForExistence(timeout: 5))
             month.tap()
             app.buttons["1月"].firstMatch.tap()
             XCTAssertTrue((month.value as? String)?.contains("1") == true)
             app.buttons["qa.wide"].tap()
+            waitForLayout("wide", in: app)
             XCTAssertTrue((month.value as? String)?.contains("1") == true)
             XCTAssertEqual(app.scrollViews["adaptive.page"].firstMatch.value as? String, "wide")
             attach(app, "\(name)-wide")
             app.buttons["qa.compact"].tap()
+            waitForLayout("compact", in: app)
             XCTAssertTrue((month.value as? String)?.contains("1") == true)
             XCTAssertEqual(app.scrollViews["adaptive.page"].firstMatch.value as? String, "compact")
         }
@@ -75,8 +78,9 @@ final class ResizeTests: XCTestCase {
 
     func testChartSelectionSurvivesResize() {
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
-        app.buttons["mainTab.stats"].tap()
+        tapPhoneTab("stats", in: app)
         let chart = app.otherElements["stats.distribution.chart"].firstMatch
         reveal(chart, in: app)
         chart.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.30)).tap()
@@ -95,9 +99,10 @@ final class ResizeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["QA_NATIVE_SIZE"] = "1"
         app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
         app.buttons["新增支出"].firstMatch.tap()
         let amount = app.textFields["entry.amount"]
-        XCTAssertTrue(amount.waitForExistence(timeout: 5))
+        XCTAssertTrue(amount.waitForExistence(timeout: 8))
         amount.tap()
         XCTAssertTrue(app.buttons["amount.operator.+"].waitForExistence(timeout: 5))
         amount.typeText("123.45+2")
@@ -151,6 +156,7 @@ final class ResizeTests: XCTestCase {
 
     func testOpenRowClosesAfterResizeWithoutEditing() {
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
         let row = app.staticTexts["QA expense 24"]
         reveal(row, in: app)
@@ -172,18 +178,41 @@ final class ResizeTests: XCTestCase {
         app.buttons["取消"].firstMatch.tap()
     }
 
-    func testSelectedVaultGoalSurvivesResize() {
+    func testVaultKeepsPlainGoalsAndDepositsAcrossResize() {
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
-        app.buttons["mainTab.vault"].tap()
-        app.buttons["qa.wide"].tap()
-        let goal = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "vault.select.")).firstMatch
-        reveal(goal, in: app)
-        goal.tap()
-        XCTAssertTrue(app.otherElements["vault.selectedGoal"].waitForExistence(timeout: 5))
-        app.buttons["qa.compact"].tap()
-        app.buttons["qa.wide"].tap()
-        XCTAssertTrue(app.otherElements["vault.selectedGoal"].exists)
+        tapPhoneTab("vault", in: app)
+        for mode in ["wide", "compact", "wide"] {
+            app.buttons["qa.\(mode)"].tap()
+            waitForLayout(mode, in: app)
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "vault.select.")).firstMatch.exists)
+            XCTAssertFalse(app.otherElements["vault.selectedGoal"].exists)
+            XCTAssertTrue(app.staticTexts["QA goal 0"].exists)
+            let deposit = app.staticTexts["QA deposit 0"]
+            reveal(deposit, in: app)
+            XCTAssertTrue(deposit.isHittable)
+        }
+    }
+
+    private func tapPhoneTab(_ key: String, in app: XCUIApplication) {
+        let symbols = ["expense": "minus.circle.fill", "income": "plus.circle.fill",
+                       "vault": "lock.shield.fill", "stats": "chart.bar.xaxis"]
+        let button = app.buttons["mainTab.\(key)"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        let icon = button.images[symbols[key]!].firstMatch
+        (icon.exists ? icon : button).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            button.isSelected
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+    }
+
+    private func waitForLayout(_ value: String, in app: XCUIApplication) {
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.scrollViews["adaptive.page"].firstMatch.value as? String == value
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {

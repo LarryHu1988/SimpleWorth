@@ -9,7 +9,6 @@ private struct GoalEditTarget: Identifiable {
 struct VaultView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.swUsesWorkspace) private var usesWorkspace
     @State private var overviewState = StatsPanelState()
 
     @Query(sort: [SortDescriptor(\SavingsGoalRecord.createdAt, order: .forward)])
@@ -26,12 +25,6 @@ struct VaultView: View {
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var hasInitializedPeriod = false
-    @State private var selectedGoalID: UUID?
-
-    private var selectedGoal: SavingsGoalRecord? {
-        goals.first { $0.id == selectedGoalID }
-    }
-
     private var totalCurrent: Double {
         goals.reduce(0) { $0 + $1.currentAmount }
     }
@@ -68,13 +61,8 @@ struct VaultView: View {
         SWWorkspacePage {
             VStack(spacing: 18) {
                 vaultOverview
-                goalsCard(isWide: usesWorkspace)
-                if usesWorkspace, let selectedGoal {
-                    GoalProgressCard(goal: selectedGoal)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("vault.selectedGoal")
-                }
-                depositsCard(goal: usesWorkspace ? selectedGoal : nil)
+                goalsCard
+                depositsCard
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         } secondary: {
@@ -195,27 +183,29 @@ struct VaultView: View {
     }
 
     private var vaultOverview: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("当前小金库")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(SWTheme.primaryText)
+        SWOverviewLayout(preferredRingSize: 104) {
+            Text("当前小金库")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .accessibilityIdentifier("vault.overview.title")
 
-                Text(totalCurrent.cnyText(in: locale))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .minimumScaleFactor(0.75)
+            Text(totalCurrent.cnyText(in: locale))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .monospacedDigit()
+                .accessibilityIdentifier("vault.overview.amount")
 
-                Text(L10n.string("vault.totalTarget", locale: locale, totalTarget.cnyText(in: locale)))
-                    .font(.footnote)
-                    .foregroundStyle(SWTheme.textSecondary)
-            }
-
-            Spacer(minLength: 8)
+            Text(L10n.string("vault.totalTarget", locale: locale, totalTarget.cnyText(in: locale)))
+                .font(.footnote)
+                .foregroundStyle(SWTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             ZStack {
                 ProgressRing(progress: totalProgress, tint: SWTheme.accentBlue, lineWidth: 12)
-                    .frame(width: 104, height: 104)
 
                 VStack(spacing: 2) {
                     Text("进度")
@@ -224,13 +214,18 @@ struct VaultView: View {
                     Text("\((totalProgress * 100).formatted(.number.precision(.fractionLength(0))))%")
                         .font(.headline.weight(.bold))
                         .foregroundStyle(SWTheme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
             }
+            .accessibilityIdentifier("vault.overview.ring")
         }
         .fitnessCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("vault.overview")
     }
 
-    private func goalsCard(isWide: Bool) -> some View {
+    private var goalsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "小目标", subtitle: "点按可编辑，左滑可删除")
 
@@ -242,47 +237,33 @@ struct VaultView: View {
                 )
             } else {
                 ForEach(goals) { goal in
-                    VStack(alignment: .trailing, spacing: 6) {
-                        GoalProgressCard(goal: goal)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                editingGoal = GoalEditTarget(id: goal.id, goal: goal)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    delete(goal)
-                                } label: {
-                                    Label("删除", systemImage: "trash.fill")
-                                }
-
-                                Button {
-                                    editingGoal = GoalEditTarget(id: goal.id, goal: goal)
-                                } label: {
-                                    Label("编辑", systemImage: "pencil")
-                                }
-                                .tint(SWTheme.accentBlue)
-                            }
-                        if isWide {
-                            Button {
-                                selectedGoalID = selectedGoalID == goal.id ? nil : goal.id
-                                HapticService.selection()
-                            } label: {
-                                Label("存入记录".appLocalized(in: locale), systemImage: selectedGoalID == goal.id ? "checkmark.circle.fill" : "list.bullet")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(goal.tintColor)
-                            .accessibilityIdentifier("vault.select.\(goal.id)")
+                    GoalProgressCard(goal: goal)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            editingGoal = GoalEditTarget(id: goal.id, goal: goal)
                         }
-                    }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(goal)
+                            } label: {
+                                Label("删除", systemImage: "trash.fill")
+                            }
+
+                            Button {
+                                editingGoal = GoalEditTarget(id: goal.id, goal: goal)
+                            } label: {
+                                Label("编辑", systemImage: "pencil")
+                            }
+                            .tint(SWTheme.accentBlue)
+                        }
                 }
             }
         }
         .fitnessCard()
     }
 
-    private func depositsCard(goal: SavingsGoalRecord?) -> some View {
-        let recentDeposits = Array(selectedPeriodDeposits.filter { goal == nil || $0.goal?.id == goal?.id }.prefix(20))
+    private var depositsCard: some View {
+        let recentDeposits = Array(selectedPeriodDeposits.prefix(20))
         return VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "最近存入", subtitle: "记录会同步更新目标进度")
 
@@ -405,6 +386,8 @@ private struct GoalProgressCard: View {
                 Text("\((goal.progress * 100).formatted(.number.precision(.fractionLength(0))))%")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(goal.tintColor)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
@@ -418,10 +401,14 @@ private struct GoalProgressCard: View {
                     Text(goal.currentAmount.cnyText(in: locale))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(SWTheme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                     Spacer()
                     Text(goal.targetAmount.cnyText(in: locale))
                         .font(.caption)
                         .foregroundStyle(SWTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
 
                 GeometryReader { proxy in

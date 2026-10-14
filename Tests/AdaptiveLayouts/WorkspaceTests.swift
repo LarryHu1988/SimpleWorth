@@ -4,11 +4,18 @@ final class WorkspaceTests: XCTestCase {
     func testFourPageCompositionAndRightSettings() {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
         XCTAssertTrue(app.buttons["qa.wide"].waitForExistence(timeout: 15))
         for key in ["expense", "income", "vault", "stats"] {
             app.buttons["qa.compact"].tap()
-            app.buttons["mainTab.\(key)"].tap()
+            let tab = app.buttons["mainTab.\(key)"]
+            let symbols = ["expense": "minus.circle.fill", "income": "plus.circle.fill",
+                           "vault": "lock.shield.fill", "stats": "chart.bar.xaxis"]
+            let icon = tab.images[symbols[key]!].firstMatch
+            (icon.exists ? icon : tab).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in tab.isSelected }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
             app.buttons["qa.wide"].tap()
             let primary = app.scrollViews["adaptive.page"].firstMatch
             let secondary = app.scrollViews["workspace.secondary"].firstMatch
@@ -35,7 +42,7 @@ final class WorkspaceTests: XCTestCase {
         let primary = app.scrollViews["adaptive.page"].firstMatch
         let previousFrame = primary.frame
         app.buttons["stats.settings"].tap()
-        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings.done"].waitForExistence(timeout: 5))
         XCTAssertTrue(primary.staticTexts["收支概览"].exists)
         XCTAssertEqual(primary.frame, previousFrame)
         app.buttons["货币选择"].firstMatch.tap()
@@ -51,6 +58,7 @@ final class WorkspaceTests: XCTestCase {
     func testIndependentScrollingAndPeriodSharing() {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
         app.buttons["qa.wide"].tap()
         let primary = app.scrollViews["adaptive.page"].firstMatch

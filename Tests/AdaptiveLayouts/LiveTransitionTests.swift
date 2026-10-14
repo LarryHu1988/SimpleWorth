@@ -3,6 +3,162 @@ import XCTest
 
 // These opt-in tests require real Device Hub pose/window changes, without relaunching the app.
 final class LiveTransitionTests: XCTestCase {
+    func testDuoPhoneNavigationAcrossPoses() throws {
+        guard ProcessInfo.processInfo.environment["QA_LIVE_TRANSITIONS"] == "1" else {
+            throw XCTSkip("Opt in and operate Device Hub when QA_LIVE_STAGE is printed.")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        // Default/manual launch must use the native root, with no width override.
+        app.launchEnvironment["QA_WIDTH_STRESS"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        let initial = try pose(in: app)
+        XCTAssertTrue(initial.isClosedOuterDisplay && initial.sceneHeight > initial.sceneWidth)
+        checkResponsivePages(in: app, pose: initial, name: "six-fixes-outer-portrait")
+
+        stage("SIX_FIXES_OPEN_LANDSCAPE")
+        try waitForPose(in: app, initial: initial, timeout: 180) { $0.isOpenedWorkspace }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "six-fixes-inner-landscape")
+        app.buttons["stats.settings"].tap()
+        let summary = app.otherElements["settings.summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        let pane = app.otherElements["settings.pane"].firstMatch
+        XCTAssertTrue(pane.exists)
+        attach(app, "six-fixes-inner-settings-margins")
+        XCTAssertGreaterThanOrEqual(summary.frame.minX - pane.frame.minX, 16)
+        XCTAssertGreaterThanOrEqual(pane.frame.maxX - summary.frame.maxX, 16)
+        XCTAssertTrue(app.buttons["settings.done"].isHittable)
+        app.buttons["settings.done"].tap()
+
+        stage("SIX_FIXES_INNER_PORTRAIT")
+        try waitForPose(in: app, initial: initial, timeout: 180) {
+            $0.status == "fullyOpen" && ($0.angle ?? 0) >= 179 && $0.sceneHeight > $0.sceneWidth
+        }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "six-fixes-inner-portrait")
+
+        stage("SIX_FIXES_OUTER_LANDSCAPE")
+        try waitForPose(in: app, initial: initial, timeout: 180) {
+            $0.isClosedOuterDisplay && $0.sceneWidth > $0.sceneHeight
+        }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "six-fixes-outer-landscape")
+
+        stage("SIX_FIXES_OUTER_PORTRAIT")
+        try waitForPose(in: app, initial: initial, timeout: 180) {
+            $0.isClosedOuterDisplay && $0.sceneHeight > $0.sceneWidth
+        }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "six-fixes-restored-outer")
+        stage("SIX_FIXES_COMPLETE")
+    }
+
+    func testActualResponsiveWidthContinuity() throws {
+        guard ProcessInfo.processInfo.environment["QA_LIVE_TRANSITIONS"] == "1" else {
+            throw XCTSkip("Opt in and operate Device Hub when QA_LIVE_STAGE is printed.")
+        }
+        continueAfterFailure = false
+        executionTimeAllowance = 3600
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launchEnvironment["QA_WIDTH_STRESS"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        let initial = try pose(in: app)
+        XCTAssertTrue(initial.isClosedOuterDisplay || initial.isOpenedWorkspace)
+        checkResponsivePages(in: app, pose: initial,
+                             name: initial.isClosedOuterDisplay ? "initial-outer" : "initial-landscape")
+        if !initial.isOpenedWorkspace {
+            stage("WIDTH_OPEN")
+            try waitForPose(in: app, initial: initial) { $0.isOpenedWorkspace }
+            checkResponsivePages(in: app, pose: try currentPose(initial), name: "opened-landscape")
+        }
+        stage("WIDTH_PORTRAIT")
+        try waitForPose(in: app, initial: initial) {
+            $0.status == "fullyOpen" && ($0.angle ?? 0) >= 179 && $0.height > $0.width && $0.sceneWidth < 760
+        }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "opened-portrait")
+        stage("WIDTH_CLOSE")
+        try waitForPose(in: app, initial: initial) {
+            $0.isClosedOuterDisplay && (!initial.isClosedOuterDisplay ||
+                (abs($0.sceneWidth - initial.sceneWidth) < 1 && abs($0.sceneHeight - initial.sceneHeight) < 1
+                    && $0.interfaceOrientation == initial.interfaceOrientation))
+        }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "restored-outer")
+        stage("WIDTH_COMPLETE")
+    }
+
+    func testActualResponsiveOuterRoundTrip() throws {
+        guard ProcessInfo.processInfo.environment["QA_LIVE_TRANSITIONS"] == "1" else {
+            throw XCTSkip("Opt in and operate Device Hub when QA_LIVE_STAGE is printed.")
+        }
+        continueAfterFailure = false
+        executionTimeAllowance = 3600
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launchEnvironment["QA_WIDTH_STRESS"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        let initial = try pose(in: app)
+        XCTAssertTrue(initial.isClosedOuterDisplay)
+        XCTAssertTrue(initial.sceneIsActive)
+        checkResponsivePages(in: app, pose: initial, name: "roundtrip-initial-outer")
+        stage("WIDTH_ROUNDTRIP_OPEN")
+        try waitForPose(in: app, initial: initial) { $0.isOpenedWorkspace }
+        checkResponsivePages(in: app, pose: try currentPose(initial), name: "roundtrip-landscape")
+        stage("WIDTH_ROUNDTRIP_CLOSE")
+        try waitForPose(in: app, initial: initial) {
+            $0.isClosedOuterDisplay && abs($0.sceneWidth - initial.sceneWidth) < 1
+                && abs($0.sceneHeight - initial.sceneHeight) < 1 && $0.interfaceOrientation == initial.interfaceOrientation
+        }
+        let restored = try currentPose(initial)
+        XCTAssertEqual(restored.sceneWidth, initial.sceneWidth, accuracy: 1)
+        XCTAssertEqual(restored.width, initial.width, accuracy: 1)
+        checkResponsivePages(in: app, pose: restored, name: "roundtrip-restored-outer")
+        stage("WIDTH_ROUNDTRIP_COMPLETE")
+    }
+
+    private func checkResponsivePages(in app: XCUIApplication, pose: Pose, name: String) {
+        XCTAssertFalse(app.buttons["qa.compact"].exists)
+        XCTAssertFalse(app.buttons["qa.wide"].exists)
+        for (key, symbol) in [("expense", "minus.circle.fill"), ("income", "plus.circle.fill"),
+                              ("vault", "lock.shield.fill"), ("stats", "chart.bar.xaxis")] {
+            tapTab(in: app, key: key, symbol: symbol)
+            XCTAssertEqual(app.scrollViews["adaptive.page"].firstMatch.value as? String,
+                           pose.isOpenedWorkspace ? "wide" : "compact")
+            if !pose.isOpenedWorkspace {
+                let bar = app.otherElements["mainTab.bar"]
+                XCTAssertTrue(bar.exists && app.buttons["mainTab.\(key)"].isHittable)
+                XCTAssertGreaterThan(bar.frame.minY, app.windows.firstMatch.frame.midY)
+                XCTAssertFalse(app.scrollViews["workspace.secondary"].exists)
+                let card = app.otherElements[key == "stats" ? "stats.overview" :
+                    (key == "vault" ? "vault.overview" : "flow.summary")]
+                XCTAssertEqual(card.frame.width, min(760, pose.width - 32), accuracy: 2,
+                               "Every phone page must fill the current usable width")
+            }
+            if key == "vault" {
+                XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "vault.select.")).firstMatch.exists)
+                XCTAssertFalse(app.otherElements["vault.selectedGoal"].exists)
+            }
+            if key == "stats" {
+                for title in ["收入", "支出", "净结余", "储蓄率"] {
+                    let amount = app.staticTexts["stats.metric.\(title)"]
+                    XCTAssertTrue(amount.exists)
+                    XCTAssertLessThanOrEqual(amount.frame.height, 28)
+                }
+            } else {
+                let card = app.otherElements[key == "vault" ? "vault.overview" : "flow.summary"]
+                let amount = app.staticTexts[key == "vault" ? "vault.overview.amount" : "flow.summary.amount"]
+                XCTAssertTrue(card.exists && amount.exists)
+                XCTAssertLessThanOrEqual(amount.frame.height, 44)
+                XCTAssertTrue(card.frame.contains(amount.frame))
+                if !pose.isOpenedWorkspace {
+                    XCTAssertEqual(card.frame.width, min(760, pose.width - 32), accuracy: 2,
+                                   "The compact card must fill the current usable width")
+                }
+            }
+            attach(app, "live-width-\(name)-\(key)")
+        }
+    }
+
     func testActualSplitViewContinuity() throws {
         guard ProcessInfo.processInfo.environment["QA_LIVE_TRANSITIONS"] == "1" else {
             throw XCTSkip("Opt in and operate Device Hub when QA_LIVE_STAGE is printed.")
@@ -92,6 +248,7 @@ final class LiveTransitionTests: XCTestCase {
         app.buttons["新增支出"].firstMatch.tap()
         let amount = app.textFields["entry.amount"]
         XCTAssertTrue(amount.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["category.search"].exists)
         amount.tap()
         amount.typeText("120+30")
         let note = app.textFields["entry.note"]
@@ -109,22 +266,58 @@ final class LiveTransitionTests: XCTestCase {
         try waitForPose(in: app, initial: initial) { $0.isClosedOuterDisplay }
         XCTAssertEqual(amount.value as? String, "120+30")
         XCTAssertEqual(note.value as? String, "QA live fold draft")
+        XCTAssertFalse(app.textFields["category.search"].exists)
         attach(app, "live-closed-editor")
         stage("FOLD_EDITOR_OPEN")
         try waitForPose(in: app, initial: initial) { $0.isOpenedWorkspace }
         XCTAssertEqual(amount.value as? String, "120+30")
         XCTAssertEqual(note.value as? String, "QA live fold draft")
+        XCTAssertEqual(app.scrollViews.containing(.textField, identifier: "entry.amount").firstMatch.value as? String, "wide")
+        XCTAssertFalse(app.textFields["category.search"].exists)
         attach(app, "live-opened-editor")
         app.buttons["取消"].firstMatch.tap()
 
+        openSelectedChartSettings(in: app)
+        try checkSettingsFold(in: app, initial: initial)
+    }
+
+    func testActualSettingsFoldContinuity() throws {
+        guard ProcessInfo.processInfo.environment["QA_LIVE_TRANSITIONS"] == "1" else {
+            throw XCTSkip("Opt in and operate Device Hub when QA_LIVE_STAGE is printed.")
+        }
+        continueAfterFailure = false
+        executionTimeAllowance = 3600
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        let initial = try pose(in: app)
+        XCTAssertTrue(initial.status == "fullyOpen" || initial.status == "closed")
+        openSelectedChartSettings(in: app)
+        if !initial.isOpenedWorkspace {
+            stage("SETTINGS_LANDSCAPE")
+            try waitForPose(in: app, initial: initial) { $0.isOpenedWorkspace }
+            XCTAssertTrue(app.navigationBars["货币选择"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.scrollViews["adaptive.page"].firstMatch.staticTexts["收支概览"].exists)
+            attach(app, "live-portrait-to-landscape-settings")
+        }
+        try checkSettingsFold(in: app, initial: initial)
+    }
+
+    private func openSelectedChartSettings(in app: XCUIApplication) {
         tapStats(in: app)
         let chart = app.otherElements["stats.distribution.chart"].firstMatch
         reveal(chart, in: app)
-        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.30)).tap()
+        chart.coordinate(withNormalizedOffset: CGVector(
+            dx: 0.5 + chart.frame.height * 0.34 / chart.frame.width, dy: 0.25
+        )).tap()
         XCTAssertTrue(app.buttons["stats.distribution.鞋靴"].isSelected)
         app.buttons["stats.settings"].tap()
         app.buttons["货币选择"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["货币选择"].waitForExistence(timeout: 5))
+    }
+
+    private func checkSettingsFold(in app: XCUIApplication, initial: Pose) throws {
         stage("FOLD_SETTINGS_CLOSE")
         try waitForPose(in: app, initial: initial) { $0.isClosedOuterDisplay }
         XCTAssertTrue(app.navigationBars["货币选择"].waitForExistence(timeout: 8))
@@ -152,6 +345,8 @@ final class LiveTransitionTests: XCTestCase {
         let angle: Double?
         let sceneX: Double
         let sceneWidth: Double
+        let sceneHeight: Double
+        let interfaceOrientation: Int?
         let sceneIsActive: Bool
         let divisions: [Division]
 
@@ -176,13 +371,30 @@ final class LiveTransitionTests: XCTestCase {
         return try JSONDecoder().decode(Pose.self, from: Data(value.utf8))
     }
 
-    private func waitForPose(in app: XCUIApplication, initial: Pose, condition: @escaping (Pose) -> Bool) throws {
+    private func waitForPose(in app: XCUIApplication, initial: Pose, timeout: TimeInterval = 900,
+                             condition: @escaping (Pose) -> Bool) throws {
+        var previousGeometry: [Double] = []
+        var matchingSince: Date?
         let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: initial.telemetryPath)),
-                  let current = try? JSONDecoder().decode(Pose.self, from: data) else { return false }
-            return current.processID == initial.processID && current.sceneIsActive && condition(current)
+                  let current = try? JSONDecoder().decode(Pose.self, from: data),
+                  current.processID == initial.processID, current.sceneIsActive, condition(current) else {
+                matchingSince = nil
+                return false
+            }
+            // Hinge state and viewport geometry arrive in separate native updates.
+            let geometry = [current.width, current.height, current.sceneWidth, current.sceneHeight,
+                            current.sceneX, current.angle ?? -1, Double(current.interfaceOrientation ?? -1)]
+                + current.divisions.map(\.x)
+            if matchingSince == nil || previousGeometry.count != geometry.count ||
+                !zip(previousGeometry, geometry).allSatisfy({ abs($0.0 - $0.1) < 0.5 }) {
+                previousGeometry = geometry
+                matchingSince = Date()
+                return false
+            }
+            return Date().timeIntervalSince(matchingSince!) >= 2
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 900), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: timeout), .completed)
         let current = try currentPose(initial)
         let evidence = try Data(contentsOf: URL(fileURLWithPath: initial.telemetryPath))
         print("QA_LIVE_POSE: \(String(decoding: evidence, as: UTF8.self))")
@@ -231,9 +443,11 @@ final class LiveTransitionTests: XCTestCase {
         let titles = ["expense": "支出", "income": "收入", "vault": "金库", "stats": "统计"]
         let button = app.buttons.matching(NSPredicate(format: "label == %@", titles[key]!))
             .containing(.image, identifier: symbol).firstMatch
-        let control = button.exists ? button : app.buttons[symbol].firstMatch
+        let custom = app.buttons["mainTab.\(key)"]
+        let control = custom.exists ? custom : (button.exists ? button : app.buttons[symbol].firstMatch)
         XCTAssertTrue(control.waitForExistence(timeout: 5))
-        control.tap()
+        let icon = control.images[symbol].firstMatch
+        (icon.exists ? icon : control).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             control.isSelected && app.staticTexts["mainPageTitle"].firstMatch.label == titles[key]!
         }, object: nil)
@@ -242,8 +456,8 @@ final class LiveTransitionTests: XCTestCase {
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<20 {
-            if element.exists, element.isHittable, element.frame.minY > 100,
-               element.frame.maxY < app.frame.maxY - 60 { return }
+            if element.exists, app.windows.firstMatch.frame.contains(element.frame), element.frame.minY > 100,
+               element.frame.maxY < app.windows.firstMatch.frame.maxY - 60 { return }
             let primary = app.scrollViews["adaptive.page"].firstMatch
             let secondary = app.scrollViews["workspace.secondary"].firstMatch
             let pane = secondary.exists && element.frame.minX >= secondary.frame.minX ? secondary : primary

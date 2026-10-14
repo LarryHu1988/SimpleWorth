@@ -292,19 +292,16 @@ extension UIColor {
 }
 
 private struct MainPageTitleModifier: ViewModifier {
-    @Environment(\.swUsesSystemNavigation) private var usesSystemNavigation
     let title: String
 
     func body(content: Content) -> some View {
         content
-            .navigationTitle(usesSystemNavigation ? title : "")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                if usesSystemNavigation {
-                    ToolbarItem(placement: .principal) { titleLabel }
-                } else if #available(iOS 26.0, *) {
+                if #available(iOS 26.0, *) {
                     ToolbarItem(placement: .topBarLeading) { titleLabel }
                         .sharedBackgroundVisibility(.hidden)
                 } else {
@@ -373,12 +370,117 @@ extension EnvironmentValues {
 }
 
 enum SWAdaptiveLayout {
+    static let compactMaximumWidth: CGFloat = 760
+
     static func usesWorkspace(size: CGSize, isInnerDisplay: Bool, dynamicTypeSize: DynamicTypeSize) -> Bool {
         isInnerDisplay && size.width > size.height && size.width >= 760 && !dynamicTypeSize.isAccessibilitySize
     }
 
     static func usesColumns(width: CGFloat, dynamicTypeSize: DynamicTypeSize) -> Bool {
         width >= 600 && !dynamicTypeSize.isAccessibilitySize
+    }
+}
+
+struct SWOverviewLayout: Layout {
+    var preferredRingSize: CGFloat = 94
+    private let spacing: CGFloat = 12
+    private let textSpacing: CGFloat = 8
+
+    private struct Measurements {
+        let textWidth: CGFloat
+        let title: CGSize
+        let amount: CGSize
+        let detail: CGSize
+        let ring: CGFloat
+        let fullWidthAmount: Bool
+
+        var textHeight: CGFloat { title.height + amount.height + detail.height + 16 }
+        var headerHeight: CGFloat { max(title.height, ring) }
+        var height: CGFloat {
+            fullWidthAmount ? headerHeight + amount.height + detail.height + 16 : max(textHeight, ring)
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 4 else { return .zero }
+        let width: CGFloat
+        if let proposedWidth = proposal.width, proposedWidth.isFinite {
+            width = max(0, proposedWidth)
+        } else {
+            width = (subviews.prefix(3).map { $0.sizeThatFits(.unspecified).width }.max() ?? 0) + preferredRingSize + spacing
+        }
+        let sizes = measuredSizes(width: width, subviews: subviews)
+        return CGSize(width: width, height: sizes.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 4 else { return }
+        let sizes = measuredSizes(width: bounds.width, subviews: subviews)
+        let titleY = sizes.fullWidthAmount
+            ? bounds.minY + (sizes.headerHeight - sizes.title.height) / 2
+            : bounds.midY - sizes.textHeight / 2
+        let amountY = sizes.fullWidthAmount
+            ? bounds.minY + sizes.headerHeight + textSpacing
+            : titleY + sizes.title.height + textSpacing
+        let amountWidth = sizes.fullWidthAmount ? bounds.width : sizes.textWidth
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: titleY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: sizes.textWidth, height: sizes.title.height))
+        subviews[1].place(at: CGPoint(x: bounds.minX, y: amountY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: amountWidth, height: sizes.amount.height))
+        subviews[2].place(at: CGPoint(x: bounds.minX, y: amountY + sizes.amount.height + textSpacing), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: amountWidth, height: sizes.detail.height))
+        let ringY = sizes.fullWidthAmount
+            ? bounds.minY + (sizes.headerHeight - sizes.ring) / 2 : bounds.midY - sizes.ring / 2
+        subviews[3].place(at: CGPoint(x: bounds.maxX - sizes.ring, y: ringY),
+                          anchor: .topLeading, proposal: ProposedViewSize(width: sizes.ring, height: sizes.ring))
+    }
+
+    private func measuredSizes(width: CGFloat, subviews: Subviews) -> Measurements {
+        let ring = min(preferredRingSize, max(56, width * 0.28), max(0, width - spacing))
+        let textWidth = max(0, width - ring - spacing)
+        let fullWidthAmount = subviews[1].sizeThatFits(.unspecified).width * 0.6 > textWidth
+        let amountWidth = fullWidthAmount ? width : textWidth
+        return Measurements(
+            textWidth: textWidth,
+            title: subviews[0].sizeThatFits(ProposedViewSize(width: textWidth, height: nil)),
+            amount: subviews[1].sizeThatFits(ProposedViewSize(width: amountWidth, height: nil)),
+            detail: subviews[2].sizeThatFits(ProposedViewSize(width: amountWidth, height: nil)),
+            ring: ring, fullWidthAmount: fullWidthAmount
+        )
+    }
+}
+
+struct SWAdaptivePairLayout: Layout {
+    var spacing: CGFloat = 12
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+        let idealColumnWidth = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let width = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? idealColumnWidth * 2 + spacing
+        let horizontal = width >= idealColumnWidth * 2 + spacing
+        let sizes = measuredSizes(width: width, horizontal: horizontal, subviews: subviews)
+        let height = horizontal ? max(sizes[0].height, sizes[1].height) : sizes[0].height + spacing + sizes[1].height
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let idealColumnWidth = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let horizontal = bounds.width >= idealColumnWidth * 2 + spacing
+        let sizes = measuredSizes(width: bounds.width, horizontal: horizontal, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let x = horizontal && index == 1 ? bounds.minX + sizes[0].width + spacing : bounds.minX
+            let y = !horizontal && index == 1 ? bounds.minY + sizes[0].height + spacing : bounds.minY
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(sizes[index]))
+        }
+    }
+
+    private func measuredSizes(width: CGFloat, horizontal: Bool, subviews: Subviews) -> [CGSize] {
+        let columnWidth = horizontal ? max(0, (width - spacing) / 2) : width
+        return subviews.map { subview in
+            let measured = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil))
+            return CGSize(width: columnWidth, height: measured.height)
+        }
     }
 }
 
@@ -393,7 +495,7 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
     @ViewBuilder var secondary: () -> Secondary
 
     var body: some View {
-        GeometryReader { _ in
+        GeometryReader { geometry in
             if usesWorkspace {
                 SWAdaptiveColumns(isWide: true, fillsHeight: true) {
                     SWAnchoredScrollView(position: primaryPosition) {
@@ -411,7 +513,8 @@ struct SWWorkspacePage<Primary: View, Secondary: View>: View {
                         primary()
                         if showSecondaryInCompact { secondary() }
                     }
-                    .frame(maxWidth: 620, alignment: .topLeading)
+                    .frame(width: min(SWAdaptiveLayout.compactMaximumWidth, max(0, geometry.size.width - 32)),
+                           alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -471,7 +574,7 @@ struct SWAdaptiveColumns<Content: View>: View {
             .onGeometryChange(for: CGRect?.self) { geometry in
                 guard isWide else { return nil }
                 if #available(iOS 27.1, *) {
-                    for region in geometry.reservedRegions(kind: .division) where region.isActive {
+                    for region in geometry.reservedRegions(kind: .division, options: .includeInactive) {
                         guard region.frame.height > region.frame.width else { continue }
                         let start = region.frame.minX - region.margins.leading - 10
                         let end = region.frame.maxX + region.margins.trailing + 10
@@ -534,7 +637,7 @@ struct SWAdaptivePage<Content: View>: View {
             let isWide = SWAdaptiveLayout.usesColumns(width: contentWidth, dynamicTypeSize: dynamicTypeSize)
             ScrollView(showsIndicators: false) {
                 content(isWide)
-                    .frame(maxWidth: maximumWidth, alignment: .topLeading)
+                    .frame(width: contentWidth, alignment: .topLeading)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -645,6 +748,7 @@ private struct FitnessCardModifier: ViewModifier {
             : Color.white.opacity(0.08)
 
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)

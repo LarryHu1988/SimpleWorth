@@ -17,6 +17,7 @@ private enum EntryEditorFocusedField: Hashable {
 
 @MainActor
 struct EntryEditorSheet: View {
+    @ScaledMetric(relativeTo: .caption2) private var minimumCategoryCellWidth: CGFloat = 68
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
@@ -38,7 +39,6 @@ struct EntryEditorSheet: View {
     @State private var amountText: String
     @State private var date: Date
     @State private var selectedCategoryID: String
-    @State private var categorySearchText = ""
     @State private var selectedCurrencyCode: String
     @State private var selectedTagNames: [String]
     @State private var showCurrencyPicker = false
@@ -331,19 +331,29 @@ struct EntryEditorSheet: View {
                             refundAmountCard
                         } else {
                             amountCard
+                                .accessibilityElement(children: .contain)
+                                .accessibilityIdentifier("entry.section.amount")
                         }
                         if shouldShowRefundDetail {
                             refundDetailCard
                                 .id(refundDetailRefreshID)
                         }
                         noteCard
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("entry.section.note")
                         dateCard
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("entry.section.date")
+                        tagCard
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("entry.section.tags")
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     VStack(spacing: 16) {
-                        tagCard
                         if !isRefundForm {
                             categoryCard
+                                .accessibilityElement(children: .contain)
+                                .accessibilityIdentifier("entry.section.category")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -734,18 +744,11 @@ struct EntryEditorSheet: View {
     }
 
     private var categoryCard: some View {
-        let columns = Array(
-            repeating: GridItem(.flexible(minimum: 44), spacing: 6),
-            count: 5
-        )
-
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "分类", subtitle: "快速选择图标分类")
 
-            CategorySearchField(text: $categorySearchText)
-
-            LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(CategoryLibrary.filtered(categories, matching: categorySearchText, locale: locale)) { category in
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCategoryCellWidth), spacing: 8)], spacing: 8) {
+                ForEach(categories) { category in
                     Button {
                         selectedCategoryID = category.id
                     } label: {
@@ -789,11 +792,6 @@ struct EntryEditorSheet: View {
                 }
             }
             .id(locale.identifier)
-            if CategoryLibrary.filtered(categories, matching: categorySearchText, locale: locale).isEmpty {
-                Text("未找到匹配分类".appLocalized(in: locale))
-                    .font(.subheadline)
-                    .foregroundStyle(SWTheme.textSecondary)
-            }
         }
         .fitnessCard()
     }

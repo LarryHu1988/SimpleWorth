@@ -1,25 +1,25 @@
 import SwiftData
 import SwiftUI
 
-private struct EntryEditTarget: Identifiable {
-    let id: UUID
-    let entry: LedgerEntry
+private struct LedgerEditorTarget: Identifiable {
+    let id = UUID()
+    let entry: LedgerEntry?
+    let categoryID: String?
+    let operation: EntryEditorOperation
+    let usesFullScreen: Bool
 }
 
 struct LedgerFlowView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.swUsesWorkspace) private var usesWorkspace
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var allEntries: [LedgerEntry]
     @Query(sort: [SortDescriptor(\TagRecord.sortOrder), SortDescriptor(\TagRecord.createdAt)]) private var allTags: [TagRecord]
     @State private var distributionState = StatsPanelState()
 
     let flow: FlowType
 
-    @State private var showCreateSheet = false
-    @State private var presetCategoryID: String?
-    @State private var editingTarget: EntryEditTarget?
-    @State private var copyTarget: EntryEditTarget?
-    @State private var refundTarget: EntryEditTarget?
+    @State private var editorTarget: LedgerEditorTarget?
     @State private var pendingDeleteEntry: LedgerEntry?
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
@@ -218,30 +218,11 @@ struct LedgerFlowView: View {
                 .accessibilityLabel(L10n.string("ledger.addFlow", locale: locale, flow.localizedTitle(in: locale)))
             }
         }
-        .sheet(isPresented: $showCreateSheet, onDismiss: {
-            presetCategoryID = nil
-        }) {
-            EntryEditorSheet(flow: flow, presetCategoryID: presetCategoryID, operation: .create)
+        .sheet(item: editorBinding(fullScreen: false)) { target in
+            editor(for: target)
         }
-        .sheet(item: $editingTarget) { target in
-            EntryEditorSheet(
-                flow: flow,
-                entry: target.entry,
-                operation: .edit,
-                linkedRefundEntries: refundEntries(for: target.entry)
-            )
-        }
-        .sheet(item: $copyTarget) { target in
-            EntryEditorSheet(flow: flow, entry: target.entry, operation: .copy)
-        }
-        .sheet(item: $refundTarget) { target in
-            EntryEditorSheet(
-                flow: target.entry.flow,
-                entry: target.entry,
-                operation: .refund,
-                linkedRefundEntries: refundEntries(for: target.entry),
-                refundLimitAmountCNY: remainingRefundAmountCNY(for: target.entry)
-            )
+        .fullScreenCover(item: editorBinding(fullScreen: true)) { target in
+            editor(for: target)
         }
         .onChange(of: availableYears) { _, _ in
             normalizeSelectionIfNeeded()
@@ -438,14 +419,14 @@ struct LedgerFlowView: View {
                             showCopyAction: !entry.isRefundEntry,
                             showRefundAction: flow == .expense,
                             onTap: {
-                                editingTarget = EntryEditTarget(id: entry.id, entry: entry)
+                                presentEditor(operation: .edit, entry: entry)
                             },
                             onCopy: {
-                                copyTarget = EntryEditTarget(id: entry.id, entry: entry)
+                                presentEditor(operation: .copy, entry: entry)
                             },
                             onRefund: {
                                 guard flow == .expense else { return }
-                                refundTarget = EntryEditTarget(id: entry.id, entry: entry)
+                                presentEditor(operation: .refund, entry: entry)
                             },
                             onDelete: {
                                 pendingDeleteEntry = entry
@@ -461,8 +442,38 @@ struct LedgerFlowView: View {
     }
 
     private func presentCreateSheet(categoryID: String?) {
-        presetCategoryID = categoryID
-        showCreateSheet = true
+        presentEditor(operation: .create, categoryID: categoryID)
+    }
+
+    private func presentEditor(operation: EntryEditorOperation, entry: LedgerEntry? = nil, categoryID: String? = nil) {
+        editorTarget = LedgerEditorTarget(entry: entry, categoryID: categoryID,
+                                          operation: operation, usesFullScreen: usesWorkspace)
+    }
+
+    private func editorBinding(fullScreen: Bool) -> Binding<LedgerEditorTarget?> {
+        Binding(get: { editorTarget?.usesFullScreen == fullScreen ? editorTarget : nil },
+                set: { value in
+                    if value != nil || editorTarget?.usesFullScreen == fullScreen { editorTarget = value }
+                })
+    }
+
+    private func editor(for target: LedgerEditorTarget) -> some View {
+        let linkedRefunds: [LedgerEntry]
+        switch target.operation {
+        case .edit, .refund:
+            linkedRefunds = target.entry.map { refundEntries(for: $0) } ?? []
+        default:
+            linkedRefunds = []
+        }
+        let refundLimit: Double?
+        if case .refund = target.operation {
+            refundLimit = target.entry.map { remainingRefundAmountCNY(for: $0) }
+        } else {
+            refundLimit = nil
+        }
+        return EntryEditorSheet(flow: flow, entry: target.entry, presetCategoryID: target.categoryID,
+                                operation: target.operation, linkedRefundEntries: linkedRefunds,
+                                refundLimitAmountCNY: refundLimit)
     }
 
     private func refundEntries(for entry: LedgerEntry) -> [LedgerEntry] {

@@ -2,6 +2,13 @@ import Charts
 import SwiftData
 import SwiftUI
 
+private struct StatsSettingsPaneBoundsKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 private struct MonthlyTrendRow: Identifiable {
     let month: Int
     let expense: Double
@@ -321,21 +328,31 @@ struct StatsView: View {
         case .distribution:
             distributionCard
         case .full:
-            if usesWorkspace {
+            NavigationStack {
                 fullWorkspacePage
-                    .safeAreaInset(edge: .top, spacing: 0) { workspaceHeader }
-                    .appBackground()
-            } else {
-                NavigationStack {
-                    fullWorkspacePage
-                        .fixedMainPageTitle("统计".appLocalized(in: locale))
-                        .toolbar {
-                            ToolbarItemGroup(placement: .topBarTrailing) {
-                                yearMenu
-                                settingsButton
-                            }
+                    .fixedMainPageTitle("统计".appLocalized(in: locale))
+                    .toolbar {
+                        ToolbarItemGroup(placement: .topBarTrailing) {
+                            yearMenu
+                            settingsButton
                         }
-                        .appBackground()
+                    }
+                    .appBackground()
+            }
+            .overlayPreferenceValue(StatsSettingsPaneBoundsKey.self) { anchor in
+                if usesWorkspace, appRuntimeController.isStatsSettingsPresented, let anchor {
+                    GeometryReader { geometry in
+                        let bounds = geometry[anchor]
+                        // Keep settings destinations outside the main navigation stack.
+                        SettingsPaneHost(path: settingsPath) {
+                            appRuntimeController.isStatsSettingsPresented = false
+                            appRuntimeController.statsSettingsPath.removeAll()
+                        }
+                        .frame(width: bounds.width, height: bounds.height)
+                        .position(x: bounds.midX, y: bounds.midY)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("settings.pane")
+                    }
                 }
             }
         }
@@ -347,30 +364,12 @@ struct StatsView: View {
                 overviewContent
             } secondary: {
                 if usesWorkspace, appRuntimeController.isStatsSettingsPresented {
-                    SettingsPaneHost(path: settingsPath) {
-                        appRuntimeController.isStatsSettingsPresented = false
-                        appRuntimeController.statsSettingsPath.removeAll()
-                    }
+                    Color.clear
+                        .anchorPreference(key: StatsSettingsPaneBoundsKey.self, value: .bounds) { $0 }
                 } else {
                     distributionCard
                 }
             }
-    }
-
-    private var workspaceHeader: some View {
-        HStack(spacing: 16) {
-            Text("统计".appLocalized(in: locale))
-                .font(.title2.weight(.bold))
-                .foregroundStyle(SWTheme.primaryText)
-                .accessibilityIdentifier("mainPageTitle")
-            Spacer()
-            yearMenu
-            settingsButton.labelStyle(.iconOnly)
-                .frame(width: 44, height: 44)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
-        .background(.ultraThinMaterial)
     }
 
     private var settingsButton: some View {
@@ -455,12 +454,12 @@ struct StatsView: View {
                 monthMenu
             }
 
-            HStack(spacing: 12) {
+            SWAdaptivePairLayout {
                 StatMetric(title: "收入", valueText: income.cnyText(in: locale), tint: SWTheme.accentGreen)
                 StatMetric(title: "支出", valueText: expense.cnyText(in: locale), tint: SWTheme.accentOrange)
             }
 
-            HStack(spacing: 12) {
+            SWAdaptivePairLayout {
                 StatMetric(title: "净结余", valueText: balance.signedCNYText(in: locale), tint: SWTheme.accentBlue)
                 StatMetric(
                     title: "储蓄率",
@@ -832,9 +831,15 @@ private struct StatsDistributionContent: View {
                 }
                 .frame(height: 250)
 
-                centerLabel
             }
             .frame(maxWidth: .infinity)
+            .overlay {
+                GeometryReader { geometry in
+                    centerLabel
+                        .frame(width: max(0, min(geometry.size.width, geometry.size.height) * 0.58 - 16))
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                }
+            }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("stats.distribution.chart")
 
@@ -869,7 +874,9 @@ private struct StatsDistributionContent: View {
                 Text(selectedStat.amount.cnyText(in: locale))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(SWTheme.primaryText)
-                    .minimumScaleFactor(0.72)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityIdentifier("stats.distribution.centerAmount")
 
                 Text(percentageText(for: selectedStat.amount))
                     .font(.caption2.weight(.semibold))
@@ -882,10 +889,11 @@ private struct StatsDistributionContent: View {
                 Text(total.cnyText(in: locale))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(SWTheme.primaryText)
-                    .minimumScaleFactor(0.72)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityIdentifier("stats.distribution.centerAmount")
             }
         }
-        .frame(width: 116)
         .contentShape(Rectangle())
         .onTapGesture {
             clearSelection()
@@ -920,6 +928,8 @@ private struct StatsDistributionContent: View {
                 Text(item.amount.cnyText(in: locale))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(isSelected ? item.color : SWTheme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
 
                 Text(percentageText(for: item.amount))
                     .font(.caption2.weight(.semibold))
@@ -1142,7 +1152,10 @@ private struct StatMetric: View {
             Text(valueText)
                 .font(.headline.weight(.bold))
                 .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .monospacedDigit()
                 .minimumScaleFactor(0.75)
+                .accessibilityIdentifier("stats.metric.\(title)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)

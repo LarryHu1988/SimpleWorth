@@ -18,6 +18,7 @@ final class ScrollingTests: XCTestCase {
     func testCategoryExpansionStaysInPlaceInWorkspace() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launch()
         guard app.frame.width >= 760 else { throw XCTSkip("Run workspace expansion on a wide iPad.") }
         XCTAssertTrue(app.buttons["qa.wide"].waitForExistence(timeout: 15))
@@ -68,6 +69,7 @@ final class ScrollingTests: XCTestCase {
     func testTaggedRowsReflowAcrossWorkspaceWidths() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["QA_SYNTHETIC_SIZE"] = "1"
         app.launchEnvironment["QA_SCROLL_ROWS"] = "300"
         app.launch()
         guard app.frame.width >= 760 else { throw XCTSkip("Run the width-reflow case on a wide iPad.") }

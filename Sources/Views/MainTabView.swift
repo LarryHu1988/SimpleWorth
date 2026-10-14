@@ -7,14 +7,17 @@ struct MainTabView: View {
     @Environment(\.locale) private var locale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.swWorkspaceOverride) private var workspaceOverride
-    @State private var hasDeviceHinge = false
     @State private var floatingTabBarHeight: CGFloat = 73
 
     var body: some View {
         GeometryReader { geometry in
-            let usesSystemNavigation = prefersSystemNavigation(in: geometry)
             let usesWorkspace = workspaceOverride ?? SWAdaptiveLayout.usesWorkspace(
                 size: geometry.size, isInnerDisplay: hasInnerDivision(in: geometry), dynamicTypeSize: dynamicTypeSize
+            )
+            // Phone pages keep their bottom tabs in every compact pose, including Duo's outer landscape.
+            let usesSystemNavigation = usesWorkspace || (
+                UIDevice.current.userInterfaceIdiom == .pad
+                    && horizontalSizeClass == .regular && geometry.size.width >= 600
             )
             TabView(selection: selectedTabBinding) {
                 NavigationStack {
@@ -55,13 +58,13 @@ struct MainTabView: View {
                 }
             }
             .environment(\.swUsesSystemNavigation, usesSystemNavigation)
+            .environment(\.horizontalSizeClass, usesSystemNavigation ? horizontalSizeClass : .compact)
             .environment(\.swUsesWorkspace, usesWorkspace)
             .environment(\.swMainPageBottomClearance, usesSystemNavigation ? 0 : floatingTabBarHeight)
             .onChange(of: usesWorkspace, initial: true) { _, value in
                 appRuntimeController.usesWorkspace = value
             }
         }
-        .modifier(SWFoldableObserver { hasDeviceHinge = $0 })
     }
 
     private func hasInnerDivision(in geometry: GeometryProxy) -> Bool {
@@ -71,32 +74,11 @@ struct MainTabView: View {
         return false
     }
 
-    private func prefersSystemNavigation(in geometry: GeometryProxy) -> Bool {
-        if hasDeviceHinge || hasInnerDivision(in: geometry) {
-            return true
-        }
-        return (horizontalSizeClass == .regular && geometry.size.width >= 600)
-            || geometry.safeAreaInsets.leading >= 32 || geometry.safeAreaInsets.trailing >= 32
-    }
-
     private var selectedTabBinding: Binding<AppRuntimeController.MainTab> {
         Binding(
             get: { appRuntimeController.selectedMainTab },
             set: { appRuntimeController.selectedMainTab = $0 }
         )
-    }
-}
-
-private struct SWFoldableObserver: ViewModifier {
-    let onChange: (Bool) -> Void
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 27.1, *) {
-            content.onHingeChange { _, context in onChange(context.hinge != nil) }
-        } else {
-            content
-        }
     }
 }
 

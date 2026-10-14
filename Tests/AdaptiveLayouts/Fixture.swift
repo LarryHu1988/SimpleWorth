@@ -7,21 +7,26 @@ struct AdaptiveLayoutCheckApp: App {
     @StateObject private var controller: AppRuntimeController
 
     init() {
-        UserDefaults.standard.set("zh-Hans", forKey: SettingsKeys.appLanguage)
+        let language = ProcessInfo.processInfo.environment["QA_LANGUAGE"] ?? "zh-Hans"
+        UserDefaults.standard.set(language, forKey: SettingsKeys.appLanguage)
         let controller = AppRuntimeController()
         let context = controller.container.mainContext
         let rowCount = min(max(Int(ProcessInfo.processInfo.environment["QA_SCROLL_ROWS"] ?? "25") ?? 25, 25), 300)
         let previousRowCount = UserDefaults.standard.object(forKey: "qa.fixture.rowCount") as? Int ?? 25
-        if (try? context.fetchCount(FetchDescriptor<LedgerEntry>())) == 0 || previousRowCount != rowCount {
+        let stressContent = ProcessInfo.processInfo.environment["QA_WIDTH_STRESS"] == "1"
+        let previousStressContent = UserDefaults.standard.bool(forKey: "qa.fixture.widthStress")
+        if (try? context.fetchCount(FetchDescriptor<LedgerEntry>())) == 0 || previousRowCount != rowCount
+            || stressContent != previousStressContent {
             for entry in (try? context.fetch(FetchDescriptor<LedgerEntry>())) ?? [] { context.delete(entry) }
             for flow in FlowType.allCases {
                 for index in 0..<rowCount {
                     let name = flow == .expense ? (index < 18 ? "鞋靴" : "餐饮") : "工资"
                     let category = CategoryLibrary.category(named: name, flow: flow)!
                     context.insert(LedgerEntry(
-                        createdAt: Date.now.addingTimeInterval(-Double(index)), amount: 100,
-                        note: "QA \(flow.storageValue) \(index)", flow: flow, category: category,
-                        tagNames: rowCount > 25 ? ["QA tag", "生活", "待核对", "长标签换行验证"] : []
+                        createdAt: Date.now.addingTimeInterval(-Double(index)), amount: stressContent ? 12_345_678.9 : 100,
+                        note: stressContent ? "QA \(flow.storageValue) \(index) - Daily shopping and a longer note" : "QA \(flow.storageValue) \(index)",
+                        flow: flow, category: category,
+                        tagNames: rowCount > 25 || stressContent ? ["QA tag", "生活", "待核对", "长标签换行验证"] : []
                     ))
                 }
             }
@@ -36,8 +41,13 @@ struct AdaptiveLayoutCheckApp: App {
                 }
             }
             if (try? context.fetchCount(FetchDescriptor<TagRecord>())) == 0 { context.insert(TagRecord(name: "QA tag")) }
+            for goal in (try? context.fetch(FetchDescriptor<SavingsGoalRecord>())) ?? [] {
+                goal.currentAmount = stressContent ? 12_345_678.9 : 100
+                goal.targetAmount = stressContent ? 99_999_999 : 400
+            }
             try? context.save()
             UserDefaults.standard.set(rowCount, forKey: "qa.fixture.rowCount")
+            UserDefaults.standard.set(stressContent, forKey: "qa.fixture.widthStress")
         }
         _controller = StateObject(wrappedValue: controller)
     }
@@ -47,7 +57,7 @@ struct AdaptiveLayoutCheckApp: App {
             FixtureRoot()
                 .environmentObject(controller)
                 .modelContainer(controller.container)
-                .environment(\.locale, Locale(identifier: "zh-Hans"))
+                .environment(\.locale, Locale(identifier: ProcessInfo.processInfo.environment["QA_LANGUAGE"] ?? "zh-Hans"))
                 .preferredColorScheme(.light)
                 .background {
                     if #available(iOS 27.1, *) {
@@ -74,6 +84,7 @@ private struct PoseRecorder: View {
         var sceneY: Double = 0
         var sceneWidth: Double = 0
         var sceneHeight: Double = 0
+        var interfaceOrientation = 0
         var sceneIsActive = false
         var angle: Double?
         var status: String?
@@ -120,12 +131,13 @@ private struct PoseRecorder: View {
         .accessibilityLabel("QA pose")
         .accessibilityValue(String(data: (try? JSONEncoder().encode(measurement)) ?? Data(), encoding: .utf8) ?? "")
         .background {
-            WindowSceneRecorder { frame, isActive in
+            WindowSceneRecorder { frame, isActive, orientation in
                 measurement.sceneX = frame.minX
                 measurement.sceneY = frame.minY
                 measurement.sceneWidth = frame.width
                 measurement.sceneHeight = frame.height
                 measurement.sceneIsActive = isActive
+                measurement.interfaceOrientation = orientation
                 save()
             }
         }
@@ -139,16 +151,17 @@ private struct PoseRecorder: View {
 }
 
 private struct WindowSceneRecorder: UIViewRepresentable {
-    let onChange: (CGRect, Bool) -> Void
+    let onChange: (CGRect, Bool, Int) -> Void
     func makeUIView(context: Context) -> Probe { Probe() }
     func updateUIView(_ view: Probe, context: Context) { view.onChange = onChange }
     static func dismantleUIView(_ view: Probe, coordinator: Void) { view.timer?.invalidate() }
 
     final class Probe: UIView {
-        var onChange: (CGRect, Bool) -> Void = { _, _ in }
+        var onChange: (CGRect, Bool, Int) -> Void = { _, _, _ in }
         var timer: Timer?
         private var lastFrame: CGRect?
         private var lastIsActive: Bool?
+        private var lastOrientation: Int?
         override func didMoveToWindow() {
             super.didMoveToWindow()
             timer?.invalidate()
@@ -157,10 +170,12 @@ private struct WindowSceneRecorder: UIViewRepresentable {
                 guard let self, let scene = self.window?.windowScene else { return }
                 let frame = scene.coordinateSpace.convert(scene.coordinateSpace.bounds, to: scene.screen.coordinateSpace)
                 let isActive = scene.activationState == .foregroundActive
-                guard frame != self.lastFrame || isActive != self.lastIsActive else { return }
+                let orientation = scene.effectiveGeometry.interfaceOrientation.rawValue
+                guard frame != self.lastFrame || isActive != self.lastIsActive || orientation != self.lastOrientation else { return }
                 self.lastFrame = frame
                 self.lastIsActive = isActive
-                self.onChange(frame, isActive)
+                self.lastOrientation = orientation
+                self.onChange(frame, isActive, orientation)
             }
         }
         deinit { timer?.invalidate() }
@@ -173,8 +188,16 @@ private struct FixtureRoot: View {
     @EnvironmentObject private var appRuntimeController: AppRuntimeController
 
     var body: some View {
-        if ProcessInfo.processInfo.environment["QA_WORKSPACE_COMMANDS"] == "1" {
-            AppRootView(appRuntimeController: appRuntimeController, appLanguage: .simplifiedChinese, themeMode: .daylight)
+        if let width = ProcessInfo.processInfo.environment["QA_CONTAINER_WIDTH"].flatMap(Double.init) {
+            GeometryReader { geometry in
+                AppRootView(appRuntimeController: appRuntimeController, appLanguage: fixtureLanguage, themeMode: .daylight)
+                    .environment(\.swWorkspaceOverride, false)
+                    .environment(\.horizontalSizeClass, .compact)
+                    .frame(width: min(max(0, width), geometry.size.width))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else if ProcessInfo.processInfo.environment["QA_WORKSPACE_COMMANDS"] == "1" {
+            AppRootView(appRuntimeController: appRuntimeController, appLanguage: fixtureLanguage, themeMode: .daylight)
                 .environment(\.swWorkspaceOverride, commandedWorkspace)
                 .background {
                     Color.clear
@@ -190,10 +213,10 @@ private struct FixtureRoot: View {
                     commandedWorkspace = value
                 }
         } else if ProcessInfo.processInfo.environment["QA_REAL_ROOT"] == "1" {
-            AppRootView(appRuntimeController: appRuntimeController, appLanguage: .simplifiedChinese, themeMode: .daylight)
+            AppRootView(appRuntimeController: appRuntimeController, appLanguage: fixtureLanguage, themeMode: .daylight)
         } else if ProcessInfo.processInfo.environment["QA_NATIVE_SIZE"] == "1" {
-            MainTabView()
-        } else {
+            AppRootView(appRuntimeController: appRuntimeController, appLanguage: fixtureLanguage, themeMode: .daylight)
+        } else if ProcessInfo.processInfo.environment["QA_SYNTHETIC_SIZE"] == "1" {
             GeometryReader { geometry in
                 MainTabView()
                     .environment(\.swWorkspaceOverride, width >= 600)
@@ -210,6 +233,12 @@ private struct FixtureRoot: View {
                 .buttonStyle(.bordered)
                 .padding(6)
             }
+        } else {
+            AppRootView(appRuntimeController: appRuntimeController, appLanguage: fixtureLanguage, themeMode: .daylight)
         }
+    }
+
+    private var fixtureLanguage: AppLanguage {
+        AppLanguage(rawValue: ProcessInfo.processInfo.environment["QA_LANGUAGE"] ?? "zh-Hans") ?? .simplifiedChinese
     }
 }

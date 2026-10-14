@@ -54,31 +54,37 @@ struct FlowSummaryCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(periodTitle)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(SWTheme.primaryText)
-                Text(signedAmount.signedCNYText(in: locale))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .minimumScaleFactor(0.75)
-                Text(compareText)
-                    .font(.footnote)
-                    .foregroundStyle(SWTheme.textSecondary)
-            }
-
-            Spacer(minLength: 8)
+        SWOverviewLayout {
+            Text(periodTitle)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .accessibilityIdentifier("flow.summary.title")
+            Text(signedAmount.signedCNYText(in: locale))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(SWTheme.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .monospacedDigit()
+                .accessibilityIdentifier("flow.summary.amount")
+            Text(compareText)
+                .font(.footnote)
+                .foregroundStyle(SWTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("flow.summary.detail")
 
             ZStack {
                 ProgressRing(progress: ringProgress, tint: flow.accent, lineWidth: 12)
-                    .frame(width: 94, height: 94)
                 Image(systemName: flow.tabIcon)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(flow.accent)
             }
+            .accessibilityIdentifier("flow.summary.ring")
         }
         .fitnessCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("flow.summary")
     }
 }
 
@@ -88,17 +94,13 @@ struct CategoryGridSection: View {
     let subtitle: String
     let categories: [CategoryItem]
     var onTapCategory: ((CategoryItem) -> Void)? = nil
-
-    private let columns = Array(
-        repeating: GridItem(.flexible(minimum: 44), spacing: 6),
-        count: 5
-    )
+    @ScaledMetric(relativeTo: .caption2) private var minimumCellWidth: CGFloat = 68
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: title, subtitle: subtitle)
 
-            LazyVGrid(columns: columns, spacing: 8) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCellWidth), spacing: 8)], spacing: 8) {
                 ForEach(categories) { item in
                     Button {
                         HapticService.impact(style: .soft)
@@ -114,38 +116,6 @@ struct CategoryGridSection: View {
             .id(locale.identifier)
         }
         .fitnessCard()
-    }
-}
-
-struct CategorySearchField: View {
-    @Environment(\.locale) private var locale
-    @Binding var text: String
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(SWTheme.textSecondary)
-            TextField("搜索分类或物品".appLocalized(in: locale), text: $text)
-                .focused($isFocused)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .onSubmit { isFocused = false }
-                .accessibilityIdentifier("category.search")
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(SWTheme.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("清除搜索".appLocalized(in: locale))
-            }
-        }
-        .padding(12)
-        .background(SWTheme.primaryText.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -284,20 +254,23 @@ private struct LedgerRowContent: View, Equatable {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(snapshot.note)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SWTheme.primaryText)
-
-                HStack(spacing: 6) {
-                    Text(snapshot.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
-                        .font(.caption)
-                        .foregroundStyle(SWTheme.textSecondary)
-
-                    if CurrencyCatalog.normalize(code: snapshot.currencyCode) != "CNY" {
-                        Text(L10n.string("entry.convertedInline", locale: locale, snapshot.signedCNYAmount.signedCNYText(in: locale)))
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(SWTheme.textSecondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        noteLabel.fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        amountLabel.fixedSize(horizontal: true, vertical: false)
                     }
+                    VStack(alignment: .leading, spacing: 3) {
+                        amountLabel.frame(maxWidth: .infinity, alignment: .trailing)
+                        noteLabel.fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { dateLabel; convertedAmountLabel }
+                        .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 3) { dateLabel; convertedAmountLabel }
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if !allTagNames.isEmpty {
@@ -324,18 +297,45 @@ private struct LedgerRowContent: View, Equatable {
                     )
                 }
             }
-
-            Spacer(minLength: 8)
-
-            Text(signedDisplayAmountText)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(amountTint)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.04))
         )
+    }
+
+    private var noteLabel: some View {
+        Text(snapshot.note)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(SWTheme.primaryText)
+            .accessibilityIdentifier("ledger.note")
+    }
+
+    private var amountLabel: some View {
+        Text(signedDisplayAmountText)
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(amountTint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .monospacedDigit()
+            .accessibilityIdentifier("ledger.amount")
+    }
+
+    private var dateLabel: some View {
+        Text(snapshot.createdAt.ledgerDateText(showTime: detailedTimeEnabled, locale: locale))
+            .font(.caption)
+            .foregroundStyle(SWTheme.textSecondary)
+    }
+
+    @ViewBuilder
+    private var convertedAmountLabel: some View {
+        if CurrencyCatalog.normalize(code: snapshot.currencyCode) != "CNY" {
+            Text(L10n.string("entry.convertedInline", locale: locale, snapshot.signedCNYAmount.signedCNYText(in: locale)))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(SWTheme.textSecondary)
+        }
     }
 
     private func tagTint(for tagName: String) -> Color {
@@ -351,7 +351,7 @@ private struct LedgerRowContent: View, Equatable {
             Text(tagName)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(SWTheme.primaryText.opacity(0.92))
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 4)

@@ -9,6 +9,8 @@ private struct CurrencyRateItem: Identifiable {
 
 @MainActor
 struct CurrencySettingsView: View {
+    @Environment(\.swSettingsPageHorizontalPadding) private var pageHorizontalPadding
+    @Environment(\.swSettingsIsEmbedded) private var isEmbedded
     @Environment(\.locale) private var locale
     @Environment(\.openURL) private var openURL
     @StateObject private var currencyStore: CurrencyStore
@@ -65,16 +67,21 @@ struct CurrencySettingsView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 16) {
-                baseCurrencyCard
-                searchCard
-                rateListCard
-                exchangeRateAttribution
+        GeometryReader { geometry in
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 16) {
+                    baseCurrencyCard
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("settings.currency.summary")
+                    searchCard
+                    rateListCard
+                    exchangeRateAttribution
+                }
+                .frame(width: max(0, geometry.size.width - pageHorizontalPadding * 2))
+                .padding(.horizontal, pageHorizontalPadding)
+                .padding(.top, 14)
+                .padding(.bottom, 28)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 28)
         }
         .navigationTitle("货币选择")
         .navigationBarTitleDisplayMode(.inline)
@@ -92,6 +99,7 @@ struct CurrencySettingsView: View {
         .task {
             await currencyStore.refreshRates(force: false)
         }
+        .ignoresSafeArea(.container, edges: isEmbedded ? .horizontal : [])
         .appBackground()
     }
 

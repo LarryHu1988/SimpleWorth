@@ -37,7 +37,7 @@ final class InteractionTests: XCTestCase {
         attach(app, "editor-tag-order")
     }
 
-    func testEnglishSearchAndTagActionsRemainAvailable() {
+    func testEnglishCategoriesAndTagActionsRemainAvailable() {
         let app = XCUIApplication()
         app.launchEnvironment["QA_LANGUAGE"] = "en"
         app.launch()
@@ -49,33 +49,31 @@ final class InteractionTests: XCTestCase {
         XCTAssertTrue(app.buttons["Close"].firstMatch.waitForExistence(timeout: 5))
         app.buttons["Close"].firstMatch.tap()
         app.buttons["qa.expense"].tap()
-        let search = app.textFields["category.search"]
-        reveal(search, in: app)
-        search.tap()
-        search.typeText("sneakers\n")
-        XCTAssertTrue(app.buttons["entry.category.鞋靴"].waitForExistence(timeout: 5))
-        attach(app, "english-shoes-search")
+        XCTAssertFalse(app.textFields["category.search"].exists)
+        let shoes = app.buttons["entry.category.鞋靴"]
+        reveal(shoes, in: app)
+        shoes.tap()
+        XCTAssertTrue(shoes.isSelected)
+        attach(app, "english-shoes-category")
     }
 
-    func testExpenseIncomeSearchAndLegacyCategory() {
+    func testExpenseIncomeCategoriesAndLegacyCategory() {
         let app = XCUIApplication()
         app.launch()
         app.buttons["qa.expense"].tap()
-        let search = app.textFields["category.search"]
-        reveal(search, in: app)
-        search.tap()
-        search.typeText("运动鞋\n")
+        XCTAssertFalse(app.textFields["category.search"].exists)
         let shoes = app.buttons["entry.category.鞋靴"]
-        XCTAssertTrue(shoes.waitForExistence(timeout: 5))
+        reveal(shoes, in: app)
         shoes.tap()
         XCTAssertTrue(shoes.isSelected)
         attach(app, "shoes-category")
         app.buttons["取消"].firstMatch.tap()
         app.buttons["qa.income"].tap()
-        reveal(search, in: app)
-        search.tap()
-        search.typeText("闲置\n")
-        XCTAssertTrue(app.buttons["entry.category.二手"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["category.search"].exists)
+        let resale = app.buttons["entry.category.二手"]
+        reveal(resale, in: app)
+        resale.tap()
+        XCTAssertTrue(resale.isSelected)
         attach(app, "resale-category")
         app.buttons["取消"].firstMatch.tap()
         app.buttons["qa.legacy"].tap()
@@ -87,7 +85,7 @@ final class InteractionTests: XCTestCase {
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<24 {
             let top = app.navigationBars.allElementsBoundByIndex.last?.frame.maxY ?? 90
-            let frame = element.frame
+            let frame = element.exists ? element.frame : .zero
             if element.isHittable, frame.minY > top + 8, frame.maxY < app.frame.maxY - 40 { return }
             let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
             let belowHeader = element.exists && frame.height > 0 && frame.minY <= top + 8

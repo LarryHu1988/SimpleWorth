@@ -1,6 +1,26 @@
 import SwiftUI
 import UIKit
 
+private struct SettingsPageHorizontalPaddingKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 16
+}
+
+private struct SettingsEmbeddedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var swSettingsPageHorizontalPadding: CGFloat {
+        get { self[SettingsPageHorizontalPaddingKey.self] }
+        set { self[SettingsPageHorizontalPaddingKey.self] = newValue }
+    }
+
+    var swSettingsIsEmbedded: Bool {
+        get { self[SettingsEmbeddedKey.self] }
+        set { self[SettingsEmbeddedKey.self] = newValue }
+    }
+}
+
 enum SettingsLayout {
     static let pageSectionSpacing: CGFloat = 14
     static let sectionSpacing: CGFloat = 10
@@ -104,6 +124,8 @@ private struct SettingsRowButtonStyle: ButtonStyle {
 }
 
 struct SettingsDetailContainer<Content: View>: View {
+    @Environment(\.swSettingsPageHorizontalPadding) private var pageHorizontalPadding
+    @Environment(\.swSettingsIsEmbedded) private var isEmbedded
     @ViewBuilder let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -111,15 +133,18 @@ struct SettingsDetailContainer<Content: View>: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                content
+        GeometryReader { geometry in
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    content
+                }
+                .frame(width: max(0, geometry.size.width - pageHorizontalPadding * 2), alignment: .leading)
+                .padding(.horizontal, pageHorizontalPadding)
+                .padding(.top, 14)
+                .padding(.bottom, 28)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 28)
         }
+        .ignoresSafeArea(.container, edges: isEmbedded ? .horizontal : [])
         .appBackground()
     }
 }
