@@ -2,10 +2,12 @@
 
 ## Layout contract
 
-- Outer display in either orientation and inner portrait retain each complete
-  phone page as one column, with the same floating bottom tabs as a slab iPhone.
-  Card widths follow the current usable viewport; a device hinge or a large
-  camera/status safe area alone never enables side tabs or a workspace.
+- Outer display in either orientation retains each complete phone page as one
+  column, with system tabs vertically aligned on the right rail. Page navigation
+  keeps compact sizing independently of tab placement, avoiding duplicate side
+  insets. Inner portrait keeps the same floating bottom tabs as a slab iPhone.
+  Card widths follow the current usable viewport; a large camera/status safe
+  area alone never enables side tabs or a workspace.
 - Inner landscape adds a separately scrolling secondary pane; available space and
   the inner display's reserved division determine eligibility, not a device name.
 - Expense/income retain summary, quick categories and records on the left, with
@@ -19,6 +21,10 @@
   Both keep at least 16 points of horizontal content padding within that pane;
   embedded presentation is a separate environment value from content padding.
 - Compact statistics continues to present settings using the production app sheet.
+- Settings language controls try a smaller inline font and spacing before using
+  a second row; normal Duo landscape keeps the label and all four options aligned.
+- All four main titles/date controls stay visible while scrolling. On iOS 27,
+  the shared title modifier disables navigation-bar minimization explicitly.
 - Period bindings are shared within each page; selection state survives reparenting.
   Donut selection publishes only to the chart/list, not to the ledger or trend.
 
@@ -83,7 +89,7 @@ use simctl io DEVICE screenshot --display=primary-1 for inner-screen visual QA.
 
 ## Actual pose and Split View checks
 
-For the six Duo layout repairs, start closed in portrait and run:
+For the Duo layout repairs and current navigation policy, start closed in portrait and run:
 
 ```sh
 QA_LIVE_TRANSITIONS=1 bash Tests/AdaptiveLayouts/run.sh DUO_SIMULATOR_UUID \
@@ -94,7 +100,8 @@ At each `SIX_FIXES_*` stage, use Device Hub to open landscape, rotate the inner
 display to portrait, close and rotate the outer display to landscape, then return
 to outer portrait. The test uses one unchanged app process with native geometry,
 checks all four pages in every pose, checks the default fixture has no width
-buttons, verifies bottom navigation and full usable card widths in phone poses,
+buttons, verifies right-side navigation on the outer display, bottom navigation
+in inner portrait and full usable card widths in phone poses,
 and measures the embedded settings content margins.
 
 These opt-in tests keep one app process alive throughout each sequence. Start
@@ -772,3 +779,51 @@ original Duo simulator as well. The isolated Duo displays the production app's
 landscape settings page. Its active-inner-display screenshot was inspected:
 `/tmp/SimpleWorth-duo-six-fixes-production-settings.png`; the outer portrait
 production screenshot is `/tmp/SimpleWorth-duo-six-fixes-production-outer.png`.
+
+## Right rail, inline language and fixed headers (2026-10-15)
+
+This follow-up replaces the outer-display bottom-tab policy recorded on October
+14. A closed hinge enables the system right rail; each page independently keeps
+compact navigation sizing, so the rail does not add another inset inside the
+content. Inner portrait retains phone bottom tabs.
+
+Language controls try the regular inline layout, then caption2 text with smaller
+horizontal padding and gaps, before falling back for genuinely narrower/larger
+text layouts. The actual Duo landscape settings pane keeps the label and all four
+options on one row, while preserving its existing content margins.
+
+The baseline scroll test reproduced disappearing title/date controls. Setting
+toolbar visibility alone did not prevent minimization. The shared main-page
+modifier now uses iOS 27's
+[`toolbarMinimizationBehavior(.never, for: .navigationBar)`](https://developer.apple.com/documentation/swiftui/view/toolbarminimizationbehavior(_:for:))
+and keeps the existing behavior on older systems. Up/down drags verify unchanged
+title/year frames and hittability on all four pages.
+
+Final successful results, all with zero failures, skips or runtime warnings:
+
+| Device / pose | Checks | Result bundle |
+| --- | --- | --- |
+| Duo closed outer | Right-rail alignment/content separation, four fixed headers, native long-money widths | `/tmp/SimpleWorth-duo-followup-fixed-outer.xcresult` (3 passed) |
+| Duo opened landscape | Four fixed headers, settings/currency margins, inline language options and return | `/tmp/SimpleWorth-duo-followup-wide.xcresult` (2 passed) |
+| iPhone SE | Four fixed headers, native long-money widths, compact settings/currency return | `/tmp/SimpleWorth-duo-followup-phone.xcresult` (3 passed) |
+| Duo real folding/rotation | Five poses / 20 page checks, outer right rail, inner portrait bottom tabs, inline language row | `/tmp/SimpleWorth-duo-followup-live.xcresult` (1 passed) |
+
+The real sequence used unchanged foreground process 69322 on isolated device
+`6815A36B-A194-4E00-AA1B-D4CC947F56DC`. It restored the initial outer portrait
+direction (orientation 1), with compact card widths 350 / 637 / 562 / 350 points
+in initial outer portrait / inner portrait / outer landscape / restored outer.
+
+Baseline and intermediate failed attempts remain failed: the early native rail
+assertion required disjoint accessibility rectangles, but native hit rectangles
+overlap at their edges. The final check verifies aligned horizontal centers,
+ordered vertical centers, and separation from the page content instead.
+
+The three changed production files match the tested source copy; hashes are in
+`/tmp/SimpleWorth-duo-followup-source-sha256.txt`. The unsigned Release simulator
+build passed in `/tmp/SimpleWorth-duo-followup-release.log`. That app was installed
+on the isolated Duo and its actual landscape settings screenshot was inspected:
+`/tmp/SimpleWorth-duo-followup-settings-inline.png`. Scroll-after screenshots
+`/tmp/SimpleWorth-duo-followup-vault-pinned.png` and
+`/tmp/SimpleWorth-duo-followup-stats-pinned.png` show the QA data fixture with
+fixed headers and right tabs. These are local changes marked unreleased in the
+main README; no signed archive, commit, push or TestFlight upload was performed.

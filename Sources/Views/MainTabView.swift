@@ -8,23 +8,28 @@ struct MainTabView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.swWorkspaceOverride) private var workspaceOverride
     @State private var floatingTabBarHeight: CGFloat = 73
+    @State private var isDuoOuterDisplay = false
 
     var body: some View {
         GeometryReader { geometry in
             let usesWorkspace = workspaceOverride ?? SWAdaptiveLayout.usesWorkspace(
                 size: geometry.size, isInnerDisplay: hasInnerDivision(in: geometry), dynamicTypeSize: dynamicTypeSize
             )
-            // Phone pages keep their bottom tabs in every compact pose, including Duo's outer landscape.
-            let usesSystemNavigation = usesWorkspace || (
+            let usesTabletNavigation = (
                 UIDevice.current.userInterfaceIdiom == .pad
                     && horizontalSizeClass == .regular && geometry.size.width >= 600
             )
+            // Duo's outer tabs occupy the system rail; its pages retain phone-width navigation.
+            let usesSystemNavigation = isDuoOuterDisplay || usesWorkspace || usesTabletNavigation
+            let pageSizeClass: UserInterfaceSizeClass? = usesWorkspace || usesTabletNavigation
+                ? horizontalSizeClass : .compact
             TabView(selection: selectedTabBinding) {
                 NavigationStack {
                     ExpenseView()
                         .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .expense)
                         .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
                 }
+                .environment(\.horizontalSizeClass, pageSizeClass)
                 .tabItem { Label("支出".appLocalized(in: locale), systemImage: "minus.circle.fill") }
                 .tag(AppRuntimeController.MainTab.expense)
 
@@ -33,6 +38,7 @@ struct MainTabView: View {
                         .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .income)
                         .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
                 }
+                .environment(\.horizontalSizeClass, pageSizeClass)
                 .tabItem { Label("收入".appLocalized(in: locale), systemImage: "plus.circle.fill") }
                 .tag(AppRuntimeController.MainTab.income)
 
@@ -41,10 +47,12 @@ struct MainTabView: View {
                         .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .vault)
                         .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
                 }
+                .environment(\.horizontalSizeClass, pageSizeClass)
                 .tabItem { Label("金库".appLocalized(in: locale), systemImage: "lock.shield.fill") }
                 .tag(AppRuntimeController.MainTab.vault)
 
                 StatsView()
+                    .environment(\.horizontalSizeClass, pageSizeClass)
                     .environment(\.swChartPageIsActive, appRuntimeController.selectedMainTab == .stats)
                     .toolbar(usesSystemNavigation ? .visible : .hidden, for: .tabBar)
                 .tabItem { Label("统计".appLocalized(in: locale), systemImage: "chart.bar.xaxis") }
@@ -65,6 +73,7 @@ struct MainTabView: View {
                 appRuntimeController.usesWorkspace = value
             }
         }
+        .modifier(DuoOuterDisplayObserver(isOuterDisplay: $isDuoOuterDisplay))
     }
 
     private func hasInnerDivision(in geometry: GeometryProxy) -> Bool {
@@ -79,6 +88,20 @@ struct MainTabView: View {
             get: { appRuntimeController.selectedMainTab },
             set: { appRuntimeController.selectedMainTab = $0 }
         )
+    }
+}
+
+private struct DuoOuterDisplayObserver: ViewModifier {
+    @Binding var isOuterDisplay: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.onHingeChange { _, context in
+                isOuterDisplay = context.hinge?.status == .closed
+            }
+        } else {
+            content
+        }
     }
 }
 

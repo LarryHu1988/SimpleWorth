@@ -487,14 +487,11 @@ struct StatsSettingsView: View {
 
     private var languageInlineRow: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: SettingsLayout.rowSpacing) {
-                languageRowLabel
-                Spacer(minLength: 8)
-                languageControls
-            }
+            languageSingleRow(compact: false)
+            languageSingleRow(compact: true)
             VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
                 languageRowLabel
-                languageControls.frame(maxWidth: .infinity, alignment: .trailing)
+                languageControls(compact: false).frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .frame(
@@ -504,6 +501,14 @@ struct StatsSettingsView: View {
         )
         .contentShape(Rectangle())
         .padding(.vertical, SettingsLayout.rowVerticalPadding)
+    }
+
+    private func languageSingleRow(compact: Bool) -> some View {
+        HStack(spacing: compact ? 6 : SettingsLayout.rowSpacing) {
+            languageRowLabel
+            Spacer(minLength: compact ? 0 : 8)
+            languageControls(compact: compact)
+        }
     }
 
     private var languageRowLabel: some View {
@@ -516,50 +521,48 @@ struct StatsSettingsView: View {
             Text("语言选择")
                 .font(SettingsLayout.titleFont)
                 .foregroundStyle(SWTheme.primaryText)
+                .accessibilityIdentifier("settings.language.title")
         }
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var languageControls: some View {
-        HStack(spacing: 6) {
+    private func languageControls(compact: Bool) -> some View {
+        HStack(spacing: compact ? 3 : 6) {
             ForEach(AppLanguage.allCases) { language in
-                Button {
-                    appLanguageRaw = language.rawValue
-                    HapticService.selection()
-                } label: {
-                    Text(language.shortLabel)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(
-                            language == selectedAppLanguage
-                                ? SWTheme.primaryText
-                                : SWTheme.textSecondary
-                        )
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .frame(height: SettingsLayout.inlineControlSize)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(
-                                    language == selectedAppLanguage
-                                        ? Color.white.opacity(0.22)
-                                        : Color.white.opacity(0.08)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(
-                                            language == selectedAppLanguage
-                                                ? Color.white.opacity(0.48)
-                                                : Color.white.opacity(0.12),
-                                            lineWidth: 1
-                                        )
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(language.displayName)
+                languageButton(language, compact: compact)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func languageButton(_ language: AppLanguage, compact: Bool) -> some View {
+        let isSelected = language == selectedAppLanguage
+        let optionFont: Font = compact ? .caption2 : .caption
+        let horizontalPadding: CGFloat = compact ? 3 : 8
+
+        return Button {
+            appLanguageRaw = language.rawValue
+            HapticService.selection()
+        } label: {
+            Text(language.shortLabel)
+                .font(optionFont.weight(.semibold))
+                .foregroundStyle(isSelected ? SWTheme.primaryText : SWTheme.textSecondary)
+                .lineLimit(1)
+                .padding(.horizontal, horizontalPadding)
+                .frame(height: SettingsLayout.inlineControlSize)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(isSelected ? 0.22 : 0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.white.opacity(isSelected ? 0.48 : 0.12), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(language.displayName)
+        .accessibilityIdentifier("settings.language.\(language.rawValue)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func settingsActionRow(

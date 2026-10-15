@@ -298,6 +298,8 @@ private struct MainPageTitleModifier: ViewModifier {
         content
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .modifier(PersistentMainNavigationBarModifier())
+            .toolbar(.visible, for: .navigationBar)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -319,6 +321,16 @@ private struct MainPageTitleModifier: ViewModifier {
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("mainPageTitle")
+    }
+}
+
+private struct PersistentMainNavigationBarModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27.0, *) {
+            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
+        } else {
+            content
+        }
     }
 }
 

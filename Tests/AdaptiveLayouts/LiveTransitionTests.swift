@@ -28,6 +28,12 @@ final class LiveTransitionTests: XCTestCase {
         attach(app, "six-fixes-inner-settings-margins")
         XCTAssertGreaterThanOrEqual(summary.frame.minX - pane.frame.minX, 16)
         XCTAssertGreaterThanOrEqual(pane.frame.maxX - summary.frame.maxX, 16)
+        let languageTitle = app.staticTexts["settings.language.title"]
+        for language in ["zh-Hans", "zh-Hant", "en", "ja"] {
+            let option = app.buttons["settings.language.\(language)"]
+            XCTAssertTrue(option.isHittable)
+            XCTAssertEqual(option.frame.midY, languageTitle.frame.midY, accuracy: 1)
+        }
         XCTAssertTrue(app.buttons["settings.done"].isHittable)
         app.buttons["settings.done"].tap()
 
@@ -126,11 +132,18 @@ final class LiveTransitionTests: XCTestCase {
                            pose.isOpenedWorkspace ? "wide" : "compact")
             if !pose.isOpenedWorkspace {
                 let bar = app.otherElements["mainTab.bar"]
-                XCTAssertTrue(bar.exists && app.buttons["mainTab.\(key)"].isHittable)
-                XCTAssertGreaterThan(bar.frame.minY, app.windows.firstMatch.frame.midY)
                 XCTAssertFalse(app.scrollViews["workspace.secondary"].exists)
                 let card = app.otherElements[key == "stats" ? "stats.overview" :
                     (key == "vault" ? "vault.overview" : "flow.summary")]
+                if pose.isClosedOuterDisplay {
+                    XCTAssertFalse(bar.exists)
+                    let tab = app.buttons.containing(.image, identifier: symbol).firstMatch
+                    XCTAssertTrue(tab.isHittable)
+                    XCTAssertGreaterThanOrEqual(tab.frame.minX, card.frame.maxX)
+                } else {
+                    XCTAssertTrue(bar.exists && app.buttons["mainTab.\(key)"].isHittable)
+                    XCTAssertGreaterThan(bar.frame.minY, app.windows.firstMatch.frame.midY)
+                }
                 XCTAssertEqual(card.frame.width, min(760, pose.width - 32), accuracy: 2,
                                "Every phone page must fill the current usable width")
             }

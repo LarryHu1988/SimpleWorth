@@ -9,6 +9,72 @@ final class NativeDeviceTests: XCTestCase {
         checkResponsiveWidths(language: "en")
     }
 
+    func testNativeMainHeadersStayFixedWhileScrolling() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        for (key, symbol) in [("expense", "minus.circle.fill"), ("income", "plus.circle.fill"),
+                              ("vault", "lock.shield.fill"), ("stats", "chart.bar.xaxis")] {
+            tapTab(in: app, key: key, symbol: symbol)
+            let title = app.staticTexts["mainPageTitle"].firstMatch
+            let year = app.buttons["period.year"].firstMatch
+            let initialTitle = title.frame
+            let initialYear = year.frame
+            let page = app.scrollViews["adaptive.page"].firstMatch
+            for direction in [true, false] {
+                let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: direction ? 0.75 : 0.3))
+                let end = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: direction ? 0.3 : 0.75))
+                start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+                attach(app, "fixed-header-\(key)-\(direction ? "up" : "down")")
+                XCTAssertTrue(title.isHittable && year.isHittable)
+                XCTAssertEqual(title.frame.minY, initialTitle.minY, accuracy: 1)
+                XCTAssertEqual(title.frame.height, initialTitle.height, accuracy: 1)
+                XCTAssertEqual(year.frame.minY, initialYear.minY, accuracy: 1)
+                XCTAssertEqual(year.frame.height, initialYear.height, accuracy: 1)
+            }
+        }
+    }
+
+    func testDuoOuterTabsUseRightRail() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        let recorder = app.otherElements["qa.pose"]
+        XCTAssertTrue(recorder.waitForExistence(timeout: 20))
+        let value = recorder.value as? String ?? ""
+        guard let pose = try? JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any],
+              pose["status"] as? String == "closed" else {
+            throw XCTSkip("Run on the actual closed Duo outer display.")
+        }
+        let native = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !app.otherElements["mainTab.bar"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [native], timeout: 5), .completed)
+        var frames: [CGRect] = []
+        for (key, title, symbol) in [("expense", "支出", "minus.circle.fill"),
+                                      ("income", "收入", "plus.circle.fill"),
+                                      ("vault", "金库", "lock.shield.fill"),
+                                      ("stats", "统计", "chart.bar.xaxis")] {
+            tapTab(in: app, key: key, symbol: symbol)
+            let tab = app.buttons.matching(NSPredicate(format: "label == %@", title))
+                .containing(.image, identifier: symbol).firstMatch
+            let card = app.otherElements[key == "stats" ? "stats.overview" :
+                (key == "vault" ? "vault.overview" : "flow.summary")]
+            XCTAssertTrue(tab.isHittable)
+            XCTAssertGreaterThanOrEqual(tab.frame.minX, card.frame.maxX)
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(tab.frame))
+            frames.append(tab.frame)
+            attach(app, "outer-right-rail-\(key)")
+        }
+        for index in 1..<frames.count {
+            XCTAssertEqual(frames[index].midX, frames[0].midX, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(frames[index].midY - frames[index - 1].midY, 24)
+        }
+    }
+
     func testResponsiveWidthMatrix() {
         for width in [320, 360, 390, 430, 600, 669, 760] {
             checkResponsiveWidths(language: "zh-Hans", width: width)
@@ -245,6 +311,14 @@ final class NativeDeviceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(done.frame.width, 44)
         XCTAssertGreaterThanOrEqual(done.frame.height, 44)
         XCTAssertGreaterThanOrEqual(pane.frame.maxX - done.frame.maxX, 16)
+        let languageTitle = app.staticTexts["settings.language.title"]
+        for language in ["zh-Hans", "zh-Hant", "en", "ja"] {
+            let option = app.buttons["settings.language.\(language)"]
+            XCTAssertTrue(option.isHittable)
+            XCTAssertEqual(option.frame.midY, languageTitle.frame.midY, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(option.frame.minX, languageTitle.frame.maxX)
+            XCTAssertLessThanOrEqual(option.frame.maxX, summary.frame.maxX - 16)
+        }
         XCTAssertTrue(primary.staticTexts["收支概览"].exists)
         XCTAssertEqual(primary.frame.minX, originalPrimary.minX, accuracy: 2)
         XCTAssertEqual(primary.frame.maxX, originalPrimary.maxX, accuracy: 2)
