@@ -8,6 +8,8 @@ test_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_dir="$(cd "$test_dir/../.." && pwd)"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/SimpleWorth-adaptive.XXXXXX")"
 cp -R "$repo_dir/Sources" "$work_dir/Sources"
+# Keep production orientation support instead of Xcode's generated defaults.
+plutil -replace CFBundleDisplayName -string 简值布局测试 "$work_dir/Sources/Info.plist"
 cp "$test_dir/"*.swift "$test_dir/project.yml" "$work_dir/"
 awk '!/^@main$/ { sub(/^private struct AppRootView:/, "struct AppRootView:"); print }' "$repo_dir/Sources/App/SimpleWorthApp.swift" > "$work_dir/Sources/App/SimpleWorthApp.swift"
 printf 'Test artifacts: %s\n' "$work_dir"

@@ -1,5 +1,7 @@
 on run arguments
-    if (count arguments) is not 1 then error "Use closed, open, partially-open or rotate-right."
+    if (count arguments) < 1 or (count arguments) > 2 then error "Use closed, open, partially-open or rotate-right, with an optional window name prefix."
+    set windowPrefix to "iPhone Duo"
+    if (count arguments) is 2 then set windowPrefix to item 2 of arguments
     set requestedPose to item 1 of arguments
     if requestedPose is "closed" then
         set controlHelp to "Closed"
@@ -18,7 +20,7 @@ on run arguments
     tell application "System Events"
         tell process "DeviceHub"
             if (count windows) is 0 then error "Unlock the Mac and open the Duo window in Device Hub."
-            set targetWindow to first window whose name starts with "iPhone Duo"
+            set targetWindow to first window whose name starts with windowPrefix
             -- Restrict clicks to the device pose bar, not simulated app controls.
             set poseBar to group 3 of splitter group 1 of group 1 of splitter group 1 of group 1 of targetWindow
             repeat with poseButton in buttons of poseBar

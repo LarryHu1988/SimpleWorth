@@ -326,7 +326,8 @@ private struct MainPageTitleModifier: ViewModifier {
 
 private struct PersistentMainNavigationBarModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 27.0, *) {
+        // The 27.0 runtime cannot resolve this modifier built with the 27.1 SDK.
+        if #available(iOS 27.1, *) {
             content.toolbarMinimizationBehavior(.never, for: .navigationBar)
         } else {
             content

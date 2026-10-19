@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 simulator_id="${1:?Simulator UUID required}"
-legacy_ref="${2:-V0.7.20}"
+legacy_ref="${2:-4ab3b0a24519964f35e310a3cd1a17b224dab231}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 test_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_dir="$(cd "$test_dir/../.." && pwd)"
