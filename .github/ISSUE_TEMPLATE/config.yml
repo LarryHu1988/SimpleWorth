@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 下载 SimpleWorth / Download
+    url: https://apps.apple.com/app/id6761478113
+    about: App Store 正式版本 / Current App Store release.
+  - name: 技术支持 / Support
+    url: https://larryhu.com/simpleworth/support/
+    about: 常见问题与联系作者 / FAQs and contact details.
+  - name: 隐私政策 / Privacy
+    url: https://larryhu.com/simpleworth/privacy/
+    about: 本地存储、iCloud 备份与数据处理说明 / Data-handling information.

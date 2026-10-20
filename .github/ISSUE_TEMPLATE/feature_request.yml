@@ -1,0 +1,21 @@
+name: 功能建议 / Feature request
+description: 描述你的使用场景与想改善的问题 / Describe a use case.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 使用场景与问题 / Use case and problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的改善 / Proposed improvement
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 其他说明 / Additional context
+      description: 请勿包含私人账目或账号信息。Do not include private ledger or account information.

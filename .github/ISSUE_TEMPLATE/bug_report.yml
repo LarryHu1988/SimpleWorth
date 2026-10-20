@@ -1,0 +1,38 @@
+name: 问题反馈 / Bug report
+description: 报告 SimpleWorth 的显示、记录或交互问题 / Report a reproducible issue.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: 请勿上传完整账本、Apple 账号、备份文件或未打码的私人记录。Please redact private ledger details and never attach account credentials or full backups.
+  - type: input
+    id: app_version
+    attributes:
+      label: App 版本与构建号 / App version and build
+      placeholder: "1.0 (1)"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 设备、系统、语言与外观 / Device, OS, language and appearance
+      placeholder: "iPhone / iPad · iOS version · 简体中文 / English · Light / Dark"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期与实际表现 / Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已打码截图与补充说明 / Redacted screenshots and context
+      description: 布局问题请说明横竖屏、可用窗口宽度、键盘状态；折叠屏请注明内外屏和实际姿态。For layout issues, include orientation, window width and keyboard state; for foldables, specify the active display and physical pose.

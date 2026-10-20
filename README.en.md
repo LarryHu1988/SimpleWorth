@@ -1,43 +1,75 @@
-<div align="center">
-<img src="docs/assets/icon.png" width="96" alt="SimpleWorth app icon">
+<p align="center"><a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/icon.png" width="64" alt="SimpleWorth app icon"></a></p>
+<h1 align="center">SimpleWorth</h1>
+<p align="center"><strong>Less clutter. More clarity.</strong></p>
+<p align="center"><a href="https://apps.apple.com/app/id6761478113">Download on the App Store ↗</a> · <a href="https://larryhu.com/simpleworth/">Website & interactive preview ↗</a> · <a href="README.md">简体中文</a></p>
 
-# SimpleWorth
+<p align="center"><a href="https://apps.apple.com/app/id6761478113"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-light.png">
+  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-light.png" width="1200" alt="SimpleWorth 1.0: Less clutter. More clarity. Free, no ads, iPhone and iPad, iOS 17 or later.">
+</picture></a></p>
 
-### Less clutter. More clarity.
+<p align="center"><strong>1.0</strong> · Free · No ads · iPhone / iPad · iOS 17+</p>
 
-Keep up with everyday spending. Make steady progress toward your goals.
+<p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-light.png">
+  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-light.png" width="1200" alt="Four spaces: Expenses, Income, Vault and Statistics. Categories, tags, a calculator, savings goals, deposits, trends and breakdowns.">
+</picture></a></p>
 
-**1.0** · Free · No ads · iPhone / iPad · iOS 17+
+## A little lighter. A little calmer.
 
-[Download on the App Store](https://apps.apple.com/app/id6761478113) · [Product website](https://larryhu.com/simpleworth/) · [简体中文](README.md)
-</div>
+Soft blue gradients, translucent cards, and green, orange, blue and pink accents give everyday bookkeeping room to breathe.
 
-## Four spaces for everyday life
+<p align="center">
+<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-01-expenses.png" width="180" alt="Expenses: categories, tags and entries"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-04-income.png" width="180" alt="Income: monthly earnings and records"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-05-savings.png" width="180" alt="Vault: savings goals, deposits and progress"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-03-breakdown.png" width="180" alt="Statistics: category and tag breakdowns"></a>
+</p>
 
-| Expenses | Income | Vault | Statistics |
-| --- | --- | --- | --- |
-| Categories, tags and notes | Monthly income records | Goals, deposits and progress | Overview, trends and breakdowns |
+<p align="center"><sub>Actual app screens. Sample data shown.</sub></p>
 
-SimpleWorth brings a calm, translucent interface to daily bookkeeping. Record expenses and income, duplicate entries, handle expense refunds, and calculate amounts with the built-in arithmetic controls. Explore monthly trends and interactive category or tag charts. Set savings goals with optional deadlines and track each deposit.
+<details>
+<summary><strong>Feature details · Text version</strong></summary>
 
-Use common currencies with base-currency conversion. Choose light, dark or system appearance. The app supports Simplified Chinese, Traditional Chinese, English and Japanese, with layouts that adapt to iPhone and iPad.
+- **Expenses and income**: categories, multiple tags, notes and monthly filters. Edit, duplicate or delete entries, handle expense refunds and calculate amounts with arithmetic controls.
+- **Vault**: savings goals, optional deadlines, deposits and progress.
+- **Statistics**: income, expenses, net balance, savings rate and monthly trends. Tap category or tag charts to inspect the entries behind each share.
+- **Currencies**: common currencies, base-currency conversion and rate refreshes. Rates are indicative.
+- **Appearance and languages**: light, dark or system appearance; Simplified Chinese, Traditional Chinese, English and Japanese.
+- **Adaptive layouts**: iPhone and iPad layouts follow the available space. Wider workspaces give entries and charts more room.
 
-## Your data, your control
+</details>
 
-Core bookkeeping works offline, with ledger data stored on your device by default. No app account is required. The app has no advertising or cross-app tracking SDKs and does not upload ledger content to developer-operated servers.
+## Your ledger stays yours.
 
-Optional iCloud automatic backup provides backup and restore under your Apple Account; it does not merge ledgers in real time. Restoring replaces the current on-device data. File import and export are available. Exchange-rate refreshes need a network connection; rates are indicative. See the [privacy policy](https://larryhu.com/simpleworth/privacy/) for service and data-handling details.
+Core bookkeeping works offline. Entries stay on your device by default, with no app account required. SimpleWorth has no advertising or cross-app tracking SDKs and does not upload ledger content to developer-operated servers.
 
-## Download and support
+Choose **iCloud automatic backup**, or export and restore your own data. iCloud provides backup and restore; it does not merge ledgers in real time. Restoring replaces the current on-device data. Rate refreshes require internet access.
 
-[App Store](https://apps.apple.com/app/id6761478113) · [Support](https://larryhu.com/simpleworth/support/#english) · [Privacy](https://larryhu.com/simpleworth/privacy/#english)
+[Read about privacy & data ↗](https://larryhu.com/simpleworth/privacy/#english)
 
-Contact [simpleworth@larryhu.com](mailto:simpleworth@larryhu.com). Include your app version, device, OS and steps to reproduce an issue. Redact private ledger details in screenshots.
+## Start with one small entry.
 
-## Development
+[**Get SimpleWorth on the App Store ↗**](https://apps.apple.com/app/id6761478113) · [Website](https://larryhu.com/simpleworth/) · [Support](https://larryhu.com/simpleworth/support/#english) · [Privacy](https://larryhu.com/simpleworth/privacy/#english)
 
-SwiftUI, SwiftData, Swift Charts and XcodeGen. Minimum iOS / iPadOS 17; version **1.0 (1)**. Run `xcodegen generate`, then open `SimpleWorth.xcodeproj`. Physical-device development requires your own signing and iCloud configuration.
+Use the [issue templates](https://github.com/LarryHu1988/SimpleWorth/issues/new/choose) or email [simpleworth@larryhu.com](mailto:simpleworth@larryhu.com). Redact private ledger details. See [support guidance](SUPPORT.md).
 
-See [development and isolated test instructions](docs/DEVELOPMENT.md), including the unresolved Duo outer-display upside-down portrait limitation. Only the **1.0** release and version tag are retained in this repository.
+<details>
+<summary><strong>Development, validation and releases</strong></summary>
 
-© 2026 Larry Hu. All rights reserved.
+SwiftUI · SwiftData · Swift Charts · XcodeGen. Minimum iOS / iPadOS 17; current distributed version **1.0 (1)**.
+
+```sh
+xcodegen generate
+open SimpleWorth.xcodeproj
+```
+
+[Development & isolated tests](docs/DEVELOPMENT.md) · [Contributing](CONTRIBUTING.md) · [Release retention](docs/RELEASES.md)
+
+Keep 1.0 and later releases, tags and required distribution materials. The development guide records the unresolved Duo outer-display upside-down portrait limitation.
+
+</details>
+
+<p align="center"><sub>© 2026 Larry Hu. All rights reserved.</sub></p>

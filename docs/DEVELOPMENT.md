@@ -42,4 +42,6 @@ Record actual native pose, scene geometry, keyboard, safe areas and retained sta
 
 ## Release scope
 
+See [release retention](RELEASES.md): retain 1.0 and later versions.
+
 GitHub presentation and version metadata are unified at **1.0 (1)**. App Store availability is linked from the product pages. Pending in-app-event preparation is not part of the 1.0 product announcement. Submission materials, account records, build archives and generated evidence belong in the local release workspace and are ignored by Git.
