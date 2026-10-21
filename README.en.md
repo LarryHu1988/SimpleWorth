@@ -15,7 +15,7 @@
 
 Centered five-column categories, direct feedback and privacy links, corrected rating and sharing links, and cleaner About and Other Apps screens. Category layouts accommodate iPhone, iPad and Duo screen widths.
 
-[Release notes in four languages](docs/release-notes/1.0.1.json) · [Website update notes](https://larryhu.com/simpleworth/updates/?lang=en-US). Version 1.0.1 (4) has been submitted for App Review and is not live yet. Version 1.0 remains available on the App Store; this update will be released manually after approval.
+[Release notes in four languages](docs/release-notes/1.0.1.json). Version 1.0.1 (4) has been submitted for App Review and is not live yet. Version 1.0 remains available on the App Store; this update will be released manually after approval.
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-dark.png">

@@ -15,7 +15,7 @@
 
 分类统一为每行五个，图标与文字居中；反馈和隐私入口直达，评价与分享链接更准确；关于简值与其它 APP 页面更清爽。兼顾 iPhone、iPad 与 Duo 的不同屏幕宽度。
 
-[四语更新日志](docs/release-notes/1.0.1.json) · [官网更新说明](https://larryhu.com/simpleworth/updates/)。1.0.1 (4) 已提交 Apple 审核，尚未正式发布；App Store 当前仍为 1.0，审核通过后手动发布。
+[四语更新日志](docs/release-notes/1.0.1.json)。1.0.1 (4) 已提交 Apple 审核，尚未正式发布；App Store 当前仍为 1.0，审核通过后手动发布。
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-features-dark.png">
