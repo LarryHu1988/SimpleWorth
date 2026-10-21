@@ -2,6 +2,9 @@ import Foundation
 
 enum AppConfig {
     static let iCloudContainerIdentifier = "iCloud.com.larry.SimpleWorth"
+    static let appStoreURL = URL(string: "https://apps.apple.com/cn/app/id6761478113")!
+    static let appStoreReviewURL = appStoreURL.appending(queryItems: [URLQueryItem(name: "action", value: "write-review")])
+    static let productWebsiteURL = URL(string: "https://larryhu.com/simpleworth/")!
     static let privacyPolicyURL = URL(string: "https://larryhu.com/simpleworth/privacy/")!
     static let supportWebsiteURL = URL(string: "https://larryhu.com/simpleworth/support/")!
     static let exchangeRateProviderURL = URL(string: "https://www.exchangerate-api.com")!

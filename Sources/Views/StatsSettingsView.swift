@@ -1,4 +1,3 @@
-import StoreKit
 import SwiftData
 import SwiftUI
 import UIKit
@@ -19,8 +18,6 @@ enum SettingsRoute: Hashable {
     case tags
     case iCloud
     case billImport
-    case feedback
-    case privacy
     case about
     case otherApps
 }
@@ -74,7 +71,7 @@ struct StatsSettingsView: View {
     @Environment(\.swSettingsPageHorizontalPadding) private var pageHorizontalPadding
     @Environment(\.swSettingsIsEmbedded) private var isEmbedded
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.requestReview) private var requestReview
+    @Environment(\.openURL) private var openURL
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: [SortDescriptor(\LedgerEntry.createdAt, order: .reverse)]) private var entries: [LedgerEntry]
@@ -95,7 +92,6 @@ struct StatsSettingsView: View {
     @State private var noticeSheet: SettingsNoticePayload?
     @Binding private var navigationPath: [SettingsRoute]
     private let onClose: (() -> Void)?
-    private let authorWebsiteURL = URL(string: "https://larryhu.com")
     private let supportEmail = "simpleworth@larryhu.com"
 
     init(navigationPath: Binding<[SettingsRoute]> = .constant([]), onClose: (() -> Void)? = nil) {
@@ -116,7 +112,7 @@ struct StatsSettingsView: View {
     }
 
     private var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7.21"
+        guard let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return "-" }
         return "V\(version)"
     }
 
@@ -232,12 +228,20 @@ struct StatsSettingsView: View {
                         }
 
                         SettingsSectionCard(title: "良性互动") {
-                            settingsRouteRow(
+                            settingsActionRow(
                                 title: "意见反馈",
                                 symbol: "envelope.fill",
-                                iconColor: SWTheme.accentBlue,
-                                route: .feedback
-                            )
+                                iconColor: SWTheme.accentBlue
+                            ) {
+                                openURL(URL(string: "mailto:\(supportEmail)")!) { accepted in
+                                    if !accepted {
+                                        UIPasteboard.general.string = supportEmail
+                                        presentNotice(message: L10n.string("settings.feedbackUnavailable", locale: uiLocale, supportEmail))
+                                    }
+                                }
+                                HapticService.selection()
+                            }
+                            .accessibilityIdentifier("settings.feedback")
 
                             SettingsRowDivider()
 
@@ -246,9 +250,14 @@ struct StatsSettingsView: View {
                                 symbol: "hand.thumbsup.fill",
                                 iconColor: SWTheme.accentGreen
                             ) {
-                                requestReview()
+                                openURL(AppConfig.appStoreReviewURL) { accepted in
+                                    if !accepted {
+                                        presentNotice(message: "settings.linkUnavailable".appLocalized(in: uiLocale))
+                                    }
+                                }
                                 HapticService.impact()
                             }
+                            .accessibilityIdentifier("settings.review")
 
                             SettingsRowDivider()
 
@@ -260,15 +269,23 @@ struct StatsSettingsView: View {
                                 showShareSheet = true
                                 HapticService.impact()
                             }
+                            .accessibilityIdentifier("settings.share")
                         }
 
                         SettingsSectionCard(title: "了解一下") {
-                            settingsRouteRow(
+                            settingsActionRow(
                                 title: "隐私协议",
                                 symbol: "hand.raised.fill",
-                                iconColor: SWTheme.accentBlue,
-                                route: .privacy
-                            )
+                                iconColor: SWTheme.accentBlue
+                            ) {
+                                openURL(AppConfig.privacyPolicyURL) { accepted in
+                                    if !accepted {
+                                        presentNotice(message: "settings.webLinkUnavailable".appLocalized(in: uiLocale))
+                                    }
+                                }
+                                HapticService.selection()
+                            }
+                            .accessibilityIdentifier("settings.privacy")
 
                             SettingsRowDivider()
 
@@ -278,15 +295,17 @@ struct StatsSettingsView: View {
                                 iconColor: SWTheme.accentOrange,
                                 route: .about
                             )
+                            .accessibilityIdentifier("settings.about")
 
                             SettingsRowDivider()
 
                             settingsRouteRow(
-                                title: "其他 APP",
+                                title: "其它 APP",
                                 symbol: "square.grid.2x2.fill",
                                 iconColor: SWTheme.accentGreen,
                                 route: .otherApps
                             )
+                            .accessibilityIdentifier("settings.otherApps")
                         }
                     }
                     .frame(width: max(0, geometry.size.width - pageHorizontalPadding * 2))
@@ -388,15 +407,13 @@ struct StatsSettingsView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let authorWebsiteURL {
-                ShareSheet(
-                    activityItems: [
-                        "我在用这款记账 App：SimpleWorth（简值），推荐你试试。".appLocalized(in: uiLocale),
-                        authorWebsiteURL
-                    ],
-                    subject: "SimpleWorth 简值".appLocalized(in: uiLocale)
-                )
-            }
+            ShareSheet(
+                activityItems: [
+                    "我在用这款记账 App：SimpleWorth（简值），推荐你试试。".appLocalized(in: uiLocale)
+                        + "\n" + AppConfig.appStoreURL.absoluteString
+                ],
+                subject: "SimpleWorth 简值".appLocalized(in: uiLocale)
+            )
         }
         .fileExporter(
             isPresented: $showFileExporter,
@@ -684,21 +701,10 @@ struct StatsSettingsView: View {
             ICloudSettingsView()
         case .billImport:
             BillImportGuideView(onImportSelected: importBills(from:))
-        case .feedback:
-            FeedbackContactView(supportEmail: supportEmail)
-        case .privacy:
-            PrivacyAgreementView(
-                supportEmail: supportEmail,
-                privacyPolicyURL: AppConfig.privacyPolicyURL
-            )
         case .about:
-            AboutSimpleWorthView(appVersionText: appVersionText)
+            AboutSimpleWorthView(appVersionText: appVersionText, language: selectedAppLanguage)
         case .otherApps:
-            OtherAppsView(
-                supportEmail: supportEmail,
-                authorWebsiteURL: authorWebsiteURL,
-                supportWebsiteURL: AppConfig.supportWebsiteURL
-            )
+            OtherAppsView()
         }
     }
 
@@ -1032,105 +1038,100 @@ private struct SettingsMetricCard: View {
 }
 
 private struct AboutSimpleWorthView: View {
-    @Environment(\.locale) private var locale
+    @Environment(\.openURL) private var openURL
 
     let appVersionText: String
+    let language: AppLanguage
 
     var body: some View {
         SettingsDetailContainer {
-            SettingsSectionCard(title: "简值是什么") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("简值是一款尽量简单、安静、专注的记账 App，希望把每天的收支、标签、金库目标和统计视图收进一套足够轻盈的体验里。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
+            introduction(in: language)
 
-                    Text("它更在意记录时的顺手、回看时的清楚，以及长期使用时的节奏感，所以会尽量减少打扰，让账单、目标和价值增长保持在同一个界面语言里。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
+            SettingsSectionCard {
+                SettingsPressableButton {
+                    HapticService.selection()
+                    openURL(AppConfig.productWebsiteURL)
+                } label: {
+                    informationRow(title: "APP 主页", emoji: "🌐")
                 }
-            }
-
-            SettingsSectionCard(title: "基本信息") {
-                SettingsKeyValueRow(title: "应用", value: "SimpleWorth（简值）")
+                .accessibilityIdentifier("about.homepage")
                 SettingsRowDivider()
-                SettingsKeyValueRow(title: "版本", value: appVersionText)
+                informationRow(title: "开发者", emoji: "👨‍💻", value: "Larry Hu")
+                    .accessibilityIdentifier("about.developer")
                 SettingsRowDivider()
-                SettingsKeyValueRow(title: "开发者", value: "Larry Hu")
-                SettingsRowDivider()
-                SettingsKeyValueRow(title: "定位", value: "轻量记账与目标管理".appLocalized(in: locale))
+                informationRow(title: "版本", emoji: "🏷️", value: appVersionText)
+                    .accessibilityIdentifier("about.version")
             }
         }
         .navigationTitle("关于简值")
         .navigationBarTitleDisplayMode(.inline)
     }
-}
 
-private struct PrivacyAgreementView: View {
-    @Environment(\.openURL) private var openURL
+    private func introduction(in language: AppLanguage) -> some View {
+        SettingsSectionCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    Image("SimpleWorthIcon")
+                        .resizable()
+                        .renderingMode(.original)
+                        .scaledToFit()
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .accessibilityLabel("SimpleWorth")
+                        .accessibilityIdentifier("about.icon")
 
-    let supportEmail: String
-    let privacyPolicyURL: URL
-
-    var body: some View {
-        SettingsDetailContainer {
-            SettingsSectionCard(title: "数据与同步") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("账单、标签、目标与存入记录默认仅保存在当前设备。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                    Text("开启 iCloud 自动备份后，新的备份文件会同步保存到你当前 Apple 账号的 iCloud。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
+                    Text(verbatim: L10n.string("about.slogan", locale: language.locale))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SWTheme.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Text(verbatim: L10n.string("about.introduction", locale: language.locale))
+                    .font(.footnote)
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.vertical, 4)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("about.introduction.\(language.rawValue)")
+    }
 
-            SettingsSectionCard(title: "联网与系统能力") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("查看或刷新汇率时，App 会请求 ExchangeRate-API 获取最新汇率；请求不会包含你的账单、标签或目标内容。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                    Text("意见反馈、好评鼓励与分享简值会调用系统邮件、评分与分享能力。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                }
-            }
+    private func informationRow(title: String, emoji: String, value: String? = nil) -> some View {
+        HStack(spacing: SettingsLayout.rowSpacing) {
+            Text(verbatim: emoji)
+                .font(.system(size: 20))
+                .frame(width: SettingsLayout.rowIconWidth)
+                .accessibilityHidden(true)
 
-            SettingsSectionCard(title: "联系作者") {
-                SettingsDetailActionRow(
-                    title: "查看完整隐私政策",
-                    symbol: "hand.raised.fill",
-                    iconColor: SWTheme.accentGreen
-                ) {
-                    openURL(privacyPolicyURL)
-                }
+            Text(title.appLocalized(in: language.locale))
+                .font(SettingsLayout.titleFont)
+                .foregroundStyle(SWTheme.primaryText)
 
-                SettingsRowDivider()
+            Spacer(minLength: 12)
 
-                SettingsDetailActionRow(
-                    title: "联系邮箱",
-                    symbol: "envelope.fill",
-                    iconColor: SWTheme.accentBlue
-                ) {
-                    guard let mailURL = URL(string: "mailto:\(supportEmail)") else { return }
-                    openURL(mailURL)
-                }
+            if let value {
+                Text(verbatim: value)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(SWTheme.textSecondary)
+                    .multilineTextAlignment(.trailing)
+            } else {
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SWTheme.textSecondary)
             }
         }
-        .navigationTitle("隐私协议")
-        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxWidth: .infinity, minHeight: SettingsLayout.rowContentMinHeight, alignment: .leading)
+        .padding(.vertical, SettingsLayout.rowVerticalPadding)
     }
 }
 
 private struct OtherAppsView: View {
     @Environment(\.openURL) private var openURL
 
-    let supportEmail: String
-    let authorWebsiteURL: URL?
-    let supportWebsiteURL: URL
-
     var body: some View {
         SettingsDetailContainer {
-            SettingsSectionCard(title: "更多作品") {
+            SettingsSectionCard {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(OtherAppListing.all) { app in
                         OtherAppLinkRow(app: app) {
@@ -1147,40 +1148,8 @@ private struct OtherAppsView: View {
                     }
                 }
             }
-
-            SettingsSectionCard(title: "联系与支持") {
-                SettingsDetailActionRow(
-                    title: "联系邮箱",
-                    symbol: "envelope.fill",
-                    iconColor: SWTheme.accentBlue
-                ) {
-                    guard let mailURL = URL(string: "mailto:\(supportEmail)") else { return }
-                    openURL(mailURL)
-                }
-
-                SettingsRowDivider()
-
-                SettingsDetailActionRow(
-                    title: "作者主页",
-                    symbol: "safari.fill",
-                    iconColor: SWTheme.accentGreen
-                ) {
-                    guard let authorWebsiteURL else { return }
-                    openURL(authorWebsiteURL)
-                }
-
-                SettingsRowDivider()
-
-                SettingsDetailActionRow(
-                    title: "技术支持",
-                    symbol: "questionmark.circle.fill",
-                    iconColor: SWTheme.accentOrange
-                ) {
-                    openURL(supportWebsiteURL)
-                }
-            }
         }
-        .navigationTitle("其他 APP")
+        .navigationTitle("其它 APP")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -1199,7 +1168,7 @@ private struct OtherAppListing: Identifiable {
             title: "KeepFit - 管住嘴迈开腿",
             description: "记录饮食、运动和热量差，帮你把管住嘴迈开腿落到每天。",
             iconAssetName: "KeepFitIcon",
-            appStoreURL: URL(string: "https://apps.apple.com/app/id6759662867")!,
+            appStoreURL: URL(string: "https://apps.apple.com/cn/app/id6759662867")!,
             accentColor: SWTheme.accentGreen
         ),
         OtherAppListing(
@@ -1207,7 +1176,7 @@ private struct OtherAppListing: Identifiable {
             title: "PDF Librarian",
             description: "整理书籍和学术文献 PDF，检索元数据、写入字段并规范文件名。",
             iconAssetName: "PDFLibrarianIcon",
-            appStoreURL: URL(string: "https://apps.apple.com/app/id6760351540?mt=12")!,
+            appStoreURL: URL(string: "https://apps.apple.com/us/app/pdf-librarian/id6760351540?mt=12")!,
             accentColor: SWTheme.accentBlue
         )
     ]
@@ -1270,6 +1239,8 @@ private struct OtherAppLinkRow: View {
         .accessibilityLabel(
             L10n.string("在 App Store 打开 %@", locale: locale, app.title.appLocalized(in: locale))
         )
+        .accessibilityIdentifier("settings.otherApp.\(app.id)")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -1295,174 +1266,6 @@ private struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-private struct FeedbackContactView: View {
-    @Environment(\.locale) private var locale
-    @Environment(\.openURL) private var openURL
-
-    let supportEmail: String
-
-    @State private var showCopyNotice = false
-    @State private var copyNoticeTask: Task<Void, Never>?
-    @State private var noticeSheet: SettingsNoticePayload?
-
-    var body: some View {
-        SettingsDetailContainer {
-            SettingsSectionCard(title: "反馈邮箱") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(supportEmail)
-                        .font(.headline.monospaced())
-                        .foregroundStyle(SWTheme.primaryText)
-                        .textSelection(.enabled)
-
-                    Text("你可以先复制邮箱，确认后再用系统邮件发送。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-
-                    Text("发送邮件时会自动填入反馈主题和正文。")
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                }
-                .padding(.vertical, 4)
-            }
-
-            SettingsSectionCard(title: "反馈方式") {
-                feedbackMethodRow(
-                    title: "复制邮箱",
-                    subtitle: "先复制邮箱，再决定是否立刻发送邮件。",
-                    symbol: "doc.on.doc.fill",
-                    iconColor: SWTheme.accentBlue,
-                    action: handleCopyEmail
-                )
-
-                SettingsRowDivider()
-
-                feedbackMethodRow(
-                    title: "发送邮件",
-                    subtitle: "系统会先打开邮件草稿，再由你确认是否真的发送。",
-                    symbol: "paperplane.fill",
-                    iconColor: SWTheme.accentGreen,
-                    action: handleSendMail
-                )
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if showCopyNotice {
-                Text("已复制反馈邮箱地址。".appLocalized(in: locale))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(SWTheme.primaryText)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.black.opacity(0.72))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                    )
-                    .padding(.bottom, 18)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .onDisappear {
-            copyNoticeTask?.cancel()
-            copyNoticeTask = nil
-        }
-        .sheet(item: $noticeSheet) { notice in
-            SettingsNoticeSheet(payload: notice) {
-                noticeSheet = nil
-            }
-        }
-        .navigationTitle("意见反馈")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func feedbackMethodRow(
-        title: String,
-        subtitle: String,
-        symbol: String,
-        iconColor: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        SettingsPressableButton(action: action) {
-            HStack(alignment: .top, spacing: SettingsLayout.rowSpacing) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: SettingsLayout.rowIconWidth)
-                    .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title.appLocalized(in: locale))
-                        .font(SettingsLayout.titleFont)
-                        .foregroundStyle(SWTheme.primaryText)
-
-                    Text(subtitle.appLocalized(in: locale))
-                        .font(.footnote)
-                        .foregroundStyle(SWTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .padding(.vertical, SettingsLayout.rowVerticalPadding)
-        }
-    }
-
-    private func handleCopyEmail() {
-        UIPasteboard.general.string = supportEmail
-        HapticService.success()
-        copyNoticeTask?.cancel()
-
-        withAnimation(.easeOut(duration: 0.18)) {
-            showCopyNotice = true
-        }
-
-        copyNoticeTask = Task {
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                withAnimation(.easeIn(duration: 0.18)) {
-                    showCopyNotice = false
-                }
-            }
-        }
-    }
-
-    private func handleSendMail() {
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = supportEmail
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "SimpleWorth 意见反馈".appLocalized(in: locale)),
-            URLQueryItem(name: "body", value: "请描述你的建议或问题：".appLocalized(in: locale))
-        ]
-
-        guard let url = components.url else {
-            fallbackToCopiedFeedbackAddress()
-            return
-        }
-
-        openURL(url) { accepted in
-            if accepted {
-                HapticService.impact()
-            } else {
-                fallbackToCopiedFeedbackAddress()
-            }
-        }
-    }
-
-    private func fallbackToCopiedFeedbackAddress() {
-        UIPasteboard.general.string = supportEmail
-        HapticService.warning()
-        noticeSheet = SettingsNoticePayload(
-            message: L10n.string("settings.feedbackUnavailable", locale: locale, supportEmail),
-            locale: locale
-        )
-    }
 }
 
 private struct BillImportGuideView: View {

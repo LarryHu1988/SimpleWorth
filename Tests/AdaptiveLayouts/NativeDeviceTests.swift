@@ -332,6 +332,58 @@ final class NativeDeviceTests: XCTestCase {
         app.buttons["settings.done"].tap()
     }
 
+    func testNativeWideSimplifiedSettings() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["QA_REAL_ROOT"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["period.year"].waitForExistence(timeout: 20))
+        guard app.scrollViews["adaptive.page"].firstMatch.value as? String == "wide" else {
+            throw XCTSkip("Requires the actual opened Duo landscape workspace.")
+        }
+        tapTab(in: app, key: "stats", symbol: "chart.bar.xaxis")
+        app.buttons["stats.settings"].tap()
+        let pane = app.otherElements["settings.pane"].firstMatch
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        let primary = app.scrollViews["adaptive.page"].firstMatch
+        let primaryFrame = primary.frame
+        let about = app.buttons["settings.about"]
+        for _ in 0..<10 where !about.isHittable {
+            pane.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+                .press(forDuration: 0.01, thenDragTo: pane.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
+        }
+        XCTAssertTrue(about.isHittable)
+        XCTAssertFalse(app.buttons["event.settingsOpen"].exists)
+        about.tap()
+        let slogan = app.staticTexts["记得简单，心里有数。"]
+        XCTAssertTrue(slogan.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(slogan.frame.minX, pane.frame.minX + 16)
+        XCTAssertLessThanOrEqual(slogan.frame.maxX, pane.frame.maxX - 16)
+        XCTAssertTrue(primary.staticTexts["收支概览"].exists)
+        XCTAssertEqual(primary.frame, primaryFrame)
+        attach(app, "native-right-about-selected-language")
+        let version = app.staticTexts.matching(NSPredicate(format: "identifier == %@ AND label MATCHES %@", "about.version", "V[0-9].*")).firstMatch
+        for _ in 0..<12 where !version.isHittable {
+            pane.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+                .press(forDuration: 0.01, thenDragTo: pane.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
+        }
+        XCTAssertTrue(version.isHittable)
+        XCTAssertGreaterThanOrEqual(version.frame.minX, pane.frame.minX + 16)
+        XCTAssertLessThanOrEqual(version.frame.maxX, pane.frame.maxX - 16)
+        attach(app, "native-right-about-information")
+        let back = app.navigationBars["关于简值"].buttons["设置"].firstMatch
+        (back.exists ? back : app.buttons["BackButton"].firstMatch).tap()
+        let otherApps = app.buttons["settings.otherApps"]
+        XCTAssertTrue(otherApps.waitForExistence(timeout: 5))
+        otherApps.tap()
+        XCTAssertTrue(app.navigationBars["其它 APP"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings.otherApp.keepfit"].exists)
+        XCTAssertTrue(app.buttons["settings.otherApp.pdf-librarian"].exists)
+        XCTAssertFalse(app.staticTexts["联系与支持"].exists)
+        XCTAssertTrue(primary.staticTexts["收支概览"].exists)
+        attach(app, "native-right-other-apps")
+    }
+
     func testCompactSettingsRoutesAndReturn() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

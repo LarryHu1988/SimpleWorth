@@ -445,6 +445,7 @@ final class VaultDepositRecord {
 }
 
 enum CategoryLibrary {
+    static let columnCount = 5
     static let refundCategoryName = "退款"
     static let expenseRefundCategory = CategoryItem(
         flow: .expense,
@@ -522,6 +523,7 @@ enum CategoryLibrary {
         .init(flow: .expense, name: "育儿", symbol: "figure.2.and.child.holdinghands", colorHex: 0xF59E0B),
         .init(flow: .expense, name: "税费", symbol: "doc.text.fill", colorHex: 0xEF4444),
         .init(flow: .expense, name: "手续费", symbol: "creditcard.fill", colorHex: 0x94A3B8),
+        .init(flow: .expense, name: "鲜花绿植", symbol: "tree.fill", colorHex: 0x22C55E),
         .init(flow: .expense, name: "其他支出", symbol: "ellipsis.circle.fill", colorHex: 0x9CA3AF)
     ]
 
@@ -563,6 +565,30 @@ enum CategoryLibrary {
         case .expense: expenseCategories
         case .income: incomeCategories
         }
+    }
+
+    // Historical categories stay selectable; real supplemental categories complete their final row.
+    static func editorCategories(for flow: FlowType, including savedCategory: CategoryItem?) -> [CategoryItem] {
+        var result = categories(for: flow)
+        guard let savedCategory, savedCategory.flow == flow,
+              !result.contains(where: { $0.id == savedCategory.id }) else { return result }
+        result.insert(savedCategory, at: 0)
+        let supplements: [CategoryItem] = flow == .expense ? [
+            .init(flow: .expense, name: "搬家仓储", symbol: "shippingbox.fill", colorHex: 0x60A5FA),
+            .init(flow: .expense, name: "证件办理", symbol: "person.text.rectangle.fill", colorHex: 0xA78BFA),
+            .init(flow: .expense, name: "法律服务", symbol: "scalemass.fill", colorHex: 0x2DD4BF),
+            .init(flow: .expense, name: "家电租赁", symbol: "washer.fill", colorHex: 0xFB923C),
+            .init(flow: .expense, name: "兴趣手作", symbol: "paintpalette.fill", colorHex: 0xF472B6)
+        ] : [
+            .init(flow: .income, name: "返现", symbol: "arrow.uturn.backward", colorHex: 0x34D399),
+            .init(flow: .income, name: "版税", symbol: "book.closed.fill", colorHex: 0x60A5FA),
+            .init(flow: .income, name: "竞赛奖励", symbol: "trophy.fill", colorHex: 0xFBBF24),
+            .init(flow: .income, name: "遗产继承", symbol: "building.columns.fill", colorHex: 0xA78BFA),
+            .init(flow: .income, name: "资产转让", symbol: "arrow.left.arrow.right", colorHex: 0x2DD4BF)
+        ]
+        let needed = (columnCount - result.count % columnCount) % columnCount
+        result += supplements.filter { candidate in !result.contains(where: { $0.name == candidate.name }) }.prefix(needed)
+        return result
     }
 
     private static let searchKeywords: [String: String] = [

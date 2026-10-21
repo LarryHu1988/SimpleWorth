@@ -17,7 +17,6 @@ private enum EntryEditorFocusedField: Hashable {
 
 @MainActor
 struct EntryEditorSheet: View {
-    @ScaledMetric(relativeTo: .caption2) private var minimumCategoryCellWidth: CGFloat = 68
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
@@ -120,17 +119,11 @@ struct EntryEditorSheet: View {
     }
 
     private var categories: [CategoryItem] {
-        var result = CategoryLibrary.categories(for: flow)
-        if let entry, entry.flow == flow {
-            let savedCategory = CategoryItem(
-                flow: flow, name: entry.categoryName,
-                symbol: entry.categorySymbol, colorHex: entry.categoryColorHex
-            )
-            if !result.contains(where: { $0.id == savedCategory.id }) {
-                result.insert(savedCategory, at: 0)
-            }
+        let savedCategory = entry.map {
+            CategoryItem(flow: $0.flow, name: $0.categoryName,
+                         symbol: $0.categorySymbol, colorHex: $0.categoryColorHex)
         }
-        return result
+        return CategoryLibrary.editorCategories(for: flow, including: savedCategory)
     }
 
     private var selectedCategory: CategoryItem {
@@ -747,44 +740,13 @@ struct EntryEditorSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "分类", subtitle: "快速选择图标分类")
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCategoryCellWidth), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: CategoryIconCell.columns, spacing: 8) {
                 ForEach(categories) { category in
                     Button {
                         selectedCategoryID = category.id
                     } label: {
-                        VStack(spacing: 6) {
-                            ZStack {
-                                Circle()
-                                    .fill(category.color.opacity(0.18))
-                                    .frame(width: 38, height: 38)
-
-                                Image(systemName: category.symbol)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(category.color)
-                            }
-
-                            Text(category.localizedName(in: locale))
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(SWTheme.primaryText)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.75)
-                                .frame(height: 28, alignment: .top)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.03))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(
-                                            selectedCategoryID == category.id
-                                                ? category.color.opacity(0.92)
-                                                : Color.white.opacity(0.08),
-                                            lineWidth: selectedCategoryID == category.id ? 1.6 : 1
-                                        )
-                                )
-                        )
+                        CategoryIconCell(item: category, isSelected: selectedCategoryID == category.id)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("entry.category.\(category.name)")

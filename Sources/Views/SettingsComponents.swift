@@ -58,20 +58,22 @@ enum SettingsLayout {
 
 struct SettingsSectionCard<Content: View>: View {
     @Environment(\.locale) private var locale
-    let title: String
+    let title: String?
     @ViewBuilder let content: Content
 
-    init(title: String, @ViewBuilder content: () -> Content) {
+    init(title: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing) {
-            Text(title.appLocalized(in: locale))
-                .font(SettingsLayout.sectionHeaderFont)
-                .tracking(SettingsLayout.sectionHeaderTracking)
-                .foregroundStyle(SettingsLayout.sectionHeaderColor)
+            if let title, !title.isEmpty {
+                Text(title.appLocalized(in: locale))
+                    .font(SettingsLayout.sectionHeaderFont)
+                    .tracking(SettingsLayout.sectionHeaderTracking)
+                    .foregroundStyle(SettingsLayout.sectionHeaderColor)
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 content

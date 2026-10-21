@@ -94,13 +94,12 @@ struct CategoryGridSection: View {
     let subtitle: String
     let categories: [CategoryItem]
     var onTapCategory: ((CategoryItem) -> Void)? = nil
-    @ScaledMetric(relativeTo: .caption2) private var minimumCellWidth: CGFloat = 68
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: title, subtitle: subtitle)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCellWidth), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: CategoryIconCell.columns, spacing: 8) {
                 ForEach(categories) { item in
                     Button {
                         HapticService.impact(style: .soft)
@@ -121,7 +120,17 @@ struct CategoryGridSection: View {
 
 struct CategoryIconCell: View {
     @Environment(\.locale) private var locale
+    @ScaledMetric(relativeTo: .caption2) private var labelHeight: CGFloat = 30
     let item: CategoryItem
+    var isSelected = false
+
+    static let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8), count: CategoryLibrary.columnCount)
+
+    private var name: String { item.localizedName(in: locale) }
+
+    private var labelLineLimit: Int {
+        locale.language.languageCode?.identifier == "en" && !name.contains(where: \.isWhitespace) ? 1 : 2
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -137,21 +146,24 @@ struct CategoryIconCell: View {
                     .foregroundStyle(item.color)
             }
 
-            Text(item.localizedName(in: locale))
+            Text(name)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(SWTheme.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.75)
-                .frame(height: 28, alignment: .top)
+                .lineLimit(labelLineLimit)
+                .minimumScaleFactor(0.65)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .frame(height: labelHeight, alignment: .center)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 7)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.03))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(isSelected ? item.color.opacity(0.92) : Color.white.opacity(0.08),
+                                lineWidth: isSelected ? 1.6 : 1)
                 )
         )
     }

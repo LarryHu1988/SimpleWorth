@@ -5,13 +5,17 @@ import SwiftUI
 struct CategoriesTagsCheckApp: App {
     @StateObject private var controller = AppRuntimeController()
 
+    init() {
+        UserDefaults.standard.set(ProcessInfo.processInfo.environment["QA_LANGUAGE"] ?? "zh-Hans", forKey: SettingsKeys.appLanguage)
+    }
+
     var body: some Scene {
         WindowGroup {
             FixtureRoot()
                 .modelContainer(controller.container)
                 .environmentObject(controller)
                 .environment(\.locale, Locale(identifier: ProcessInfo.processInfo.environment["QA_LANGUAGE"] ?? "zh-Hans"))
-                .preferredColorScheme(.light)
+                .preferredColorScheme(ProcessInfo.processInfo.environment["QA_DARK"] == "1" ? .dark : .light)
         }
     }
 }
@@ -26,10 +30,34 @@ private struct FixtureRoot: View {
     @Environment(\.modelContext) private var context
     @State private var editor: EditorTarget?
     @State private var storeStatus = "loading"
+    @State private var settingsPath: [SettingsRoute] = []
+    @State private var openedURL = ""
+
+    private var screen: String { ProcessInfo.processInfo.environment["QA_SCREEN"] ?? "tags" }
 
     var body: some View {
-        NavigationStack {
-            TagManagementView()
+        Group {
+            if screen == "editor" {
+                EntryEditorSheet(flow: ProcessInfo.processInfo.environment["QA_FLOW"] == "income" ? .income : .expense)
+            } else {
+                navigation
+            }
+        }
+    }
+
+    private var navigation: some View {
+        NavigationStack(path: $settingsPath) {
+            if screen == "categories" {
+                let flow: FlowType = ProcessInfo.processInfo.environment["QA_FLOW"] == "income" ? .income : .expense
+                ScrollView {
+                    CategoryGridSection(title: "分类", subtitle: "", categories: CategoryLibrary.categories(for: flow))
+                        .padding(16)
+                }
+                .navigationTitle("QA Categories")
+            } else if screen == "settings" {
+                StatsSettingsView(navigationPath: $settingsPath)
+            } else {
+                TagManagementView()
                 .safeAreaInset(edge: .bottom) {
                     Text(storeStatus).accessibilityIdentifier("qa.store-status")
                 }
@@ -70,6 +98,23 @@ private struct FixtureRoot: View {
                     }
                     storeStatus = defaults.stringArray(forKey: "qa.originalTagIDs") == ids ? "preserved" : "changed"
                 }
+            }
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            guard screen == "settings" else { return .systemAction }
+            openedURL = url.absoluteString
+            return ProcessInfo.processInfo.environment["QA_REJECT_URL"] == "1" ? .discarded : .handled
+        })
+        .safeAreaInset(edge: .bottom) {
+            if screen == "settings" {
+                VStack {
+                    Text(openedURL).font(.caption2).accessibilityIdentifier("qa.openedURL")
+                    Text("\(settingsPath.count)").accessibilityIdentifier("qa.settingsPathDepth")
+                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
+                        .accessibilityIdentifier("qa.bundleVersion")
+                }
+                .font(.caption2)
+            }
         }
         .sheet(item: $editor) { target in
             EntryEditorSheet(flow: target.flow, entry: target.entry, operation: target.entry == nil ? .create : .edit)

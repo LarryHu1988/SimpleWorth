@@ -5,6 +5,16 @@ import UIKit
 
 @MainActor
 final class ModelTests: XCTestCase {
+    func testAboutIconHasLightAndDarkAssets() throws {
+        let light = try XCTUnwrap(UIImage(named: "SimpleWorthIcon", in: .main,
+                                          compatibleWith: UITraitCollection(userInterfaceStyle: .light)))
+        let dark = try XCTUnwrap(UIImage(named: "SimpleWorthIcon", in: .main,
+                                         compatibleWith: UITraitCollection(userInterfaceStyle: .dark)))
+        XCTAssertGreaterThanOrEqual(light.size.width * light.scale, 1024)
+        XCTAssertGreaterThanOrEqual(dark.size.width * dark.scale, 1024)
+        XCTAssertNotEqual(light.pngData(), dark.pngData())
+    }
+
     private func container() throws -> ModelContainer {
         let schema = Schema([TagRecord.self, LedgerEntry.self, SavingsGoalRecord.self, VaultDepositRecord.self])
         return try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
@@ -28,6 +38,44 @@ final class ModelTests: XCTestCase {
         }
         XCTAssertEqual(CategoryLibrary.category(named: "服饰", flow: .expense)?.symbol, "tshirt.fill")
         XCTAssertTrue(CategoryLibrary.category(named: "退款", flow: .expense) == CategoryLibrary.expenseRefundCategory)
+    }
+
+    func testFiveColumnCatalogsAndHistoricalCategoryRowsStayComplete() {
+        XCTAssertEqual(CategoryLibrary.expenseCategories.count, 70)
+        XCTAssertEqual(CategoryLibrary.incomeCategories.count, 30)
+        XCTAssertEqual(CategoryLibrary.columnCount, 5)
+        for flow in FlowType.allCases {
+            let catalog = CategoryLibrary.categories(for: flow)
+            XCTAssertEqual(catalog.count % CategoryLibrary.columnCount, 0)
+            XCTAssertEqual(CategoryLibrary.editorCategories(for: flow, including: nil), catalog)
+            XCTAssertEqual(CategoryLibrary.editorCategories(for: flow, including: catalog.first), catalog)
+            for name in ["旧分类", "搬家仓储", "返现", CategoryLibrary.refundCategoryName] {
+                let saved = CategoryItem(flow: flow, name: name, symbol: "star.fill", colorHex: 0x123456)
+                let choices = CategoryLibrary.editorCategories(for: flow, including: saved)
+                XCTAssertEqual(choices.first, saved)
+                XCTAssertEqual(choices.count % CategoryLibrary.columnCount, 0, name)
+                XCTAssertEqual(Set(choices.map(\.id)).count, choices.count)
+                XCTAssertTrue(Set(catalog).isSubset(of: Set(choices)))
+                for item in choices {
+                    XCTAssertNotNil(UIImage(systemName: item.symbol), item.name)
+                    for language in AppLanguage.allCases {
+                        let text = item.localizedName(in: language.locale)
+                        XCTAssertFalse(text.isEmpty)
+                        if name != item.name && language == .english {
+                            XCTAssertNotEqual(text, item.name)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testReviewAndSharePointToTheSameAppStoreProduct() throws {
+        XCTAssertEqual(AppConfig.appStoreURL.host, "apps.apple.com")
+        XCTAssertTrue(AppConfig.appStoreURL.path.hasSuffix("/id6761478113"))
+        let review = try XCTUnwrap(URLComponents(url: AppConfig.appStoreReviewURL, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(review.path, AppConfig.appStoreURL.path)
+        XCTAssertEqual(review.queryItems, [URLQueryItem(name: "action", value: "write-review")])
     }
 
     func testOrderMovesAndNewTagsAppendWithoutChangingNamesOrDates() throws {
