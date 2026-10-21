@@ -1,4 +1,4 @@
-<p align="center"><a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/icon.png" width="64" alt="SimpleWorth app icon"></a></p>
+<p align="center"><a href="https://larryhu.com/simpleworth/"><picture><source media="(prefers-color-scheme: dark)" srcset="Sources/Assets.xcassets/AppIcon.appiconset/AppIcon-dark-1024.png"><img src="Sources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="64" alt="SimpleWorth app icon"></picture></a></p>
 <h1 align="center">SimpleWorth</h1>
 <p align="center"><strong>Less clutter. More clarity.</strong></p>
 <p align="center"><a href="https://apps.apple.com/app/id6761478113">Download on the App Store ↗</a> · <a href="https://larryhu.com/simpleworth/">Website & interactive preview ↗</a> · <a href="README.md">简体中文</a></p>

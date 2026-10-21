@@ -1,4 +1,4 @@
-<p align="center"><a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/icon.png" width="64" alt="SimpleWorth 简值图标"></a></p>
+<p align="center"><a href="https://larryhu.com/simpleworth/"><picture><source media="(prefers-color-scheme: dark)" srcset="Sources/Assets.xcassets/AppIcon.appiconset/AppIcon-dark-1024.png"><img src="Sources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="64" alt="SimpleWorth 简值图标"></picture></a></p>
 <h1 align="center">SimpleWorth · 简值</h1>
 <p align="center"><strong>记得简单，心里有数。</strong></p>
 <p align="center"><a href="https://apps.apple.com/app/id6761478113">App Store 免费下载 ↗</a> · <a href="https://larryhu.com/simpleworth/">完整介绍与交互预览 ↗</a> · <a href="README.en.md">English</a></p>
