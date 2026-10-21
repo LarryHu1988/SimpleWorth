@@ -6,16 +6,10 @@
 <p align="center"><a href="https://apps.apple.com/app/id6761478113"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-light.png">
-  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-light.png" width="1200" alt="SimpleWorth 1.0：记得简单，心里有数。免费、无广告，iPhone 与 iPad，iOS 17 及以上。">
+  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-light.png" width="1200" alt="SimpleWorth：记得简单，心里有数。免费、无广告，iPhone 与 iPad，iOS 17 及以上。">
 </picture></a></p>
 
-<p align="center"><strong>1.0 正式版 · 1.0.1 (4) 已提交审核</strong> · 免费 · 无广告 · iPhone / iPad · iOS 17+</p>
-
-## 1.0.1 · 更整齐，也更直接。
-
-分类统一为每行五个，图标与文字居中；反馈和隐私入口直达，评价与分享链接更准确；关于简值与其它 APP 页面更清爽。兼顾 iPhone、iPad 与 Duo 的不同屏幕宽度。
-
-[四语更新日志](docs/release-notes/1.0.1.json)。1.0.1 (4) 已提交 Apple 审核，尚未正式发布；App Store 当前仍为 1.0，审核通过后手动发布。
+<p align="center">免费 · 无广告 · iPhone / iPad · iOS 17+</p>
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-features-dark.png">
@@ -63,18 +57,18 @@
 反馈问题请使用[问题反馈模板](https://github.com/LarryHu1988/SimpleWorth/issues/new/choose)或联系 [simpleworth@larryhu.com](mailto:simpleworth@larryhu.com)。截图请遮挡私人账目。详见[支持说明](SUPPORT.md)。
 
 <details>
-<summary><strong>开发、验证与版本说明</strong></summary>
+<summary><strong>开发与验证</strong></summary>
 
-SwiftUI · SwiftData · Swift Charts · XcodeGen。最低 iOS / iPadOS 17；当前正式版本 **1.0 (1)**，本次更新 **1.0.1 (4)** 已提交审核。
+SwiftUI · SwiftData · Swift Charts · XcodeGen。最低 iOS / iPadOS 17。
 
 ```sh
 xcodegen generate
 open SimpleWorth.xcodeproj
 ```
 
-[开发与隔离测试](docs/DEVELOPMENT.md) · [开发协作](CONTRIBUTING.md) · [版本保留规则](docs/RELEASES.md)
+[开发与隔离测试](docs/DEVELOPMENT.md) · [开发协作](CONTRIBUTING.md)
 
-保留 1.0 及以后版本的 Release、标签和必要发行资料。Duo 外屏倒置竖屏的已知限制在开发说明中记录。
+Duo 外屏倒置竖屏的已知限制在开发说明中记录。
 
 </details>
 
