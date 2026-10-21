@@ -9,13 +9,13 @@
   <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-light.png" width="1200" alt="SimpleWorth 1.0: Less clutter. More clarity. Free, no ads, iPhone and iPad, iOS 17 or later.">
 </picture></a></p>
 
-<p align="center"><strong>1.0 available · 1.0.1 (4) preparing for review</strong> · Free · No ads · iPhone / iPad · iOS 17+</p>
+<p align="center"><strong>1.0 available · 1.0.1 (4) submitted for review</strong> · Free · No ads · iPhone / iPad · iOS 17+</p>
 
 ## 1.0.1 · Clearer categories. Fewer steps.
 
 Centered five-column categories, direct feedback and privacy links, corrected rating and sharing links, and cleaner About and Other Apps screens. Category layouts accommodate iPhone, iPad and Duo screen widths.
 
-[Release notes in four languages](docs/release-notes/1.0.1.json) · [Website update notes](https://larryhu.com/simpleworth/updates/?lang=en-US). Version 1.0.1 (4) is not live yet; version 1.0 remains available on the App Store.
+[Release notes in four languages](docs/release-notes/1.0.1.json) · [Website update notes](https://larryhu.com/simpleworth/updates/?lang=en-US). Version 1.0.1 (4) has been submitted for App Review and is not live yet. Version 1.0 remains available on the App Store; this update will be released manually after approval.
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-dark.png">
@@ -65,7 +65,7 @@ Use the [issue templates](https://github.com/LarryHu1988/SimpleWorth/issues/new/
 <details>
 <summary><strong>Development, validation and releases</strong></summary>
 
-SwiftUI · SwiftData · Swift Charts · XcodeGen. Minimum iOS / iPadOS 17; current distributed version **1.0 (1)**. Update **1.0.1 (4)** is being prepared for review.
+SwiftUI · SwiftData · Swift Charts · XcodeGen. Minimum iOS / iPadOS 17; current distributed version **1.0 (1)**. Update **1.0.1 (4)** has been submitted for App Review.
 
 ```sh
 xcodegen generate
