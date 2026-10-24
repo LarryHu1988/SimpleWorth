@@ -4,17 +4,17 @@
 <p align="center"><a href="https://apps.apple.com/app/id6761478113">App Store 免费下载 ↗</a> · <a href="https://larryhu.com/simpleworth/">完整介绍与交互预览 ↗</a> · <a href="README.en.md">English</a></p>
 
 <p align="center"><a href="https://apps.apple.com/app/id6761478113"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-light.png">
-  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-hero-light.png" width="1200" alt="SimpleWorth：记得简单，心里有数。免费、无广告，iPhone 与 iPad，iOS 17 及以上。">
+  <source media="(prefers-color-scheme: dark)" srcset="https://larryhu.com/simpleworth/assets/github/zh-hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://larryhu.com/simpleworth/assets/github/zh-hero-light.png">
+  <img src="https://larryhu.com/simpleworth/assets/github/zh-hero-light.png" width="1200" alt="SimpleWorth：记得简单，心里有数。免费、无广告，iPhone 与 iPad，iOS 17 及以上。">
 </picture></a></p>
 
 <p align="center">免费 · 无广告 · iPhone / iPad · iOS 17+</p>
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-features-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-features-light.png">
-  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-features-light.png" width="1200" alt="支出、收入、金库、统计：分类与标签、金额计算、储蓄目标、存入记录、月度趋势与占比图。">
+  <source media="(prefers-color-scheme: dark)" srcset="https://larryhu.com/simpleworth/assets/github/zh-features-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://larryhu.com/simpleworth/assets/github/zh-features-light.png">
+  <img src="https://larryhu.com/simpleworth/assets/github/zh-features-light.png" width="1200" alt="支出、收入、金库、统计：分类与标签、金额计算、储蓄目标、存入记录、月度趋势与占比图。">
 </picture></a></p>
 
 ## 清透一点，轻松一点。
@@ -22,10 +22,10 @@
 柔和的蓝色渐变、通透的玻璃卡片、绿橙蓝粉四色。支出、收入、金库、统计，给日常刚刚好的空间。
 
 <p align="center">
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-Hans-01-expenses.png" width="180" alt="支出：分类、标签与账目记录"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-Hans-04-income.png" width="180" alt="收入：按月记录与查看进账"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-Hans-05-savings.png" width="180" alt="金库：小目标、存入记录与进度"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/zh-Hans-03-breakdown.png" width="180" alt="统计：分类与标签占比"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/zh-Hans-01-expenses.png" width="180" alt="支出：分类、标签与账目记录"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/zh-Hans-04-income.png" width="180" alt="收入：按月记录与查看进账"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/zh-Hans-05-savings.png" width="180" alt="金库：小目标、存入记录与进度"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/zh-Hans-03-breakdown.png" width="180" alt="统计：分类与标签占比"></a>
 </p>
 
 <p align="center"><sub>真实应用界面，截图使用演示数据。</sub></p>

@@ -4,17 +4,17 @@
 <p align="center"><a href="https://apps.apple.com/app/id6761478113">Download on the App Store ↗</a> · <a href="https://larryhu.com/simpleworth/">Website & interactive preview ↗</a> · <a href="README.md">简体中文</a></p>
 
 <p align="center"><a href="https://apps.apple.com/app/id6761478113"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-light.png">
-  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-hero-light.png" width="1200" alt="SimpleWorth: Less clutter. More clarity. Free, no ads, iPhone and iPad, iOS 17 or later.">
+  <source media="(prefers-color-scheme: dark)" srcset="https://larryhu.com/simpleworth/assets/github/en-hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://larryhu.com/simpleworth/assets/github/en-hero-light.png">
+  <img src="https://larryhu.com/simpleworth/assets/github/en-hero-light.png" width="1200" alt="SimpleWorth: Less clutter. More clarity. Free, no ads, iPhone and iPad, iOS 17 or later.">
 </picture></a></p>
 
 <p align="center">Free · No ads · iPhone / iPad · iOS 17+</p>
 
 <p align="center"><a href="https://larryhu.com/simpleworth/"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-light.png">
-  <img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-features-light.png" width="1200" alt="Four spaces: Expenses, Income, Vault and Statistics. Categories, tags, a calculator, savings goals, deposits, trends and breakdowns.">
+  <source media="(prefers-color-scheme: dark)" srcset="https://larryhu.com/simpleworth/assets/github/en-features-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://larryhu.com/simpleworth/assets/github/en-features-light.png">
+  <img src="https://larryhu.com/simpleworth/assets/github/en-features-light.png" width="1200" alt="Four spaces: Expenses, Income, Vault and Statistics. Categories, tags, a calculator, savings goals, deposits, trends and breakdowns.">
 </picture></a></p>
 
 ## A little lighter. A little calmer.
@@ -22,10 +22,10 @@
 Soft blue gradients, translucent cards, and green, orange, blue and pink accents give everyday bookkeeping room to breathe.
 
 <p align="center">
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-01-expenses.png" width="180" alt="Expenses: categories, tags and entries"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-04-income.png" width="180" alt="Income: monthly earnings and records"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-05-savings.png" width="180" alt="Vault: savings goals, deposits and progress"></a>
-<a href="https://larryhu.com/simpleworth/"><img src="https://raw.githubusercontent.com/LarryHu1988/LarryHu1988.github.io/93aecb644e70b257fafb083d46d8510d7fa01b05/simpleworth/assets/github/en-US-03-breakdown.png" width="180" alt="Statistics: category and tag breakdowns"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/en-US-01-expenses.png" width="180" alt="Expenses: categories, tags and entries"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/en-US-04-income.png" width="180" alt="Income: monthly earnings and records"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/en-US-05-savings.png" width="180" alt="Vault: savings goals, deposits and progress"></a>
+<a href="https://larryhu.com/simpleworth/"><img src="https://larryhu.com/simpleworth/assets/github/en-US-03-breakdown.png" width="180" alt="Statistics: category and tag breakdowns"></a>
 </p>
 
 <p align="center"><sub>Actual app screens. Sample data shown.</sub></p>
